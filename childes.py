@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "1.3"
+__version__ = "1.4"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "7.10.23"
+__status__ = "9.2.24"
 __license__ = "GPL"
 
 import sys
@@ -51,6 +51,7 @@ def main(args):
         continue
       m = re.search(rePID, s)
       pid = m.group(1)
+      sNr = 0 # reset utterance numbering, so that files can be processed in any order without changing utt_id
       childData = {}  # empty childData bio dictionary
       # check for more than one Target_Child (French: only in Palasis)
       childNr = re.findall(r'@ID:\s+.*\|.*?\|[A-Z]+\|.*?\|.*Target_Child\|', s)

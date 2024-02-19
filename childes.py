@@ -80,9 +80,9 @@ def main(args):
           if re.search(reMatch, s):
             m = re.search(reMatch, s)
             child = m.group(1) + '_' + project[:3]  # disambiguate identical child names
-            child = re.sub(r'[éèe]', 'e', child)  # Anae is not spelt consistently
-            child = re.sub(r'Ann_Yor', 'Anne_Yor', child)  # repair inconsistency
-            child = re.sub(r'Sullyvan', 'Sullivan', child)  # repair inconsistency
+            child = re.sub(r'[éèe]', 'e', child)  # # repair inconsistencies (Anae is not spelt consistently)
+            child = re.sub(r'Ann_Yor', 'Anne_Yor', child)
+            child = re.sub(r'Sullyvan', 'Sullivan', child)
             childData['CHI'] = (child, age, age_days)   # store bio data in dict
       sys.stderr.write("PID: %s / CHILD: %s / AGE: %s = %s days\n" % (pid, child, age, str(age_days)))
       continue  # no output for the header

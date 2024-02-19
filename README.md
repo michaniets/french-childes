@@ -1,12 +1,6 @@
-# silpac-h2
-Utilities created in project H2 of the DFG research unit [SILPAC](https://silpac.uni-mannheim.de) (FOR 5157)
+# Processing French CHILDES data
 
-This repository contains mostly scripts that were created for a specific research task (linguistics, psycholinguistics). Note that the author is not a programmer, scripts may not be well documented and are often in a work-in-progress state.
-You are welcome to use them, adapt them to your needs and give feedback on them.
-
-## pb1-parse-qualtrics.py
-
-Processes output csv files exported from the Qualtrics experiment website. This script was designed for a specific experiment. It converts the Qualtrics output to a table that can be analysed with R. It also analyses the Italian data using H. Schmid's (LMU, München) _TreeTagger_ with paramater for Italian created by A. Stein (U Stuttgart).
+This script was created in project H2 of the DFG research unit [SILPAC](https://silpac.uni-mannheim.de) (FOR 5157)
 
 ## childes.py
 

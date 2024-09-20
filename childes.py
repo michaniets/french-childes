@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "1.4"
+__version__ = "1.5"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "9.2.24"
+__status__ = "20.9.24"
 __license__ = "GPL"
 
 import sys
@@ -30,7 +30,8 @@ def main(args):
   with open(args.out_file, 'r', encoding="utf8") as file:  # , newline=''
     sys.stderr.write("Reading " + args.out_file +'\n')
     all = file.read()
-    all = re.sub('@END', '*\n', all)  # insert delimiter at end of file
+    all = re.sub('@End', '*\n', all)  # insert delimiter at end of file
+    all = re.sub('@Begin.*?\n@Comment:.*?(dummy file|No transcript).*?\n@End\n', '', all, re.DOTALL)  # remove dummy files
     sentences = all.split('\n*')   # split utterances at '*', e.g. *CHI:
   if len(sentences) <= 1:
     sys.stderr.write("No output sentences found. " + str(len(sentences)) + " Exiting.\n")
@@ -48,10 +49,9 @@ def main(args):
     rePID = re.compile('@PID:.*/.*?0*(\d+)')
     if re.search(rePID, s):
       if re.search (r'@Comment:.*dummy file', s):
-        continue
+        pass #continue
       m = re.search(rePID, s)
       pid = m.group(1)
-      sNr = 0 # reset utterance numbering, so that files can be processed in any order without changing utt_id
       childData = {}  # empty childData bio dictionary
       # check for more than one Target_Child (French: only in Palasis)
       childNr = re.findall(r'@ID:\s+.*\|.*?\|[A-Z]+\|.*?\|.*Target_Child\|', s)
@@ -67,7 +67,6 @@ def main(args):
       else:
         # just one Target_Child  (TODO: redundant, include above)
         # example: @ID: fra|Paris|CHI|0;11.18|female|||Target_Child|||
-
         if re.search(r"CHI Target_Child , TAT Tata Babysitter", s):  # correct error in one file header
           s = re.sub("CHI Target_Child , TAT Tata Babysitter", "CHI Anne Target_Child , TAT Tata Babysitter", s)
         reMatch = re.compile('@ID:.*\|(.*?)\|[A-Z]+\|(\d.*?)\|.*Target_Child')
@@ -80,9 +79,9 @@ def main(args):
           if re.search(reMatch, s):
             m = re.search(reMatch, s)
             child = m.group(1) + '_' + project[:3]  # disambiguate identical child names
-            child = re.sub(r'[éèe]', 'e', child)  # # repair inconsistencies (Anae is not spelt consistently)
-            child = re.sub(r'Ann_Yor', 'Anne_Yor', child)
-            child = re.sub(r'Sullyvan', 'Sullivan', child)
+            child = re.sub(r'[éè]', 'e', child)  # Anae is not spelt consistently
+            child = re.sub(r'Ann_Yor', 'Anne_Yor', child)  # repair inconsistency
+            child = re.sub(r'(Greg|Gregx|Gregoire)_Cha', 'Gregoire_Cha', child)  # repair inconsistency
             childData['CHI'] = (child, age, age_days)   # store bio data in dict
       sys.stderr.write("PID: %s / CHILD: %s / AGE: %s = %s days\n" % (pid, child, age, str(age_days)))
       continue  # no output for the header
@@ -111,13 +110,13 @@ def main(args):
     if re.search(reMatch, s):
       m = re.search(reMatch, s)
       mor = m.group(1)
-    # match speaker and utterance -- TODO: handle Palasis corpus (no 'CHI', but several child name abbrevs)
+    # match speaker and utterance
     reMatch = re.compile('^([A-Z]+):\s+(.*?)\n')
     if re.search(reMatch, s):
       m = re.search(reMatch, s)
       speaker = m.group(1)
       utt = m.group(2)
-    splitUtt = cleanUtt(utt)  # clean copy for splitting in to words
+    splitUtt = cleanUtt(utt)  # clean a copy for splitting in to words
     # concatenate utterances to build taggerInput. Use tag with uttID
     if args.parameters != '':
       with open('tagthis.tmp', 'a') as tagthis:  # for tagger output
@@ -144,10 +143,19 @@ def main(args):
     (itemWords, itemPOS, itemLemmas, itemTagged) = treeTagger(taggerInput)
 
   # ----------------------------------------
+  # Parser (option -h)  NOT YET IMPLEMENTED
+  # ----------------------------------------
+  #if args.hopsparser != '':
+  #  sys.stderr.write('Running Parser...\n')
+  #  with open('tagthis.tmp', 'r') as parsethis:
+  #    taggerInput = parsethis.read()
+  #  (itemWords, itemPOS, itemLemmas, itemTagged) = treeTagger(taggerInput)
+
+  # ----------------------------------------
   # output
   # ----------------------------------------
   # write output table: DictWriter matches header and rows, regardless of the order of fields in row
-  outHeader = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'features', 'note', 'utterance', 'utt_clean', 'utt_tagged']
+  outHeader = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'features', 'note', 'utterance', 'utt_clean', 'utt_tagged']
   with open(args.out_file + '.csv', 'w', newline='') as out:   # newline '' is needed: we have commas in items
     writer = csv.DictWriter(out, delimiter='\t', fieldnames=outHeader)
     writer.writeheader()
@@ -159,7 +167,7 @@ def main(args):
     addTagging(args.out_file + '.csv', args.out_file + '.tagged.csv', outHeader, itemWords, itemPOS, itemLemmas, itemTagged)
     sys.stderr.write("\nOutput file: " + args.out_file + '.tagged.csv\n')
     sys.stderr.write("  you can delete the temporary file: " + args.out_file + '.csv\n')
-    sys.stderr.write("  you can delete the temporary files: tag*.tmp")
+    sys.stderr.write("  you can delete the temporary files: tag*.tmp\n")
   else:
     sys.stderr.write("output was written to: " + args.out_file + '.csv\n')
       
@@ -250,9 +258,6 @@ def analyseTagging(tagged, lemma):
   annotation = []
   # example for verbal token regex word_tag=lemma: ( .*?_VER.*?=\w+)?
   reRefl = re.compile(' [^_]+_.*?=se [^_]+_VER.*?=(?P<lemma>\w+)')    # try lemma
-# ( reRefl = re.compile(' [^_]+_.*?=se( [^_]+_AUX.*?=\w+)? [^_]+_VER.*?=(?P<lemma>\w+)')
-#  reRefl = re.compile(' [^_]+_.*?=se( [^_]+_VER.*?=\w+) [^_]+_VER.*?=(?P<lemma>\w+)')
-#  reRefl = re.compile(' se_[^ ]+( .*?_VER.*?=\w+) [^_]+_VER.*?=(?P<lemma>\w+)')
   if re.search(reRefl, tagged):
     m = re.search(reRefl, tagged)
     if m.group(1) is not None:
@@ -268,7 +273,7 @@ def analyseTagging(tagged, lemma):
       matchedLemma = m.group('lemma')
     if(lemma == matchedLemma):  # annotate only rows where lemma is identical
       annotation.append('dat') # ('dat:'+matchedLemma)
-  reDatCl = re.compile('(lui|leur)_[^ ]+ [^_]+_VER.*?=(?P<lemma>\w+)')
+  reDatCl = re.compile('(lui|leur)_[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>\w+)')
   if re.search(reDatCl, tagged):
     m = re.search(reDatCl, tagged)
     if m.group(1) is not None:
@@ -288,6 +293,7 @@ def insertAtIndex(add, list, index):
 
 def wordPerLineTagger(splitUtt, mor):
   # for TreeTagger annotation: build one line (table row) for each token in utterance
+  child_other = ''
   age = tags = ''
   age_days = wNr = 0
   thisRow = {}
@@ -305,10 +311,17 @@ def wordPerLineTagger(splitUtt, mor):
     uttPrint = utt
     if args.first_utterance and wNr > 1:
       uttPrint = splitUttPrint = ''
-    # read bio data for this speaker
+    # if there is childData for this speaker (=child), insert the child's age
     if childData.get(speaker) != None:
+      child_other = "C"
       age = childData[speaker][1]
       age_days = childData[speaker][2]
+    else:  # for caretakers, annotate the child's age (age_days)
+      child_other = "X"
+      for caretaker, data in childData.items():
+        # check if there is an age_days variable 
+        if len(data) > 2 and caretaker == "CHI":  # exclude multi-child corpus (Palasis)
+            age_days = data[2]
     # build output line for word
     thisRow = {
       'utt_id': uttID + '_w' + str(wNr),
@@ -316,6 +329,7 @@ def wordPerLineTagger(splitUtt, mor):
       'w_nr': wNr,
       'speaker': speaker,
       'child_project' : child,
+      'child_other' : child_other,
       'age': age,
       'age_days': age_days,
       'time_code': timeCode,
@@ -327,11 +341,12 @@ def wordPerLineTagger(splitUtt, mor):
       'utterance': uttPrint,
       'utt_clean': splitUttPrint
       }
-    outRows.append(thisRow)   # append dictionary for this row to list of rows
+    outRows.append(thisRow)   # append dictionary for this row to the list of rows
   return(outRows)
 
 def wordPerLineChat(splitUtt, mor):
   # for CHAT format: build one line (table row) for each token in utterance
+  child_other = ''
   age = tags = ''
   age_days = wNr = 0
   thisRow = {}
@@ -360,10 +375,17 @@ def wordPerLineChat(splitUtt, mor):
             m = re.search(r'(.*?)[-&](.*)', l)  # split lemma and morphology (lemma-INF, lemma$PRES...)
             l = m.group(1)
             f = m.group(2)
-    # read bio data for this speaker
+    # if there is childData for this speaker (=child), insert the child's age
     if childData.get(speaker) != None:
+      child_other = "C"
       age = childData[speaker][1]
       age_days = childData[speaker][2]
+    else:  # for caretakers, annotate the child's age (age_days)
+      child_other = "X"
+      for caretaker, data in childData.items():
+        # check if there is an age_days variable 
+        if len(data) > 2 and caretaker == "CHI":  # exclude multi-child corpus (Palasis)
+            age_days = data[2]
     # build output line for word
     thisRow = {
       'utt_id': uttID + '_w' + str(wNr),
@@ -389,15 +411,17 @@ def cleanUtt(s):
     # delete specific CHILDES annotation not needed for pos tagging (WIP - TODO check CHILDES documentation)
     # input:  unprocessed utterance
     # output: utterance cleaned of special annotation
+    s = re.sub(r' 0([\S+])', r' \1', s) # delete 0 at beginning of words
     s = re.sub(r'0faire ', 'faire ', s) # faire + Inf is transcribed as '0faire' in York
     s = re.sub(r'<[^>]+> \[//?\] ', '', s) # repetitions (not in %mor), e.g. mais <je t'avais dit que> [/] je t'avais dit que ...
-    s = re.sub(r'\[\!\] ?', ' ', s) # repetitions (not in %mor), e.g. mais <je t'avais dit que> [/] je t'avais dit que ...
-    s = re.sub(r'<([^>]+)>\s+\[%[^\]]+\]', '\1', s) # corrections: qui <va> [% sdi=vais] la raconter . > va
-    s = re.sub(r'<(0|www|xxx|yyy)[^>]+> ?', '', s) # repetitions (not in %mor), e.g. mais <je t'avais dit que> [/] je t'avais dit que ...
+    s = re.sub(r'\[\!\] ?', ' ', s) 
+    s = re.sub(r' \(\.\) ', ' , ', s)  # pauses (unknown to tagger) > comma
+    s = re.sub(r'<([^>]+)>\s+\[%[^\]]+\]', r'\1', s) # corrections: qui <va> [% sdi=vais] la raconter . > va
+    s = re.sub(r'<(0|www|xxx|yyy)[^>]+> ?', '', s) 
     s = re.sub(r'\+[<,]? ?', '', s)  
     s = re.sub(r'(0|www|xxx|yyy)\s', '', s)  # xxx = incomprehensible – yyy = separate phonetic coding
     s = re.sub(r'\[.*?\] ?', '', s)  # no words
-    s = re.sub(r'\(([A-Za-z])\)', r'\1', s)  # delete parentheses around chars
+    s = re.sub(r'\(([A-Za-z]+)\)', r'\1', s)  # delete parentheses around chars
     s = re.sub(r' \+/+', ' ', s)  # annotations for pauses (?) e.g. +//.
     s = re.sub(r'[_=]', ' ', s)  # eliminate _ and = 
     s = re.sub(r'\s+', ' ', s)  # reduce spaces
@@ -409,7 +433,7 @@ def tokenise(s):
     # output: sentence tokenised for TreeTagger
     # 1) define cutoff characters and strings at beginning and end of tokens
     reBeginChar = re.compile('(\[\|\{\(\/\'\´\`"»«°)') 
-    reEndChar = re.compile('(\]\|\}\/\'\`\"\),;:\!\?\%»«)') 
+    reEndChar = re.compile('(\]\|\}\/\'\`\"\),;:\!\?\.\%»«)') 
     reBeginString = re.compile('([dcjlmnstDCJLNMST]\'|[Qq]u\'|[Jj]usqu\'|[Ll]orsqu\')') 
     reEndString = re.compile('(-t-elles?|-t-ils?|-t-on|-ce|-elles?|-ils?|-je|-la|-les?|-leur|-lui|-mêmes?|-m\'|-moi|-nous|-on|-toi|-tu|-t\'|-vous|-en|-y|-ci|-là)') 
     # 2) cut
@@ -424,12 +448,11 @@ def treeTagger(str):
     # input:  concatenated target items
     # output: tagged items stored in dictionaries with item IDs as key
     itemTagged = {}  # this dict stores tagged items in the format  Word_POS_Lemma ...
-    itemLemmas = {}  # this dict stores POS tags only
-    itemPOS = {}  # this dict stores POS tags only
-    itemWords = {}  # this dict stores words only
+    itemLemmas = {}  # this dict stores Lemmas only
+    itemPOS = {}     # this dict stores POS tags only
+    itemWords = {}   # this dict stores words only
     taggerBin = os.path.expanduser('./tree-tagger')     # TreeTagger binary
-    #paramFile = os.path.expanduser('./perceo-spoken-french-utf.par')    # TreeTagger parameters
-    paramFile = os.path.expanduser(args.parameters)    # TreeTagger parameters
+    paramFile = os.path.expanduser(args.parameters)     # TreeTagger parameters
     if not os.path.exists(taggerBin):   # verify if tagger files exist
         print("tree-tagger binary not found:", taggerBin, " - trying current working directory...")
         taggerBin = os.path.expanduser('./tree-tagger')     # TreeTagger binary
@@ -451,17 +474,19 @@ def treeTagger(str):
     p1 = subprocess.Popen(["cat", 'tagged.tmp'], stdout=subprocess.PIPE)
     tagged = subprocess.check_output([taggerBin, paramFile, '-token', '-lemma', '-sgml'], stdin=p1.stdout)
     tagged = tagged.decode('utf8')
-    tagged = re.sub(r'\t([A-Za-z:]+)\t', r'_\1=', tagged)         # annotation format: word_pos=lemma ...
-    tagged = re.sub(r'\n', ' ', tagged)                          # put everything on one line
+    if args.hops != '':
+      parseFormat = tagged2conllu(tagged)  # preserve tabular format for CoNLL
+    tagged = re.sub(r'\t([A-Za-z:]+)\t', r'_\1=', tagged)   # annotation format: word_pos=lemma ...
+    tagged = re.sub(r'\n', ' ', tagged)                     # put everything on one line
     # Tagger corrections (TODO improve)
     tagged = re.sub(r'([,\?])_NAM=<unknown>', r'\1_PON=,', tagged)
-    for sentence in tagged.split("<s_"): #taggedItems:    # split the concatenated items
+    for sentence in tagged.split("<s_"): #taggedItems: split the concatenated items
         if sentence == "":   # first element is empty: ignore
             continue
         reItem = re.compile('^([^>]+)> (.*)') # e.g.: <s_paris-julie.cha_u18342>
         if re.search(reItem, sentence):  # get the item number from the rest of code, e.g. (<s_)A23
             m = re.search(reItem, sentence)
-            sentence = re.sub(r'^([^>]+)> ', ' ', sentence)  # leave a initial space for word matching
+            sentence = re.sub(r'^([^>]+)> ', ' ', sentence)  # leave an initial space for word matching
         else:
             print("Error: no item number found in item:", sentence)
             quit()
@@ -476,6 +501,32 @@ def treeTagger(str):
         itemWords[key] = ' '.join(posWords)     #  ... and stores it in dictionary
     return(itemWords, itemPOS, itemLemmas, itemTagged)
 
+def tagged2conllu (str):
+  # convert 3-column tagger output to 10-column conllu format
+  str = re.sub(r'(.*)\t(.*)\t(.*)', r'\1\t\3\t_\t\2\t_\t_\t_\t_\t_', str)
+  reItem = re.compile('<s_([^>]+)>') # e.g.: <s_paris-julie.cha_u18342>
+  str = re.sub(reItem, r'# item_id = \1', str)   # create CoNLL-U IDs
+  # for each sentence, insert word numbers and write
+  with open('parseme.conllu', 'w') as parsetmp:
+    sNr = wNr = 0
+    out = ''
+    for line in str.split("\n"):
+      if re.search(r'^# item', line):
+        sNr += 1
+        if sNr > 1 and wNr > 0:
+          reVerb = re.compile('\t' + args.pos_utterance)
+          print(f"Matching output against {args.pos_utterance}")
+#          if re.search(r'\tVER', out):   # for now, only write sentences with verbs
+          if re.search(reVerb, out):   # for now, only write sentences with verbs
+            parsetmp.write(f"{out}\n")   # write the last sentence
+        wNr = 0
+        out = ''
+        out = f"{line}\n"  # store meta info for next sentence
+      else:
+        wNr += 1
+        out += f"{wNr}\t{line}\n"  # append
+    parsetmp.close()
+  return(str)
 
 ###########################################################################
 # main function
@@ -484,15 +535,21 @@ def treeTagger(str):
 if __name__ == "__main__":
    parser = argparse.ArgumentParser(
        description='''
-Converts childes CHAT format data into one word per line table.
+Converts CHILDES CHAT format into one word per line table.
 - Aligns words with matching information from annotation in %mor.
 - Discards other annotation lines (%sit etc).
+
+Examples:
+childes.py -m VER --pos_utterance VER --tagger_input -p perceo-spoken-french-utf.par concat-french-projects/Geneva.cha   
 ''', formatter_class = argparse.RawTextHelpFormatter   # allows triple quoting for multiple-line text
        )
    parser.add_argument('out_file', type=str,  help='output file')
    parser.add_argument(
         '-F', '--first_utterance', action='store_true',
         help='print utterance only for first token')
+   parser.add_argument(
+       '--hops', default = "", type = str,
+       help='run hops parser with this model')
    parser.add_argument(
        '-m', '--match_tagging', default = "", type = str,
        help='match the tagger output against this regex')

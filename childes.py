@@ -509,7 +509,7 @@ def treeTagger(str):
     tagged = tagged.decode('utf8')
     if args.hops != '':
       parseFormat = tagged2conllu(tagged)  # preserve tabular format for CoNLL
-    tagged = re.sub(r'\t([A-Za-z:]+)\t', r'_\1=', tagged)   # annotation format: word_pos=lemma ...
+    tagged = re.sub(r'\t([A-Za-z:]+)\t', r'_\1=', tagged)   # create annotation format: word_pos=lemma ...
     tagged = re.sub(r'\n', ' ', tagged)                     # put everything on one line
     # Tagger corrections (TODO improve)
     tagged = re.sub(r'([,\?])_NAM=<unknown>', r'\1_PON=,', tagged)
@@ -549,7 +549,6 @@ def tagged2conllu (str):
         if sNr > 1 and wNr > 0:
           reVerb = re.compile('\t' + args.pos_utterance)
           print(f"Matching output against {args.pos_utterance}")
-#          if re.search(r'\tVER', out):   # for now, only write sentences with verbs
           if re.search(reVerb, out):   # for now, only write sentences with verbs
             parsetmp.write(f"{out}\n")   # write the last sentence
         wNr = 0

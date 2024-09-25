@@ -254,18 +254,19 @@ def addTagging(inputFile, outputFile, outHeader, itemWords, itemPOS, itemLemmas,
 
 def analyseTagging(tagged, lemma):
   # parse tagger output
-  matchedLemma = ''
-  annotation = []
   # example for verbal token regex word_tag=lemma: ( .*?_VER.*?=\w+)?
-  reRefl = re.compile(' [^_]+_.*?=se [^_]+_VER.*?=(?P<lemma>\w+)')    # try lemma
+  matchedLemma = ''
+  matchedVerb = ''
+  annotation = []
+  # --- Annotate reflexives
+  reRefl = re.compile(' [^_]+_.*?=se [^_]+_VER.*?=(?P<lemma>\w+)')
   if re.search(reRefl, tagged):
     m = re.search(reRefl, tagged)
     if m.group(1) is not None:
       matchedLemma = m.group('lemma')
     if(lemma == matchedLemma):  # annotate only rows where lemma is identical
       annotation.append('refl') # ('refl:'+matchedLemma)
-  # 'dative' complements with à, au, lui
-  #reDat = re.compile('[^_]+_VER.*?=(?P<lemma>\w+) [^_]+_.*?=à ')
+  # --- Annotate 'dative' complements with à, au, lui
   reDat = re.compile('[^_]+_VER.*?=(?P<lemma>\w+) (à|au|aux)_[^ ]+')
   if re.search(reDat, tagged):
     m = re.search(reDat, tagged)
@@ -280,6 +281,38 @@ def analyseTagging(tagged, lemma):
       matchedLemma = m.group('lemma')
     if(lemma == matchedLemma):  # annotate only rows where lemma is identical
       annotation.append('datclit') # ('dat:'+matchedLemma)
+  # --- Annotate Modal verbs
+  reMod = re.compile(' [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)') 
+  reModCl = re.compile(' [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)(pas_ADV=pas)?( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)') 
+  reModVerb = re.compile(' [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)(pas_ADV=pas)?.*? [^_]+_(VER|AUX):infi=(?P<verb>\S+)') 
+  reModCompl = re.compile(' [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)(pas_ADV=pas)?.*? [^_]+_(KON|PRO:int)=') 
+  reClMod = re.compile('( [^_]+_PRO:clo=\S+) [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)(pas_ADV=pas)?.*? [^_]+_VER:infi=(?P<verb>\S+)') 
+  # tu le veux INF
+  # tu veux un crayon
+  # tu le veux
+
+  if re.search(reModCl, tagged):
+    m = re.search(reModCl, tagged)
+    if m.group(1) is not None:
+      matchedLemma = m.group('lemma')
+      matchedVerb = m.group('verb')
+    if(lemma == matchedLemma):  # annotate only rows where lemma is identical
+      annotation.append('mod-clit' + '_' + matchedVerb)
+  elif re.search(reModVerb, tagged):
+      m = re.search(reModVerb, tagged)
+      if m.group(1) is not None:
+        matchedLemma = m.group('lemma')
+        matchedVerb = m.group('verb')
+      if(lemma == matchedLemma):  # annotate only rows where lemma is identical
+        annotation.append('mod' + '_' + matchedVerb)
+  elif re.search(reClMod, tagged):
+    annotation.append('clit-mod')
+  elif re.search(reModCompl, tagged):
+    annotation.append('mod-clause')
+  elif re.search(reMod, tagged):
+    annotation.append('mod-bare')
+  else:
+    pass
   return(annotation)
 
 def insertAtIndex(add, list, index):

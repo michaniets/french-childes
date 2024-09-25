@@ -3,7 +3,7 @@
 __author__ = "Achim Stein"
 __version__ = "1.5"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "20.9.24"
+__status__ = "25.9.24"
 __license__ = "GPL"
 
 import sys
@@ -282,37 +282,32 @@ def analyseTagging(tagged, lemma):
     if(lemma == matchedLemma):  # annotate only rows where lemma is identical
       annotation.append('datclit') # ('dat:'+matchedLemma)
   # --- Annotate Modal verbs
-  reMod = re.compile(' [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)') 
-  reModCl = re.compile(' [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)(pas_ADV=pas)?( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)') 
-  reModVerb = re.compile(' [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)(pas_ADV=pas)?.*? [^_]+_(VER|AUX):infi=(?P<verb>\S+)') 
-  reModCompl = re.compile(' [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)(pas_ADV=pas)?.*? [^_]+_(KON|PRO:int)=') 
-  reClMod = re.compile('( [^_]+_PRO:clo=\S+) [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)(pas_ADV=pas)?.*? [^_]+_VER:infi=(?P<verb>\S+)') 
-  # tu le veux INF
-  # tu veux un crayon
-  # tu le veux
-
-  if re.search(reModCl, tagged):
-    m = re.search(reModCl, tagged)
-    if m.group(1) is not None:
-      matchedLemma = m.group('lemma')
-      matchedVerb = m.group('verb')
-    if(lemma == matchedLemma):  # annotate only rows where lemma is identical
-      annotation.append('mod-clit' + '_' + matchedVerb)
-  elif re.search(reModVerb, tagged):
-      m = re.search(reModVerb, tagged)
+  reModalLemmas = re.compile('(devoir|falloir|pouvoir|savoir|vouloir)')
+  reModCl = re.compile('[^ _]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)') 
+  reModVerb = re.compile('[^ _]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)( [^_]+_ADV=\S+)*.*? [^_]+_(VER|AUX):infi=(?P<verb>\S+)') 
+  reModCompl = re.compile('[^ _]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)( [^_]+_ADV=\S+)* [^_]+_(KON|PRO:int)=') 
+  reModObj = re.compile('[^ _]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)( [^_]+_ADV=\S+)*( de_PRP=de)? [^_]+_(DET:.*?|PRO:rel|PRO:dem)=') 
+  reClMod = re.compile('([^ _]+_PRO:clo=\S+) [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)( pas_ADV=pas)?.*? [^_]+_VER:infi=(?P<verb>\S+)') 
+  # tu veux aussi NP
+  if re.search(reModalLemmas, lemma):  # annotate only rows with modal lemma
+    if re.search(reModCl, tagged):
+      m = re.search(reModCl, tagged)
       if m.group(1) is not None:
-        matchedLemma = m.group('lemma')
         matchedVerb = m.group('verb')
-      if(lemma == matchedLemma):  # annotate only rows where lemma is identical
-        annotation.append('mod' + '_' + matchedVerb)
-  elif re.search(reClMod, tagged):
-    annotation.append('clit-mod')
-  elif re.search(reModCompl, tagged):
-    annotation.append('mod-clause')
-  elif re.search(reMod, tagged):
-    annotation.append('mod-bare')
-  else:
-    pass
+      annotation.append('mod-clit-verb' ) # + '_' + matchedVerb
+    elif re.search(reModVerb, tagged):
+        m = re.search(reModVerb, tagged)
+        if m.group(1) is not None:
+          matchedVerb = m.group('verb')
+        annotation.append('mod-verb') #  + '_' + matchedVerb
+    elif re.search(reClMod, tagged):
+      annotation.append('clit-mod')
+    elif re.search(reModCompl, tagged):
+      annotation.append('mod-clause')
+    elif re.search(reModObj, tagged):
+      annotation.append('mod-obj')
+    else:
+      annotation.append('mod-noRule')  # unanalysed construction
   return(annotation)
 
 def insertAtIndex(add, list, index):

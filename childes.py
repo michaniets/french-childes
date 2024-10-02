@@ -317,13 +317,13 @@ def analyseTagging(tagged, lemma):
   # -------------------------------------------------------
   # Annotate VERB + VERB sequences (e.g. préférer faire)
   # -------------------------------------------------------
-  reVerbVerb = re.compile('[^ _]+_VER:.*?=(?P<verb>\S+)( [^_]+_ADV=\S+)*.*? [^_]+_(VER):infi=') 
+  reVerbVerb = re.compile('[^ _]+_VER:.*?=(?P<verb>\S+)( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+)* [^_]+_(VER):infi=') 
   if re.search(reVerbVerb, tagged):
     m = re.search(reVerbVerb, tagged)
     if m.group('verb') is not None:
       matchedVerb = m.group('verb')
-      #if not re.search(r'(devoir|falloir|pouvoir|savoir|vouloir)', matchedVerb):
-      annotation.append('verb-verb' + '_' + matchedVerb)
+      if(lemma == matchedVerb): 
+        annotation.append('verb-verb' + '_' + matchedVerb)
   # -------------------------------------------------------
   # Annotate verb particles (project H1)
   # -------------------------------------------------------

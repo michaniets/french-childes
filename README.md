@@ -24,6 +24,10 @@ Example: concatenated French CHILDES projects, tagged with parameters for spoken
 
 > childes.py -m VER --pos_utterance VER -p perceo-spoken-french-utf.par CHILDES-French-SILPAC.cha
 
+With option to preserve the string with the tagged utterance:
+
+> childes.py -m VER --pos_utterance VER --tagger_output -p perceo-spoken-french-utf.par CHILDES-French-SILPAC.cha
+
 
 Bugs:
 

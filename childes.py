@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "1.5"
+__version__ = "1.6"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "2.10.24"
+__status__ = "18.10.24"
 __license__ = "GPL"
 
 import sys
@@ -21,6 +21,11 @@ age = child = speaker = utt = uttID = timeCode = splitUtt = pid = ''
 sNr = age_days = 0
 outRows = []
 childData = {}
+# initialize the dictionary for annotations (--add_annotation)
+annotations = {}
+annot_keys = ['annot_refl', 'annot_dat', 'annot_clit', 'annot_mod', 'annot_verb', 'annot_particle']
+for key in annot_keys:
+   annotations[key] = None
 
 def main(args):
   global age, age_days, child, childData, speaker, utt, uttID, pid, splitUtt, sNr, timeCode, outRows    # needed to modify global vars locally
@@ -156,6 +161,10 @@ def main(args):
   # ----------------------------------------
   # write output table: DictWriter matches header and rows, regardless of the order of fields in row
   outHeader = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'features', 'annotation', 'utterance', 'utt_clean', 'utt_tagged']
+  if args.add_annotation != '':
+    for key, value in annotations.items():
+      outHeader.append(key) # create columns for annotation values
+
   with open(args.out_file + '.csv', 'w', newline='') as out:   # newline '' is needed: we have commas in items
     writer = csv.DictWriter(out, delimiter='\t', fieldnames=outHeader)
     writer.writeheader()
@@ -165,12 +174,13 @@ def main(args):
   if args.parameters != '':
     sys.stderr.write('Adding tagger output for each utterance...\n')
     addTagging(args.out_file + '.csv', args.out_file + '.tagged.csv', outHeader, itemWords, itemPOS, itemLemmas, itemTagged)
+    # write output
     sys.stderr.write("\nOutput file: " + args.out_file + '.tagged.csv\n')
     sys.stderr.write("  you can delete the temporary file: " + args.out_file + '.csv\n')
     sys.stderr.write("  you can delete the temporary files: tag*.tmp\n")
   else:
     sys.stderr.write("output was written to: " + args.out_file + '.csv\n')
-      
+  
 #-------------------------------------------------------
 # functions
 #-------------------------------------------------------
@@ -206,13 +216,10 @@ def addTagging(inputFile, outputFile, outHeader, itemWords, itemPOS, itemLemmas,
           wID = m.group(2)
           lemma = itemLemmas[uID].split(' ')
           pos = itemPOS[uID].split(' ')
-          annotation = []
           # get column indexes from header
           lemmaIndex = outHeader.index("lemma") if "lemma" in outHeader else None
           posIndex = outHeader.index("pos") if "pos" in outHeader else None
-          featIndex = outHeader.index("features") if "features" in outHeader else None
           uttIndex = outHeader.index("utterance") if "utterance" in outHeader else None
-          noteIndex = outHeader.index("annotation") if "annotation" in outHeader else None
           # insert new lemma (col 9), pos (10), note (11)
           try:
             data[l][lemmaIndex] = lemma[int(wID)-1]
@@ -231,21 +238,26 @@ def addTagging(inputFile, outputFile, outHeader, itemWords, itemPOS, itemLemmas,
             tagged = itemTagged[uID]
             try:
               if re.search(re.compile(args.match_tagging), pos[int(wID)-1]): # if tagger pos matches argument
+                # --add_annotation: get the annotation values, store at index of header column
                 if args.add_annotation != '':
-                  annotation = analyseTagging(tagged, lemma[int(wID)-1])
-                  data[l][noteIndex] = ','.join(annotation)
+                  annotations = analyseTagging(tagged, lemma[int(wID)-1])
+                  for key, value in annotations.items():
+                    thisIndex = outHeader.index(key) if key in outHeader else None
+                    data[l][thisIndex] = annotations[key]
             except IndexError:
               print('   INDEX ERROR annotation index %s of: %s\n' % (str(int(wID)-1), data[l]))
           # add a column with the tagger analysis 
           if args.tagger_output:
             index = outHeader.index("utt_tagged")
-            data[l][index] = tagged  # add the annotation values
+            reMatch = re.compile(args.pos_utterance)
+            if posIndex <= len(data[l]) and re.search(reMatch, data[l][posIndex]):
+              data[l][index] = tagged  # add the tagged string
           # output option depending on tagger output
           if args.pos_utterance:
             uttIndex = outHeader.index("utterance") if "utterance" in outHeader else None
             reMatch = re.compile(args.pos_utterance)
             if posIndex <= len(data[l]) and not re.search(reMatch, data[l][posIndex]):
-              data[l][uttIndex] = ''  # add the annotation values
+              data[l][uttIndex] = ''  # add the utterance
 
           # output table row
           writer.writerow(row)
@@ -254,87 +266,92 @@ def addTagging(inputFile, outputFile, outHeader, itemWords, itemPOS, itemLemmas,
           writer.writerow(row)
 
 def analyseTagging(tagged, lemma):
-  # option -a --add_annotion: coding based on the tagger output
-  # example for verbal token regex word_tag=lemma: ( .*?_VER.*?=\w+)?
-  matchedLemma = ''
-  matchedVerb = ''
-  annotation = []
-  # -------------------------------------------------------
-  # --- Annotate reflexives
-  # -------------------------------------------------------
-  reRefl = re.compile(' [^_]+_.*?=se [^_]+_VER.*?=(?P<lemma>\w+)')
-  if re.search(reRefl, tagged):
-    m = re.search(reRefl, tagged)
-    if m.group(1) is not None:
-      matchedLemma = m.group('lemma')
-    if(lemma == matchedLemma):  # annotate only rows where lemma is identical
-      annotation.append('refl') # ('refl:'+matchedLemma)
-  # -------------------------------------------------------
-  # --- Annotate 'dative' complements with à, au, lui
-  # -------------------------------------------------------
-  reDat = re.compile('[^_]+_VER.*?=(?P<lemma>\w+) (à|au|aux)_[^ ]+')
-  if re.search(reDat, tagged):
-    m = re.search(reDat, tagged)
-    if m.group(1) is not None:
-      matchedLemma = m.group('lemma')
-    if(lemma == matchedLemma):  # annotate only rows where lemma is identical
-      annotation.append('dat') # ('dat:'+matchedLemma)
-  reDatCl = re.compile('(lui|leur)_[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>\w+)')
-  if re.search(reDatCl, tagged):
-    m = re.search(reDatCl, tagged)
-    if m.group(1) is not None:
-      matchedLemma = m.group('lemma')
-    if(lemma == matchedLemma):  # annotate only rows where lemma is identical
-      annotation.append('datclit') # ('dat:'+matchedLemma)
-  # -------------------------------------------------------
-  # --- Annotate Modal verbs
-  # -------------------------------------------------------
-  reModalLemmas = re.compile('(devoir|falloir|pouvoir|savoir|vouloir)')
-  reModCl = re.compile('[^ _]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)') 
-  reModVerb = re.compile('[^ _]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)( [^_]+_ADV=\S+)*.*? [^_]+_(VER|AUX):infi=(?P<verb>\S+)') 
-  reModCompl = re.compile('[^ _]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)( [^_]+_ADV=\S+)* [^_]+_(KON|PRO:int)=') 
-  reModObj = re.compile('[^ _]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)( [^_]+_ADV=\S+)*( de_PRP=de)? [^_]+_(DET:.*?|PRO:rel|PRO:dem)=') 
-  reClMod = re.compile('([^ _]+_PRO:clo=\S+) [^_]+_.*?=(?P<lemma>devoir|falloir|pouvoir|savoir|vouloir)( pas_ADV=pas)?.*? [^_]+_VER:infi=(?P<verb>\S+)') 
-  if re.search(reModalLemmas, lemma):  # annotate only rows with modal lemma
-    if re.search(reModCl, tagged):
-      m = re.search(reModCl, tagged)
-      if m.group(1) is not None:
+    for key in annot_keys:
+      annotations[key] = None  # empty the dict for annotations
+    # -------------------------------------------------------
+    # --- Annotate reflexives
+    # -------------------------------------------------------
+    reRefl = re.compile(' [^_]+_.*?=se [^_]+_VER.*?=(?P<lemma>\w+)')
+    if re.search(reRefl, tagged):
+        m = re.search(reRefl, tagged)
+        matchedLemma = m.group('lemma')
+        if lemma == matchedLemma:  # Annotate only rows where lemma is identical
+            annotations['annot_refl'] = 'refl'
+    # -------------------------------------------------------
+    # --- Annotate 'dative' complements with à, au, lui
+    # -------------------------------------------------------
+    reDat = re.compile('[^_]+_VER.*?=(?P<lemma>\w+) (à|au|aux)_[^ ]+')
+    if re.search(reDat, tagged):
+        m = re.search(reDat, tagged)
+        matchedLemma = m.group('lemma')
+        if lemma == matchedLemma:  # Annotate only rows where lemma is identical
+            annotations['annot_dat'] = 'aPP'    
+    # -------------------------------------------------------
+    # --- Annotate object clitics
+    # -------------------------------------------------------
+    reDatCl = re.compile('(lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>\w+)')
+    reAccCl = re.compile('(le|la|les)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>\w+)')
+    reAccDatCl = re.compile('(le|la|les)_PRO:clo[^ ]+ (lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>\w+)')
+    if re.search(reDatCl, tagged):
+        m = re.search(reDatCl, tagged)
+        matchedLemma = m.group('lemma')
+        if lemma == matchedLemma:  # Annotate only rows where lemma is identical
+            annotations['annot_clit'] = 'dat'
+    if re.search(reAccCl, tagged):
+        m = re.search(reAccCl, tagged)
+        matchedLemma = m.group('lemma')
+        if lemma == matchedLemma:  # Annotate only rows where lemma is identical
+            annotations['annot_clit'] = 'acc'
+    if re.search(reAccDatCl, tagged):
+        m = re.search(reAccDatCl, tagged)
+        matchedLemma = m.group('lemma')
+        if lemma == matchedLemma:  # Annotate only rows where lemma is identical
+            annotations['annot_clit'] = 'accdat'
+    # -------------------------------------------------------
+    # --- Annotate Modal verbs
+    # -------------------------------------------------------
+    reModalLemmas = re.compile('(devoir|falloir|pouvoir|savoir|vouloir)')  # only modals
+    reModCl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{reModalLemmas.pattern})( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)')
+    reModVerb = re.compile(rf'[^ _]+_.*?=(?P<lemma>{reModalLemmas.pattern})( [^_]+_ADV=\S+)*.*? [^_]+_(VER|AUX):infi=(?P<verb>\S+)')
+    reModCompl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{reModalLemmas.pattern})( [^_]+_ADV=\S+)* [^_]+_(KON|PRO:int)=')
+    reModObj = re.compile(rf'[^ _]+_.*?=(?P<lemma>{reModalLemmas.pattern})( [^_]+_ADV=\S+)*( de_PRP=de)? [^_]+_(DET:.*?|PRO:rel|PRO:dem)=')
+    reClMod = re.compile(rf'([^ _]+_PRO:clo=\S+) [^_]+_.*?=(?P<lemma>{reModalLemmas.pattern})( pas_ADV=pas)?.*? [^_]+_VER:infi=(?P<verb>\S+)')
+    if re.search(reModalLemmas, lemma):  # Annotate only rows with modal lemma
+      if re.search(reModCl, tagged):
+          m = re.search(reModCl, tagged)
+          annotations['annot_mod'] = 'mod-clit-verb'
+      elif re.search(reModVerb, tagged):
+          m = re.search(reModVerb, tagged)
+          annotations['annot_mod'] = 'mod-verb'
+      elif re.search(reClMod, tagged):
+          annotations['annot_mod'] = 'clit-mod'
+      elif re.search(reModCompl, tagged):
+          annotations['annot_mod'] = 'mod-clause'
+      elif re.search(reModObj, tagged):
+          annotations['annot_mod'] = 'mod-obj'
+      else:
+          annotations['annot_mod'] = 'mod-noRule'
+    # -------------------------------------------------------
+    # --- Annotate VERB + VERB sequences (e.g. préférer faire)
+    # -------------------------------------------------------
+    reVerbVerb = re.compile('[^ _]+_VER:.*?=(?P<verb>\S+)( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+)* [^_]+_(VER):infi=')
+    #if re.search(reModalLemmas, lemma):  # Annotate only rows with modal lemma
+    if not re.search(reModalLemmas, lemma) and re.search(reVerbVerb, tagged):
+        m = re.search(reVerbVerb, tagged)
         matchedVerb = m.group('verb')
-      annotation.append('mod-clit-verb' ) # + '_' + matchedVerb
-    elif re.search(reModVerb, tagged):
-        m = re.search(reModVerb, tagged)
-        if m.group(1) is not None:
-          matchedVerb = m.group('verb')
-        annotation.append('mod-verb') #  + '_' + matchedVerb
-    elif re.search(reClMod, tagged):
-      annotation.append('clit-mod')
-    elif re.search(reModCompl, tagged):
-      annotation.append('mod-clause')
-    elif re.search(reModObj, tagged):
-      annotation.append('mod-obj')
-    else:
-      annotation.append('mod-noRule')  # unanalysed construction
-  # -------------------------------------------------------
-  # Annotate VERB + VERB sequences (e.g. préférer faire)
-  # -------------------------------------------------------
-  reVerbVerb = re.compile('[^ _]+_VER:.*?=(?P<verb>\S+)( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+)* [^_]+_(VER):infi=') 
-  if re.search(reVerbVerb, tagged):
-    m = re.search(reVerbVerb, tagged)
-    if m.group('verb') is not None:
-      matchedVerb = m.group('verb')
-      if(lemma == matchedVerb): 
-        annotation.append('verb-verb' + '_' + matchedVerb)
-  # -------------------------------------------------------
-  # Annotate verb particles (project H1)
-  # -------------------------------------------------------
-  reVPart = re.compile('[^ _]+_VER:.*?=(?P<verb>\S+) (?P<part>[^_]+_ADV=\S+)') 
-  if re.search(reVPart, tagged):
-    m = re.search(reVPart, tagged)
-    if m.group('part') is not None:
-      matched = m.group('part')
-      if re.search(r'(dessus|dessous|dehors|avant|derrière|en-.*)', matched):
-        annotation.append('verb-part' + '_' + m.group('part'))
-  return(annotation)
+        if lemma == matchedVerb:
+            annotations['annot_verb'] = 'verb-verb_' + matchedVerb
+    # -------------------------------------------------------
+    # --- Annotate verb particles (just a try, for project H1)
+    # -------------------------------------------------------
+    reVPart = re.compile('[^ _]+_VER:.*?=(?P<verb>\S+) (?P<part>[^_]+_ADV=\S+)')
+    if re.search(reVPart, tagged):
+        m = re.search(reVPart, tagged)
+        matchedPart = m.group('part')
+        if re.search(r'(dessus|dessous|dehors|avant|derrière|en-.*)', matchedPart):
+            annotations['annot_particle'] = 'verb-part_' + matchedPart
+
+    return annotations
 
 def insertAtIndex(add, list, index):
   # insert 'add' in list at index
@@ -486,8 +503,8 @@ def tokenise(s):
     # input:  unprocessed sentence
     # output: sentence tokenised for TreeTagger
     # 1) define cutoff characters and strings at beginning and end of tokens
-    reBeginChar = re.compile('(\[\|\{\(\/\'\´\`"»«°)') 
-    reEndChar = re.compile('(\]\|\}\/\'\`\"\),;:\!\?\.\%»«)') 
+    reBeginChar = re.compile('(\[\|\{\(\/\'\´\`"»«°<)') 
+    reEndChar = re.compile('(\]\|\}\/\'\`\"\),\;\:\!\?\.\%»«>)') 
     reBeginString = re.compile('([dcjlmnstDCJLNMST]\'|[Qq]u\'|[Jj]usqu\'|[Ll]orsqu\')') 
     reEndString = re.compile('(-t-elles?|-t-ils?|-t-on|-ce|-elles?|-ils?|-je|-la|-les?|-leur|-lui|-mêmes?|-m\'|-moi|-nous|-on|-toi|-tu|-t\'|-vous|-en|-y|-ci|-là)') 
     # 2) cut
@@ -532,8 +549,7 @@ def treeTagger(str):
       parseFormat = tagged2conllu(tagged)  # preserve tabular format for CoNLL
     tagged = re.sub(r'\t([A-Za-z:]+)\t', r'_\1=', tagged)   # create annotation format: word_pos=lemma ...
     tagged = re.sub(r'\n', ' ', tagged)                     # put everything on one line
-    # Tagger corrections (TODO improve)
-    tagged = re.sub(r'([,\?])_NAM=<unknown>', r'\1_PON=,', tagged)
+    tagged = processTaggerOutput(tagged)                    # correct errors
     for sentence in tagged.split("<s_"): #taggedItems: split the concatenated items
         if sentence == "":   # first element is empty: ignore
             continue
@@ -554,6 +570,40 @@ def treeTagger(str):
         itemPOS[key] = ' '.join(posTags)     #  ... and stores it in dictionary
         itemWords[key] = ' '.join(posWords)     #  ... and stores it in dictionary
     return(itemWords, itemPOS, itemLemmas, itemTagged)
+
+def processTaggerOutput (tagged):
+  print(f"Correcting the tagger output:")
+  tagged = re.sub(r'([,\?])_NAM=<unknown>', r'\1_PON=,', tagged)
+  tagged, count = re.subn('Marie_VER:pres=marier', 'Marie_NAM=Marie', tagged)
+  print(f"   - {count} substitutions for: Marie")
+  tagged, count = re.subn(r'( allez[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER:impe=NEWLEM:aller', tagged)
+  print(f"   - {count} substitutions for: aller")
+  tagged, count = re.subn(r'( attend[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:attendre', tagged)
+  print(f"   - {count} substitutions for: attendre")
+  tagged, count = re.subn(r'( dis[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:dire', tagged)
+  print(f"   - {count} substitutions for: dire")
+  tagged, count = re.subn(r'( enl.v.[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:enlever', tagged)
+  print(f"   - {count} substitutions for: enlever")
+  tagged, count = re.subn(r'( fai[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:faire', tagged)
+  print(f"   - {count} substitutions for: faire")
+  tagged, count = re.subn(r'( fini[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:finir', tagged)
+  print(f"   - {count} substitutions for: finir")
+  tagged, count = re.subn(r'( prend[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:prendre', tagged)
+  print(f"   - {count} substitutions for: prendre")
+  tagged, count = re.subn(r'( mett[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:mettre', tagged)
+  print(f"   - {count} substitutions for: mettre")
+  tagged, count = re.subn(r'( regard[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:regarder', tagged)
+  print(f"   - {count} substitutions for: regarder")
+  tagged, count = re.subn(r'( tomb[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:tomber', tagged)
+  print(f"   - {count} substitutions for: tomber")
+  tagged, count = re.subn(r'( vu[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:voir', tagged)
+  print(f"   - {count} substitutions for: voir")
+  tagged, count = re.subn(r'( ![^_ ]*)_([^= ]+)=<unknown>', r' !_PON=!', tagged)
+  print(f"   - {count} substitutions for: !")
+  tagged, count = re.subn('NEWLEM:', '', tagged)
+  print(f"  Total corrected lemmas: {count}")
+  print("  Remaining <unknown>: ", len(re.findall(r'VER:[^=]+=<unknown>', tagged)))
+  return(tagged)
 
 def tagged2conllu (str):
   # convert 3-column tagger output to 10-column conllu format
@@ -593,7 +643,10 @@ Converts CHILDES CHAT format into one word per line table.
 - Discards other annotation lines (%sit etc).
 
 Examples:
-childes.py -m VER --pos_utterance VER --tagger_input -p perceo-spoken-french-utf.par concat-french-projects/Geneva.cha   
+> childes.py -m VER --pos_utterance VER --tagger_input -p perceo-spoken-french-utf.par Geneva.cha   
+
+Add annotation based on the tagged string:
+> childes.py -m VER --add_annotation --tagger_output --pos_utterance VER -p perceo-spoken-french-utf.par childes-all.cha
 ''', formatter_class = argparse.RawTextHelpFormatter   # allows triple quoting for multiple-line text
        )
    parser.add_argument('out_file', type=str,  help='output file')

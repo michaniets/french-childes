@@ -289,62 +289,46 @@ def analyseTagging(tagged, lemma):
     # -------------------------------------------------------
     # --- Annotate object clitics
     # -------------------------------------------------------
-    reDatCl = re.compile('(lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>\w+)')
-    reAccCl = re.compile('(le|la|les)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>\w+)')
-    reAccDatCl = re.compile('(le|la|les)_PRO:clo[^ ]+ (lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>\w+)')
+    reDatCl = re.compile(rf'(lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{lemma})')
+    reAccCl = re.compile(rf'(le|la|les)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{lemma})')
+    reAccDatCl = re.compile(rf'(le|la|les)_PRO:clo[^ ]+ (lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{lemma})')
     if re.search(reDatCl, tagged):
-        m = re.search(reDatCl, tagged)
-        matchedLemma = m.group('lemma')
-        if lemma == matchedLemma:  # Annotate only rows where lemma is identical
-            annotations['annot_clit'] = 'dat'
+        annotations['annot_clit'] = 'dat'
     if re.search(reAccCl, tagged):
-        m = re.search(reAccCl, tagged)
-        matchedLemma = m.group('lemma')
-        if lemma == matchedLemma:  # Annotate only rows where lemma is identical
-            annotations['annot_clit'] = 'acc'
+        annotations['annot_clit'] = 'acc'
     if re.search(reAccDatCl, tagged):
-        m = re.search(reAccDatCl, tagged)
-        matchedLemma = m.group('lemma')
-        if lemma == matchedLemma:  # Annotate only rows where lemma is identical
-            annotations['annot_clit'] = 'accdat'
+        annotations['annot_clit'] = 'accdat'
     # -------------------------------------------------------
     # --- Annotate Modal verbs
     # -------------------------------------------------------
-    reModalLemmas = re.compile('(devoir|falloir|pouvoir|savoir|vouloir)')  # only modals
-    reModCl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{reModalLemmas.pattern})( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)')
-    reModVerb = re.compile(rf'[^ _]+_.*?=(?P<lemma>{reModalLemmas.pattern})( [^_]+_ADV=\S+)*.*? [^_]+_(VER|AUX):infi=(?P<verb>\S+)')
-    reModCompl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{reModalLemmas.pattern})( [^_]+_ADV=\S+)* [^_]+_(KON|PRO:int)=')
-    reModObj = re.compile(rf'[^ _]+_.*?=(?P<lemma>{reModalLemmas.pattern})( [^_]+_ADV=\S+)*( de_PRP=de)? [^_]+_(DET:.*?|PRO:rel|PRO:dem)=')
-    reClMod = re.compile(rf'([^ _]+_PRO:clo=\S+) [^_]+_.*?=(?P<lemma>{reModalLemmas.pattern})( pas_ADV=pas)?.*? [^_]+_VER:infi=(?P<verb>\S+)')
-    if re.search(reModalLemmas, lemma):  # Annotate only rows with modal lemma
-      if re.search(reModCl, tagged):
-          m = re.search(reModCl, tagged)
-          annotations['annot_mod'] = 'mod-clit-verb'
-      elif re.search(reModVerb, tagged):
-          m = re.search(reModVerb, tagged)
-          annotations['annot_mod'] = 'mod-verb'
-      elif re.search(reClMod, tagged):
-          annotations['annot_mod'] = 'clit-mod'
-      elif re.search(reModCompl, tagged):
-          annotations['annot_mod'] = 'mod-clause'
-      elif re.search(reModObj, tagged):
-          annotations['annot_mod'] = 'mod-obj'
-      else:
-          annotations['annot_mod'] = 'mod-noRule'
-    # -------------------------------------------------------
-    # --- Annotate VERB + VERB sequences (e.g. préférer faire)
-    # -------------------------------------------------------
-    reVerbVerb = re.compile('[^ _]+_VER:.*?=(?P<verb>\S+)( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+)* [^_]+_(VER):infi=')
-    #if re.search(reModalLemmas, lemma):  # Annotate only rows with modal lemma
-    if not re.search(reModalLemmas, lemma) and re.search(reVerbVerb, tagged):
-        m = re.search(reVerbVerb, tagged)
-        matchedVerb = m.group('verb')
-        if lemma == matchedVerb:
-            annotations['annot_verb'] = 'verb-verb_' + matchedVerb
+    reOnlyModals = re.compile('(devoir|falloir|pouvoir|savoir|vouloir)')  # only modals
+    reModalLemmas = re.compile('[^ ]+')  # only modals
+    reModCl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)')
+    reModVerb = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)*.*? [^_]+_(VER|AUX):infi=(?P<verb>\S+)')
+    reModCompl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)* [^_]+_(KON|PRO:int)')
+    reModObj = re.compile(rf'[^ _]+_[^=]+=(?P<lemma>{lemma}) [^_]+_(DET:.*?|PRO:rel|PRO:dem)=')
+    reClMod = re.compile(rf'([^ _]+_PRO:clo=\S+) [^_]+_.*?=(?P<lemma>{lemma})( pas_ADV=pas)?.*? [^_]+_VER:infi=(?P<verb>\S+)')
+    if re.search(reOnlyModals, lemma):
+      prefix = "modal"  # mark modal verbs by prefix 'mod'
+    else:
+      prefix = "verb"
+    if re.search(reModCl, tagged):  
+      thisAnnot = prefix + '-clit-verb'
+    elif re.search(reClMod, tagged):
+        thisAnnot = 'clit-' + prefix  # no clit-modal order in the corpus
+    elif re.search(reModObj, tagged):
+      thisAnnot = prefix + '-obj'
+    elif re.search(reModVerb, tagged):
+      thisAnnot = prefix + '-verb'
+    elif re.search(reModCompl, tagged):
+      thisAnnot = prefix + '-clause'
+    else:
+      thisAnnot = prefix + '-noRule'
+    annotations['annot_mod'] = thisAnnot  # store annotation in dict
     # -------------------------------------------------------
     # --- Annotate verb particles (just a try, for project H1)
     # -------------------------------------------------------
-    reVPart = re.compile('[^ _]+_VER:.*?=(?P<verb>\S+) (?P<part>[^_]+_ADV=\S+)')
+    reVPart = re.compile('[^ _]+_VER:.*?=(?P<lemma>{lemma}) (?P<part>[^_]+_ADV=\S+)')
     if re.search(reVPart, tagged):
         m = re.search(reVPart, tagged)
         matchedPart = m.group('part')

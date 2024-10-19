@@ -328,12 +328,10 @@ def analyseTagging(tagged, lemma):
     # -------------------------------------------------------
     # --- Annotate verb particles (just a try, for project H1)
     # -------------------------------------------------------
-    reVPart = re.compile('[^ _]+_VER:.*?=(?P<lemma>{lemma}) (?P<part>[^_]+_ADV=\S+)')
+    reParticle = re.compile('(dessus|dessous|dehors|avant|derrière|en-.*)')
+    reVPart = re.compile(rf'[^ _]+_VER:.*?=(?P<lemma>{lemma}) (?P<part>{reParticle.pattern}_ADV=\S+)')
     if re.search(reVPart, tagged):
-        m = re.search(reVPart, tagged)
-        matchedPart = m.group('part')
-        if re.search(r'(dessus|dessous|dehors|avant|derrière|en-.*)', matchedPart):
-            annotations['annot_particle'] = 'verb-part_' + matchedPart
+      annotations['annot_particle'] = 'verb-part_' + re.search(reVPart, tagged).group('part') # matchedPart
 
     return annotations
 

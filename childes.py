@@ -23,7 +23,7 @@ outRows = []
 childData = {}
 # initialize the dictionary for annotations (--add_annotation)
 annotations = {}
-annot_keys = ['annot_refl', 'annot_dat', 'annot_clit', 'annot_mod', 'annot_verb', 'annot_particle']
+annot_keys = ['annot_refl', 'annot_dat', 'annot_clit', 'annot_mod', 'annot_particle']
 for key in annot_keys:
    annotations[key] = None
 

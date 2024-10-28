@@ -22,11 +22,15 @@ Tested for some of the French CHILDES files (e.g. Paris).
 
 Example: concatenated French CHILDES projects, tagged with parameters for spoken French
 
-> childes.py -m VER --pos_utterance VER -p perceo-spoken-french-utf.par CHILDES-French-SILPAC.cha
+> childes.py -m VER --pos_utterance VER -p perceo-spoken-french-utf.par childes-all.cha
 
 With option to preserve the string with the tagged utterance:
 
-> childes.py -m VER --pos_utterance VER --tagger_output -p perceo-spoken-french-utf.par CHILDES-French-SILPAC.cha
+> childes.py -m VER --pos_utterance VER --tagger_output -p perceo-spoken-french-utf.par childes-all.cha
+
+With option --add_annotation to apply the annotation rules specified in _tag_analyser.py_ 
+
+> childes.py -m VER --add_annotation --tagger_output --pos_utterance VER -p perceo-spoken-french-utf.par childes-all.cha
 
 ### Bugs
 
@@ -43,3 +47,6 @@ Options:
 - **--conllu** creates parallel output in the file _parseme.conllu_.  Run the parser on this file, then optionally merge the output with the csv table.  To run UDPipe on this file, specify 'conllu' as input format, like so:
 
 > curl -F data=@parseme.conllu  -F model=french -F tagger= -F parser= -F input=conllu https://lindat.mff.cuni.cz/services/udpipe/api/process | python -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['result'])" > udpipe.conllu
+
+Example:
+> childes.py -m VER --add_annotation --tagger_output --pos_utterance VER -p perceo-spoken-french-utf.par --conllu childes-all.cha

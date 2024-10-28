@@ -20,7 +20,7 @@ Tested for some of the French CHILDES files (e.g. Paris).
 2. Run script on concatenated file.
 3. Use -p <parameters> for TreeTagger analysis
 
-Example: concatenated French CHILDES projects, tagged with parameters for spoken French (from the PERCEO project, see [https://www.cis.uni-muenchen.de/~schmid/tools/TreeTagger/](Helmut Schmid's TreeTagger website))
+Example: concatenated French CHILDES projects, tagged with parameters for spoken French (from the PERCEO project, see [Helmut Schmid's TreeTagger website](https://www.cis.uni-muenchen.de/~schmid/tools/TreeTagger/))
 
 > childes.py -m VER --pos_utterance VER -p perceo-spoken-french-utf.par childes-all.cha
 

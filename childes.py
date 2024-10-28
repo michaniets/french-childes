@@ -209,9 +209,9 @@ def main(args):
       CoNLL-U was written to parseme.conllu. Run a parser on it, or call UDPipe like so:
       1. slice into files of 10000 sentences (UDPipe doesn't seem to digest larger files)
       > conll.pl -S 10000 parseme.conllu
-      2. send each slice to UDPipe. Convert JSON output to CoNLL-U using udpipe_json.py 
-      > for i in parseme_*.conllu; do echo "--------- $i"; curl -F data=@$i  -F model=french -F tagger= -F parser= -F input=conllu https://lindat.mff.cuni.cz/services/udpipe/api/process | python3.11 udpipe_json.py > output-$i; done 
-      3. convert json to conllu using json2conll.py (the solution using the JSON library proposed by UDPipe is not robust)
+      2a. send each slice to UDPipe, pipe through Python to convert JSON to CoNLL-U:
+      > for i in parseme_*.conllu; do echo "--------- $i"; curl -F data=@$i  -F model=french -F tagger= -F parser= -F input=conllu https://lindat.mff.cuni.cz/services/udpipe/api/process | python3 -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['result'])" > output-$i; done 
+      2b. if JSON library produces errors convert json to conllu using json2conll.py
       > for i in {1..42}; do file="output-parseme_${i}.conllu.json"; echo "------- $file"; python3 json2conll.py $file >> childes-all.conllu; done
       """
     sys.stderr.write(help_conllu)

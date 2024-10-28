@@ -195,7 +195,6 @@ def main(args):
 
   # add tagger output
   if args.parameters != '':
-    sys.stderr.write('Adding tagger output for each utterance...\n')
     addTagging(args.out_file + '.csv', args.out_file + '.tagged.csv', outHeader, itemWords, itemPOS, itemLemmas, itemTagged)
     # write output
     sys.stderr.write(f"\nOUTPUT: {args.out_file}.tagged.csv\n")
@@ -207,9 +206,13 @@ def main(args):
     sys.stderr.write("CoNLL-U columns were added to the table. To extract CoNLL-U files use this script:\n> python childes-csv2conllu.py output.csv > output.conllu\n")
   if args.conllu != '':
     help_conllu = """PARSING:
-      CoNLL-U was written to parseme.conllu. Run parser or call UDPipe like so:
-      > curl -F data=@parseme.conllu  -F model=french -F tagger= -F parser= -F input=conllu https://lindat.mff.cuni.cz/services/udpipe/api/process |\
-        python3.11 -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['result'])" > udpipe.conllu
+      CoNLL-U was written to parseme.conllu. Run a parser on it, or call UDPipe like so:
+      1. slice into files of 10000 sentences (UDPipe doesn't seem to digest larger files)
+      > conll.pl -S 10000 parseme.conllu
+      2. send each slice to UDPipe. Convert JSON output to CoNLL-U using udpipe_json.py 
+      > for i in parseme_*.conllu; do echo "--------- $i"; curl -F data=@$i  -F model=french -F tagger= -F parser= -F input=conllu https://lindat.mff.cuni.cz/services/udpipe/api/process | python3.11 udpipe_json.py > output-$i; done 
+      3. convert json to conllu using json2conll.py (the solution using the JSON library proposed by UDPipe is not robust)
+      > for i in {1..42}; do file="output-parseme_${i}.conllu.json"; echo "------- $file"; python3 json2conll.py $file >> childes-all.conllu; done
       """
     sys.stderr.write(help_conllu)
   
@@ -240,8 +243,15 @@ def addTagging(inputFile, outputFile, outHeader, itemWords, itemPOS, itemLemmas,
       writer = csv.writer(csvout, delimiter = "\t")
       reader = csv.reader(csvfile, delimiter = "\t")
       data = list(reader)
+      total_rows = len(data)  # Get total number of rows for progress calculation
+      print(f"Adding tagger output to csv table ({total_rows} rows)...")
       # Iterate through each row and modify a specific cell in each row
       for l, row in enumerate(data):
+        if l % 100 == 0:  # progress every 100 rows
+          progress = (l / total_rows) * 100
+          sys.stderr.write(f'\r  Merging with tagger output: {progress:.2f}% complete')
+          sys.stderr.flush()  # Ensure it gets printed immediately
+
         reMatch = re.compile('(.*)_w(\d+)') # get utterance ID (=key) and word number...
         if re.search(reMatch, data[l][0]):  # ... from the first col of the row
           m = re.search(reMatch, data[l][0])
@@ -558,7 +568,6 @@ def wordPerLineChat(splitUtt, mor):
       'utterance': utt
       }
     outRows.append(thisRow)   # append dictionary for this row to list of rows
-#    return(w,t,l,f)
   return(outRows)
 
 def cleanUtt(s):
@@ -578,6 +587,7 @@ def cleanUtt(s):
     s = re.sub(r'\(([A-Za-z]+)\)', r'\1', s)  # delete parentheses around chars
     s = re.sub(r' \+/+', ' ', s)  # annotations for pauses (?) e.g. +//.
     s = re.sub(r'[_=]', ' ', s)  # eliminate _ and = 
+    s = re.sub(r'[<>]', '', s)  # eliminate remaining '<>'
     s = re.sub(r'\s+', ' ', s)  # reduce spaces
     return(s)
 
@@ -628,11 +638,12 @@ def treeTagger(str):
     p1 = subprocess.Popen(["cat", 'tagged.tmp'], stdout=subprocess.PIPE)
     tagged = subprocess.check_output([taggerBin, paramFile, '-token', '-lemma', '-sgml'], stdin=p1.stdout)
     tagged = tagged.decode('utf8')
+    tagged = process_tagged_data(tagged)  # correct lemmas
     if args.hops != '' or args.conllu:
-      parseFormat = tagged2conllu(tagged)  # preserve tabular format for CoNLL
+      tagged2conllu(tagged)  # write tabular format for CoNLL
     tagged = re.sub(r'\t([A-Za-z:]+)\t', r'_\1=', tagged)   # create annotation format: word_pos=lemma ...
     tagged = re.sub(r'\n', ' ', tagged)                     # put everything on one line
-    tagged = processTaggerOutput(tagged)                    # correct errors
+    tagged = correct_tagger_output(tagged)                    # correct errors
     for sentence in tagged.split("<s_"): #taggedItems: split the concatenated items
         if sentence == "":   # first element is empty: ignore
             continue
@@ -642,7 +653,7 @@ def treeTagger(str):
             sentence = re.sub(r'^([^>]+)> ', ' ', sentence)  # leave an initial space for word matching
         else:
             print("Error: no item number found in item:", sentence)
-            quit()
+#            quit()
         # generate output fields from each item
         key = m.group(1)
         itemTagged[key] = m.group(2)     #   dict   itemNr : sentence
@@ -654,7 +665,20 @@ def treeTagger(str):
         itemWords[key] = ' '.join(posWords)     #  ... and stores it in dictionary
     return(itemWords, itemPOS, itemLemmas, itemTagged)
 
-def processTaggerOutput (tagged):
+def process_tagged_data(tagged):
+    print("\nCorrecting two-token lemmas introduced by PERCEO parameters, e.g. 'se endormir'")
+    lines = tagged.strip().split('\n')
+    processed_lines = []
+    for line in lines:
+        columns = line.split('\t')
+        if len(columns) == 3 and re.search(' ', columns[2]):
+            print(f"   - deleting first element in: {columns[2]}")
+            columns[2] = re.sub(r'.*? ', '', columns[2])  # delete everything before space
+        processed_lines.append('\t'.join(columns))
+    concat_lines = '\n'.join(processed_lines)
+    return concat_lines
+
+def correct_tagger_output (tagged):
   print(f"Correcting the tagger output:")
   tagged = re.sub(r'([,\?])_NAM=<unknown>', r'\1_PON=,', tagged)
   tagged, count = re.subn('Marie_VER:pres=marier', 'Marie_NAM=Marie', tagged)
@@ -688,13 +712,60 @@ def processTaggerOutput (tagged):
   print("  Remaining <unknown>: ", len(re.findall(r'VER:[^=]+=<unknown>', tagged)))
   return(tagged)
 
-def tagged2conllu (str):
+
+def tagged2conllu_NEW(input_str, pos_utterance=None):
+    conllu_out = 'parseme.conllu'
+    print(f"Creating output file '{conllu_out}' for dependency parsing...")
+
+    # Prepare to write the output
+    with open(conllu_out, 'w') as parsetmp:
+        sNr = wNr = 0
+        out = ''
+        lines = input_str.split("\n")
+
+        for line in lines:
+            line = line.strip()  # Remove leading/trailing whitespace
+            if not line:
+                continue  # Skip empty lines
+
+            # Convert 3-column tagger output to 10-column CoNLL-U format
+            print(f"DEBUG {line}")
+            exit(0)
+            match = re.match(r'^(.*)\t(.*)\t(.*)$', line)
+            if match:
+                # If the line has the expected three columns, proceed with conversion
+                form, lemma, pos = match.groups()
+                # Build the CoNLL-U line
+                conllu_line = f"{wNr + 1}\t{form}\t{lemma}\t_\t{pos}\t_\t_\t_\t_\t_"
+                out += conllu_line + "\n"
+                wNr += 1
+            else:
+                print(f"Warning: Line does not match expected format: {line}")
+
+            if re.search(r'^# item', line):
+                # Check if it's a new sentence and write the previous one if it meets criteria
+                if sNr > 0 and wNr > 0:
+                    if not pos_utterance or re.search(r'\t' + pos_utterance, out):
+                        parsetmp.write(f"{out}\n")  # Write the last sentence
+                sNr += 1
+                wNr = 0  # Reset word number for new sentence
+                out = f"{line}\n"  # Store meta info for the new sentence
+
+        # Write the final sentence if conditions are met
+        if wNr > 0 and (not pos_utterance or re.search(r'\t' + pos_utterance, out)):
+            parsetmp.write(f"{out}\n")
+    parsetmp.close()
+    return input_str
+
+def tagged2conllu(str):
+  conllu_out = 'parseme.conllu'
+  print(f"Creating output file '{conllu_out}' for dependency parsing...")
   # convert 3-column tagger output to 10-column conllu format
   str = re.sub(r'(.*)\t(.*)\t(.*)', r'\1\t\3\t_\t\2\t_\t_\t_\t_\t_', str)
   reItem = re.compile('<s_([^>]+)>') # e.g.: <s_paris-julie.cha_u18342>
   str = re.sub(reItem, r'# item_id = \1', str)   # create CoNLL-U IDs
   # for each sentence, insert word numbers and write
-  with open('parseme.conllu', 'w') as parsetmp:
+  with open(conllu_out, 'w') as parsetmp:
     sNr = wNr = 0
     out = ''
     for line in str.split("\n"):
@@ -702,7 +773,6 @@ def tagged2conllu (str):
         sNr += 1
         if sNr > 1 and wNr > 0:
           reVerb = re.compile('\t' + args.pos_utterance)
-          print(f"Matching output against {args.pos_utterance}")
           if re.search(reVerb, out):   # for now, only write sentences with verbs
             parsetmp.write(f"{out}\n")   # write the last sentence
         wNr = 0

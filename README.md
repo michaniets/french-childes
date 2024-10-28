@@ -14,7 +14,7 @@ The script was built to facilitate studies of vocabulary progression.
 
 Tested for some of the French CHILDES files (e.g. Paris).
 
-Hints:
+### How to use
 
 1. Concatenate *.cha files of one project
 2. Run script on concatenated file.
@@ -28,9 +28,18 @@ With option to preserve the string with the tagged utterance:
 
 > childes.py -m VER --pos_utterance VER --tagger_output -p perceo-spoken-french-utf.par CHILDES-French-SILPAC.cha
 
-
-Bugs:
+### Bugs
 
 - Some utterances are not processed correctly because not all the specifics of the CHAT annotation were implemented.  Watch out for 'INDEX ERROR' messages while processing.
 
+### Dependency parsing
 
+Work in progress, version >= 1.8
+
+Options:
+
+- **--ud_pipe <model>** calls the UDPipe API for each single utterance during processing and appends CoNLL-U columns directly to the csv table.  This is very slow and should only be done for small texts.  For example **--udpipe french** selects UDPipe's default French model.  Any UDPipe model name can be given (see UDPipe documentation).
+
+- **--conllu** creates parallel output in the file _parseme.conllu_.  Run the parser on this file, then optionally merge the output with the csv table.  To run UDPipe on this file, specify 'conllu' as input format, like so:
+
+> curl -F data=@parseme.conllu  -F model=french -F tagger= -F parser= -F input=conllu https://lindat.mff.cuni.cz/services/udpipe/api/process | python -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['result'])" > udpipe.conllu

@@ -153,6 +153,7 @@ def main(args):
       if args.parameters == '':
         outRows = wordPerLineChat(splitUtt, mor)
       else:
+        # tokenisation for tree-tagger, optionally UDPipe parsing
         outRows = wordPerLineTagger(splitUtt, mor)
 
 
@@ -197,13 +198,20 @@ def main(args):
     sys.stderr.write('Adding tagger output for each utterance...\n')
     addTagging(args.out_file + '.csv', args.out_file + '.tagged.csv', outHeader, itemWords, itemPOS, itemLemmas, itemTagged)
     # write output
-    sys.stderr.write("\nOutput file: " + args.out_file + '.tagged.csv\n')
+    sys.stderr.write(f"\nOUTPUT: {args.out_file}.tagged.csv\n")
     sys.stderr.write("  you can delete the temporary file: " + args.out_file + '.csv\n')
     sys.stderr.write("  you can delete the temporary files: tag*.tmp\n")
   else:
     sys.stderr.write("output was written to: " + args.out_file + '.csv\n')
   if args.ud_pipe != '':
     sys.stderr.write("CoNLL-U columns were added to the table. To extract CoNLL-U files use this script:\n> python childes-csv2conllu.py output.csv > output.conllu\n")
+  if args.conllu != '':
+    help_conllu = """PARSING:
+      CoNLL-U was written to parseme.conllu. Run parser or call UDPipe like so:
+      > curl -F data=@parseme.conllu  -F model=french -F tagger= -F parser= -F input=conllu https://lindat.mff.cuni.cz/services/udpipe/api/process |\
+        python3.11 -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['result'])" > udpipe.conllu
+      """
+    sys.stderr.write(help_conllu)
   
 #-------------------------------------------------------
 # functions
@@ -429,7 +437,7 @@ def wordPerLineTagger(splitUtt, mor):
     if args.ud_pipe != '':
       udpipe_model = args.ud_pipe
       conllu_data = get_conllu_word(wNr, udpipe_output) or {}  # empty dict if None
-      thisRow.update(conllu_data)
+      thisRow.update(conllu_data) 
     outRows.append(thisRow)   # append dictionary for this row to the list of rows
   return(outRows)
 
@@ -620,7 +628,7 @@ def treeTagger(str):
     p1 = subprocess.Popen(["cat", 'tagged.tmp'], stdout=subprocess.PIPE)
     tagged = subprocess.check_output([taggerBin, paramFile, '-token', '-lemma', '-sgml'], stdin=p1.stdout)
     tagged = tagged.decode('utf8')
-    if args.hops != '':
+    if args.hops != '' or args.conllu:
       parseFormat = tagged2conllu(tagged)  # preserve tabular format for CoNLL
     tagged = re.sub(r'\t([A-Za-z:]+)\t', r'_\1=', tagged)   # create annotation format: word_pos=lemma ...
     tagged = re.sub(r'\n', ' ', tagged)                     # put everything on one line
@@ -637,7 +645,7 @@ def treeTagger(str):
             quit()
         # generate output fields from each item
         key = m.group(1)
-        itemTagged[key] = m.group(2)     #   dict   itemNr : sentence {A1:Il vaso si rompe}
+        itemTagged[key] = m.group(2)     #   dict   itemNr : sentence
         posLemmas = re.findall(r'=(.*?)[ $]', sentence)   # gets the list of lemmas...
         posTags   = re.findall(r'_(.*?)=', sentence)   # gets the list of tags...
         posWords  = re.findall(r' (.*?)_', sentence)   # gets the list of words...
@@ -729,14 +737,17 @@ Add annotation based on the tagged string:
         '-F', '--first_utterance', action='store_true',
         help='print utterance only for first token')
    parser.add_argument(
+       '-a', '--add_annotation', action='store_true',
+       help='add annotation based on rules matching the tagger output. Calls tag_analyser.py')
+   parser.add_argument(
+       '-c', '--conllu', action='store_true',
+       help='create a parallel table in CoNLL-U format, as input for a dependency parser')
+   parser.add_argument(
        '--hops', default = "", type = str,
-       help='run hops parser with this model')
+       help='run hops parser with this model (NOT YET IMPLEMENTED: use --conllu and UDPipe instead)')
    parser.add_argument(
        '-m', '--match_tagging', default = "", type = str,
        help='match the tagger output against this regex')
-   parser.add_argument(
-       '-a', '--add_annotation', action='store_true',
-       help='add annotation based on rules matching the tagger output. Calls tag_analyser.py')
    parser.add_argument(
        '-p', '--parameters', default = "", type = str,
        help='run TreeTagger with this parameter file')
@@ -751,6 +762,6 @@ Add annotation based on the tagged string:
        help='print utterance as converted for tagger')
    parser.add_argument(
        '-u', '--ud_pipe', default = "", type = str,
-       help='run UDPipe parser with this model (slow: calls API for each utterance)')
+       help='run UDPipe parser with this model (extremely slow: calls API for each utterance; use --conllu and UDPipe instead)')
    args = parser.parse_args()
    main(args)

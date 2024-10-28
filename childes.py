@@ -1,34 +1,50 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "1.6"
+__version__ = "1.8"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "18.10.24"
+__status__ = "28.10.24"
 __license__ = "GPL"
 
 import sys
-import argparse, pickle, re
+import argparse, re
 import os
 import fileinput
 import datetime
 from xmlrpc.client import boolean
-import subprocess   # for system commands, here: tree-tagger
+import subprocess   # for system commands, here: tree-tagger and udpipe
 from collections import defaultdict   #  make dictionaries with initialised keys (avoids KeyError)
 import csv
+from tag_analyser import TagAnalyser  # previous function analyseTagging is now a class (v1.7)
+import json   # for udpipe
+import warnings
 
 # global vars
-age = child = speaker = utt = uttID = timeCode = splitUtt = pid = ''
+age = child = speaker = utt = uttID = timeCode = splitUtt = pid = progress = ''
 sNr = age_days = 0
 outRows = []
 childData = {}
-# initialize the dictionary for annotations (--add_annotation)
-annotations = {}
+annotations = {} # init the dictionary for annotations (--add_annotation)
 annot_keys = ['annot_refl', 'annot_dat', 'annot_clit', 'annot_mod', 'annot_particle']
 for key in annot_keys:
    annotations[key] = None
+analyser = TagAnalyser()  # Init the TagAnalyser class
+conllu_columns = [
+    "ID",        # Token ID
+    "FORM",      # Word form or punctuation symbol
+    "LEMMA",     # Lemma or stem of the word
+    "UPOS",      # Universal part-of-speech tag
+    "XPOS",      # Language-specific part-of-speech tag
+    "FEATS",     # List of morphological features
+    "HEAD",      # Head of the current token (ID of the token's governor)
+    "DEPREL",    # Universal dependency relation to the HEAD
+    "DEPS",      # Enhanced dependency graph (if available)
+    "MISC"       # Miscellaneous information
+]
+udpipe_model = 'french'  # default for option -u (currently selects gsd model in UDPipe)
 
 def main(args):
-  global age, age_days, child, childData, speaker, utt, uttID, pid, splitUtt, sNr, timeCode, outRows    # needed to modify global vars locally
+  global age, age_days, child, childData, speaker, utt, uttID, pid, progress, splitUtt, sNr, timeCode, outRows    # needed to modify global vars locally
   age = child = taggerInput = pid = ''
   age_days = 0
   childData = {}  # store age for a child
@@ -88,7 +104,8 @@ def main(args):
             child = re.sub(r'Ann_Yor', 'Anne_Yor', child)  # repair inconsistency
             child = re.sub(r'(Greg|Gregx|Gregoire)_Cha', 'Gregoire_Cha', child)  # repair inconsistency
             childData['CHI'] = (child, age, age_days)   # store bio data in dict
-      sys.stderr.write("PID: %s / CHILD: %s / AGE: %s = %s days\n" % (pid, child, age, str(age_days)))
+      progress = round(sNr/len(sentences)*100, 0)
+      sys.stderr.write("Progress: %s%% | PID: %s / CHILD: %s / AGE: %s = %s days\n" % (progress, pid, child, age, str(age_days)))
       continue  # no output for the header
     if pid == '':       # verify if header was parsed
       sys.stderr.write('!!!!! ERROR: missing header info. Check the file header! Exiting at utterance:\n')
@@ -138,6 +155,7 @@ def main(args):
       else:
         outRows = wordPerLineTagger(splitUtt, mor)
 
+
   # ----------------------------------------
   # TreeTagger (option -p)
   # ----------------------------------------
@@ -156,6 +174,7 @@ def main(args):
   #    taggerInput = parsethis.read()
   #  (itemWords, itemPOS, itemLemmas, itemTagged) = treeTagger(taggerInput)
 
+
   # ----------------------------------------
   # output
   # ----------------------------------------
@@ -164,6 +183,9 @@ def main(args):
   if args.add_annotation != '':
     for key, value in annotations.items():
       outHeader.append(key) # create columns for annotation values
+  if args.ud_pipe != '':
+    for key in conllu_columns:
+      outHeader.append(key) # create columns for conllu annotation
 
   with open(args.out_file + '.csv', 'w', newline='') as out:   # newline '' is needed: we have commas in items
     writer = csv.DictWriter(out, delimiter='\t', fieldnames=outHeader)
@@ -180,10 +202,13 @@ def main(args):
     sys.stderr.write("  you can delete the temporary files: tag*.tmp\n")
   else:
     sys.stderr.write("output was written to: " + args.out_file + '.csv\n')
+  if args.ud_pipe != '':
+    sys.stderr.write("CoNLL-U columns were added to the table. To extract CoNLL-U files use this script:\n> python childes-csv2conllu.py output.csv > output.conllu\n")
   
 #-------------------------------------------------------
 # functions
 #-------------------------------------------------------
+
 def parseAge(age):
   # parse the age string, correct errors, return age in days
   year = months = days = 0
@@ -240,7 +265,7 @@ def addTagging(inputFile, outputFile, outHeader, itemWords, itemPOS, itemLemmas,
               if re.search(re.compile(args.match_tagging), pos[int(wID)-1]): # if tagger pos matches argument
                 # --add_annotation: get the annotation values, store at index of header column
                 if args.add_annotation != '':
-                  annotations = analyseTagging(tagged, lemma[int(wID)-1])
+                  annotations = analyser.analyse(tagged, lemma[int(wID) - 1])  # class call version >= 1.7
                   for key, value in annotations.items():
                     thisIndex = outHeader.index(key) if key in outHeader else None
                     data[l][thisIndex] = annotations[key]
@@ -351,6 +376,12 @@ def wordPerLineTagger(splitUtt, mor):
   age_days = wNr = 0
   thisRow = {}
   words = tokenise(splitUtt).split(' ')
+  # Parse with UDPipe 
+  global udpipe_model # use the model specified with option --ud_pipe
+  if args.ud_pipe != '':
+    udpipe_output = parse_with_udpipe(tokenise(splitUtt)) # use same tokeniser
+    print(f"UDPipe output: {udpipe_output}")
+  # build row for output
   for w in words:
     if w == '':
       continue
@@ -394,8 +425,70 @@ def wordPerLineTagger(splitUtt, mor):
       'utterance': uttPrint,
       'utt_clean': splitUttPrint
       }
+    # Append the conllu columns for this word (or nothing if UDPipe fails)
+    if args.ud_pipe != '':
+      udpipe_model = args.ud_pipe
+      conllu_data = get_conllu_word(wNr, udpipe_output) or {}  # empty dict if None
+      thisRow.update(conllu_data)
     outRows.append(thisRow)   # append dictionary for this row to the list of rows
   return(outRows)
+
+def parse_with_udpipe(udpipe_input):
+  """
+  Takes tokenised utterance, launches UDPipe using curl
+  see https://lindat.mff.cuni.cz/services/udpipe/api-reference.php
+  """
+  # UDPipe call returns JSON output. Collect and decode
+  udpipe_input = clean_for_udpipe(udpipe_input)
+  print(f"Progress: %s%% | Calling UDPipe with model %s: %s\n" % (progress, udpipe_model, udpipe_input))
+  udpipe_command = [
+    "curl", "-F", f"data={udpipe_input}",
+    "-F", f"model={udpipe_model}",
+    "-F", "tokenizer=no",
+    "-F", "tagger=",
+    "-F", "parser=",
+    "https://lindat.mff.cuni.cz/services/udpipe/api/process"
+  ]
+  result = subprocess.run(udpipe_command, capture_output=True, text=True)
+  try:
+      response_json = result.stdout
+      response_dict = json.loads(response_json)  # load the JSON
+      udpipe_output = response_dict.get("result", "")
+  except json.JSONDecodeError:
+      warnings.warn("Error: Failed to decode JSON from curl output.")
+      udpipe_output = dummy_conllu(udpipe_input)
+  except Exception as e:
+      warnings.warn(f"Unexpected error: {e}")
+      udpipe_output = dummy_conllu(udpipe_input)
+  return udpipe_output
+
+def clean_for_udpipe (s):
+  # UDPipe needs more cleaning. Parentheses need to be deleted.
+  s = re.sub(r'\((.*?)\)', r'\1', s) # delete 0 at beginning of words
+  s = re.sub(r'<(.*?)>', r'\1', s) # delete 0 at beginning of words
+  return s
+
+def get_conllu_word(word_id, udpipe_output):
+    """
+    retrieves the conllu columns for a specific word ID
+    returns a dict conllu attributes for this ID
+    """
+    for line in udpipe_output.strip().split("\n"):
+        if line.strip() and not line.startswith("#"):
+            token_data = line.split("\t")
+            if token_data[0] == str(word_id):
+                # zip returns tuples [("ID", "1"), ("FORM", "word") etc] - dict takes first element as key
+                return dict(zip(conllu_columns, token_data))
+    return None
+
+def dummy_conllu(udpipe_input):
+    # Create a dummy CoNLL-U output string based on udpipe_input, with 9 columns filled.
+    dummy_output = "# Fallback dummy output due to error\n"
+    for i, line in enumerate(udpipe_input.strip().split('\n'), 1):
+        word = line.split()[0]  # Assume word is the first item in each line
+        # Construct the 9 columns for each word, filling in placeholders as needed
+        dummy_output += f"{i}\tERROR\t_\t_\t_\t_\t_\t_\t_\t_\n"
+    return dummy_output
 
 def wordPerLineChat(splitUtt, mor):
   # for CHAT format: build one line (table row) for each token in utterance
@@ -468,7 +561,7 @@ def cleanUtt(s):
     s = re.sub(r'0faire ', 'faire ', s) # faire + Inf is transcribed as '0faire' in York
     s = re.sub(r'<[^>]+> \[//?\] ', '', s) # repetitions (not in %mor), e.g. mais <je t'avais dit que> [/] je t'avais dit que ...
     s = re.sub(r'\[\!\] ?', ' ', s) 
-    s = re.sub(r' \(\.\) ', ' , ', s)  # pauses (unknown to tagger) > comma
+    s = re.sub(r' ?\(\.\) ', ' , ', s)  # pauses (unknown to tagger) > comma
     s = re.sub(r'<([^>]+)>\s+\[%[^\]]+\]', r'\1', s) # corrections: qui <va> [% sdi=vais] la raconter . > va
     s = re.sub(r'<(0|www|xxx|yyy)[^>]+> ?', '', s) 
     s = re.sub(r'\+[<,]? ?', '', s)  
@@ -643,7 +736,7 @@ Add annotation based on the tagged string:
        help='match the tagger output against this regex')
    parser.add_argument(
        '-a', '--add_annotation', action='store_true',
-       help='add annotation based on rules matching the tagger output')
+       help='add annotation based on rules matching the tagger output. Calls tag_analyser.py')
    parser.add_argument(
        '-p', '--parameters', default = "", type = str,
        help='run TreeTagger with this parameter file')
@@ -656,5 +749,8 @@ Add annotation based on the tagged string:
    parser.add_argument(
        '--tagger_output', action='store_true',
        help='print utterance as converted for tagger')
+   parser.add_argument(
+       '-u', '--ud_pipe', default = "", type = str,
+       help='run UDPipe parser with this model (slow: calls API for each utterance)')
    args = parser.parse_args()
    main(args)

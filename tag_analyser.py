@@ -48,7 +48,7 @@ class TagAnalyser:
             self.annotations['annot_clit'] = 'acc'
         if re.search(reAccDatCl, tagged):
             self.annotations['annot_clit'] = 'accdat'
-        # --- Annotate modal verbs
+        # --- Annotate modal verbs (verb+bare infinitives)
         reOnlyModals = re.compile('(devoir|falloir|pouvoir|savoir|vouloir)')
         reModCl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)')
         reModVerb = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)* [^_]+_(VER|AUX):infi=(?P<verb>\S+)')

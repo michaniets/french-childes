@@ -32,6 +32,16 @@ With option --add_annotation to apply the annotation rules specified in _tag_ana
 
 > childes.py -m VER --add_annotation --tagger_output --pos_utterance VER -p perceo-spoken-french-utf.par childes-all.cha
 
+
+### Annotation (-a --add_annotation)
+
+Rules for automatic annotation based on the tagged utterance can be added to _tag_analyser.py_.
+(This is a very shakey implementation and should be improved, but it works).
+
+Rules are based on regular expressions that match the tagged string of the format:
+: word_tag=lemma word_tag=lemma word_tag=lemma ...
+They are applied during chat-to-csv conversion.
+
 ### Bugs
 
 - Some utterances are not processed correctly because not all the specifics of the CHAT annotation were implemented.  Watch out for 'INDEX ERROR' messages while processing.

@@ -50,10 +50,10 @@ class TagAnalyser:
             self.annotations['annot_clit'] = 'accdat'
         # --- Annotate modal verbs (verb+bare infinitives)
         reOnlyModals = re.compile('(devoir|falloir|pouvoir|savoir|vouloir)')
+        reModObj = re.compile(rf'[^ _]+_[^=]+=(?P<lemma>{lemma}) [^_]+_(DET:.*?|PRO:rel|PRO:dem)=')
         reModCl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)')
         reModVerb = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)* [^_]+_(VER|AUX):infi=(?P<verb>\S+)')
         reModCompl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)* [^_]+_(KON|PRO:int)')
-        reModObj = re.compile(rf'[^ _]+_[^=]+=(?P<lemma>{lemma}) [^_]+_(DET:.*?|PRO:rel|PRO:dem)=')
         reClMod = re.compile(rf'([^ _]+_PRO:clo=\S+) [^_]+_.*?=(?P<lemma>{lemma})( pas_ADV=pas)?.*? [^_]+_VER:infi=(?P<verb>\S+)')
         if re.search(reOnlyModals, lemma):
             prefix = "modal"  

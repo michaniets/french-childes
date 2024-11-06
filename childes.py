@@ -3,7 +3,7 @@
 __author__ = "Achim Stein"
 __version__ = "1.8"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "28.10.24"
+__status__ = "6.11.24"
 __license__ = "GPL"
 
 import sys
@@ -208,7 +208,7 @@ def main(args):
     help_conllu = """PARSING:
       CoNLL-U was written to parseme.conllu. Run a parser on it, or call UDPipe like so:
       1. slice into files of 10000 sentences (UDPipe doesn't seem to digest larger files)
-      > conll.pl -S 10000 parseme.conllu
+      > conll-util.py -S 10000 parseme.conllu
       2a. send each slice to UDPipe, pipe through Python to convert JSON to CoNLL-U:
       > for i in parseme_*.conllu; do echo "--------- $i"; curl -F data=@$i  -F model=french -F tagger= -F parser= -F input=conllu https://lindat.mff.cuni.cz/services/udpipe/api/process | python3 -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['result'])" > output-$i; done 
       2b. if JSON library produces errors convert json to conllu using json2conll.py
@@ -830,6 +830,9 @@ Add annotation based on the tagged string:
    parser.add_argument(
        '--tagger_output', action='store_true',
        help='print utterance as converted for tagger')
+#   parser.add_argument(
+#       '--tagger_output', nargs='?', const = "VER", default = "VER", type = str,
+#       help='print utterance as converted for tagger (default "VER" if not provided)')
    parser.add_argument(
        '-u', '--ud_pipe', default = "", type = str,
        help='run UDPipe parser with this model (extremely slow: calls API for each utterance; use --conllu and UDPipe instead)')

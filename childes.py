@@ -773,9 +773,9 @@ def tagged2conllu(str):
         sNr += 1
         if sNr > 1 and wNr > 0:
           reVerb = re.compile('\t' + args.pos_utterance)
-          if re.search(reVerb, out):   # for now, only write sentences with verbs
-            parsetmp.write(f"{out}\n")   # write the last sentence
-        wNr = 0
+#          if re.search(reVerb, out):   # for now, only write sentences with verbs
+          parsetmp.write(f"{out}\n")   # write the previous sentence
+        wNr = 0 # reset variables
         out = ''
         out = f"{line}\n"  # store meta info for next sentence
       else:

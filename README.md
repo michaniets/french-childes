@@ -60,3 +60,28 @@ Options:
 
 Example:
 > childes.py -m VER --add_annotation --tagger_output --pos_utterance VER -p perceo-spoken-french-utf.par --conllu childes-all.cha
+
+## Use UDPipe (or other parser)
+
+UDPipe fails when uploaded files are too large. Split them:
+
+> conll-util.py -S 10000 parseme.conllu
+
+Process the splitted files in a loop and concatenate the output:
+
+> bash call-udpipe.sh
+> cat udpiped-parseme_* > udpiped.conllu
+
+Delete temporary files
+
+> rm parseme_* udpiped-parseme_*
+
+## Merge CoNLL-U with table or enrich CoNLL-U
+
+Combine (right join) the CoNLL-U columns and the table (CSV):
+
+> python3 merge-csv-conllu.py childes.cha.tagged.csv udpiped.conllu out.conllu
+
+Don't combine the files, but copy the values of some CSV columns into the CoNLL-U file. This writes a feature=value list to column 10.  Specify the relevant columns with option --enrich_conllu, like so:
+
+> python3 merge-csv-conllu.py --enrich_conllu speaker,age_days childes.cha.tagged.csv udpiped.conllu out.conllu

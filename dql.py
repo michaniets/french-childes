@@ -14,22 +14,27 @@ def parse_grew_query(query_file):
     coding = {}
     coding_line = ''
     for line in query_file.split('\n'):
+        # collect nodes in list
         reNode = re.compile('(\w+)\s*?\[.*]')
         m = re.search(reNode, line)
         if m:
-            nodes.append(m.group(1))
-            print(f"Adding node. Nodes = {nodes}")
+            nodes.append(m.group(1))  
         # grep coding instruction from comment line (% coding...)
-        if re.search(r'%.*coding', line, re.IGNORECASE):
+        if not coding_line and re.search(r'coding', line, re.IGNORECASE):
             coding_line = line
-            print(f"Coding line: {coding_line}")
     if coding_line:
-        re.search(r'(attr?|attribute)=(?P<value>\w+)', coding_line, re.IGNORECASE)
+        m = re.search(r'(attr?|attribute)=(?P<value>\w+)', coding_line, re.IGNORECASE)
         if m:
             coding['att'] = m.group('value')
-            print(f"Coding info: {coding}")
-        else:
-            print("Coding instructions not found.  Use a comment to define them, e.g. '% coding attribute=modal value=verb node=VERB'")
+        m = re.search(r'(val|value)=(?P<value>\w+)', coding_line, re.IGNORECASE)
+        if m:
+            coding['val'] = m.group('value')
+        m = re.search(r'(node)=(?P<value>\w+)', coding_line, re.IGNORECASE)
+        if m:
+            coding['node'] = m.group('value')
+        print(f"Coding info: {coding}")
+    else:
+        print("Coding instructions not found.  Use a comment to define them, e.g. '% coding attribute=modal value=verb node=VERB'")
     return coding
 
 def match_sentences_with_query(conllu_file, query_content):
@@ -45,34 +50,33 @@ def match_sentences_with_query(conllu_file, query_content):
     match_count = corpus.count(request)
     print(f"{match_count} graphs match this request")
     # search   
-    match_nr = 0 
-    matched_sent = []
-    match_dict = {}
-    
-    # Iterate through each graph in the corpus to apply the query.
     print("Matching query against corpus...")
     match_list = corpus.search(request)
+  
+    # Iterate through each graph in the corpus to apply the query.
+    match_nr = 0 
+    matched_graphs = []
     for match in match_list:
         match_nr += 1
-        if match_nr > args.max:
-            print(f"Maximum match number {args.max} reached: search stopped.")
-            return matched_sent
         sent_id = match['sent_id']
+        graph = corpus.get(sent_id)  # get graph for this id
         nodes = match['matching']['nodes']
         print(f"\n===> Match nr = {match_nr} | nodes = {nodes}\n  {match}")
-        graph = corpus.get(sent_id)  # get graph for this id
-        #print(graph.to_sentence())
+        if match_nr > args.max:
+            print(f"Maximum match number {args.max} reached: search stopped.")
+            return matched_graphs
+        matched_graphs.append(graph)
+        print(graph.to_sentence())
         graph.json_data()["meta"]["coding"] = "my coding string"
         graph.json_data()["meta"]["utterance"] = graph.to_sentence()
         print(graph.to_conll())
         print(graph.json_data())
-        # for each meta line
-#        for meta in graph.json_data()["meta"]:
-#            if 'item_id' in graph.json_data()["meta"].keys():
-#                print(graph.json_data()["meta"].keys())
-        # store matches in dict
-        match_dict[sent_id] = [graph.to_sentence(), ]
-    return matched_sent
+
+        print(graph.to_conll())  # Print matched sentences in CoNLL-U format
+
+        sent_id = match['sent_id']
+        nodes = match['matching']['nodes']
+    return matched_graphs
 
 def count_graphs(conllu_file):
     graph_count = 0
@@ -82,7 +86,7 @@ def count_graphs(conllu_file):
                 graph_count += 1
     return graph_count
 
-def main(query_file, conllu_file):
+def main(query_file, conllu_file, args):
     # Read and parse the GREW query
     query_content = read_grew_query(query_file)
     print(f"Query:\n{query_content}")
@@ -93,7 +97,7 @@ def main(query_file, conllu_file):
     
     # Output matched sentences
     for graph in matched_sentences:
-        print(graph.conll_as_string())  # Print matched sentences in CoNLL-U format
+        pass
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=
@@ -105,6 +109,9 @@ if __name__ == "__main__":
     parser.add_argument(
        '-m', '--max', default = float('inf'), type = int,
        help='Max output: stop after <int> matches')
+    parser.add_argument(
+       '-f', '--format', default = float('inf'), type = int,
+       help='Output format (or list of formats), e.g. conll,text,json')
     args = parser.parse_args()
 
-    main(args.query_file, args.conllu_file)
+    main(args.query_file, args.conllu_file,args)

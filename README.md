@@ -70,19 +70,20 @@ UDPipe fails when uploaded files are too large. Split them:
 Process the splitted files in a loop and concatenate the output:
 
 ```{shell}
-bash call-udpipe.sh
-cat udpiped-parseme_* > udpiped.conllu
+bash call-udpipe.sh                     # loop through splitted data
+cat udpiped-parseme_* > udpiped.conllu  # concatenate parsed files
+rm parseme_* udpiped-parseme_*          # delete temporary files
 ```
 
-Delete temporary files
+## Merge
 
-> rm parseme_* udpiped-parseme_*
-
-## Merge CoNLL-U with table or enrich CoNLL-U
+### Add CoNLL-U to CSV table
 
 Combine (right join) the CoNLL-U columns and the table (CSV):
 
 > python3 merge-csv-conllu.py childes.cha.tagged.csv udpiped.conllu out.conllu
+
+### Add CSV columns to CoNLL-U
 
 Don't combine the files, but copy the values of some CSV columns into the CoNLL-U file. This writes a feature=value list to column 10.  Specify the relevant columns with option --enrich_conllu, like so:
 

@@ -1,0 +1,5 @@
+% coding node=V attribute=modal value=verb
+pattern {
+    MOD [lemma="pouvoir"] | [lemma="vouloir"];
+    MOD -[re".*"]-> V;  % mostly xcomp
+}

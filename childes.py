@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "1.8"
+__version__ = "0.1"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "6.11.24"
+__status__ = "8.11.24"
 __license__ = "GPL"
 
 import sys

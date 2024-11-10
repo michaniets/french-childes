@@ -82,29 +82,30 @@ def match_sentences_with_query(conllu_file, query_content):
         matched_graphs.append(graph)
         print(graph.to_sentence())
         j_graph = graph.json_data()  # graph in JSON format
-        print(j_graph['nodes']['1'])
         # add coding data
-        coding = parse_grew_query(query_content)
-        j_graph["meta"]["coding"] = '' # add empty coding line
-        if coding:
-            # add coding to meta
-            addlemma_node_id = match['matching']['nodes'][coding['addlemma']] # id of coding node
-            lemma = j_graph['nodes'][addlemma_node_id]['lemma']           # lemma of this node
-            coding_string = f"{coding['att']}={coding['val']}({lemma})"
-            j_graph["meta"]["coding"] += f"{coding_string}"
-            # add coding to node specified in the coding instruction
-            coding_node_id = match['matching']['nodes'][coding['node']] # id of coding node
-            j_graph['nodes'][coding_node_id]['coding'] = coding_string
-        # add utterance to meta. Problem: columns 'misc' and 'feats' are not stored in dict, but splitted
+        add_coding(match, j_graph, query_content)
+        # add utterance to meta
         get_misc_string(graph, "1")
-
         j_graph["meta"]["utterance"] = graph.to_sentence()
-
         print(graph.to_conll())  # Print matched sentences in CoNLL-U format
 
-        sent_id = match['sent_id']
-        nodes = match['matching']['nodes']
+#        sent_id = match['sent_id']
+#        nodes = match['matching']['nodes']
     return matched_graphs
+
+def add_coding(match, j_graph, query_content):
+    coding = parse_grew_query(query_content)
+    j_graph["meta"]["coding"] = '' # add empty coding line
+    if coding:
+        # add coding to meta
+        addlemma_node_id = match['matching']['nodes'][coding['addlemma']] # id of coding node
+        lemma = j_graph['nodes'][addlemma_node_id]['lemma']           # lemma of this node
+        coding_string = f"{coding['att']}={coding['val']}({lemma})"
+        j_graph["meta"]["coding"] += f"{coding_string}"
+        # add coding to node specified in the coding instruction
+        coding_node_id = match['matching']['nodes'][coding['node']] # id of coding node
+        j_graph['nodes'][coding_node_id]['coding'] = coding_string
+    return j_graph
 
 def get_misc_string(graph, node_id):
     "get value of 'misc' column as whole string"

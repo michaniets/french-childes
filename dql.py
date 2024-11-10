@@ -1,4 +1,11 @@
-import sys
+#!/usr/local/bin/python3
+
+__author__ = "Achim Stein"
+__version__ = "0.1"
+__email__ = "achim.stein@ling.uni-stuttgart.de"
+__status__ = "10.11.24"
+__license__ = "GPL"
+
 import re
 import argparse
 from grewpy import Corpus, Request, Graph
@@ -134,6 +141,7 @@ def main(query_file, conllu_file, args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=
         '''Query CoNLL-U corpus using Grew query language.
+        This script was designed to process CHILDES data created by childes.py.
         '''
     )
     parser.add_argument("query_file", help="File with Grew query")

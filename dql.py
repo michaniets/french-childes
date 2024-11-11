@@ -1,13 +1,7 @@
 #!/usr/local/bin/python3
-
 """
-match_list geht nicht. 
-
-1. jeden Satz matchen
-
-
+Work in progress
 """
-
 __author__ = "Achim Stein"
 __version__ = "0.1"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
@@ -60,22 +54,27 @@ def parse_grew_query(query_file):
     return codings, pattern_dict
 
 def find_matches(corpus, patterns):
-    """Finds all sentences that match any of the queries (patterns)."""
+    """Finds all sentences that match any of the queries (patterns).
+    Returns a dict with key = pattern number and value = list of matches
+    """
     unique_ids = set()  # Use a set to avoid duplicates
     all_matches = []    # The matching structures
     matches_for_pattern = {}
+    sent2item = {}  # dict maps sent_id (in matches) to item_id (in graph meta info)
     for nr in patterns.keys():
         print(f"  Searching corpus query no. {nr}...")
         request = Request.parse(patterns[nr])
-        match_list = corpus.search(request)
-        print(f"    Found {len(match_list)} matches for query") #:\n{patterns[nr]}
+        match_list = corpus.search(request)  # matches for this pattern
+        print(f"    Found {len(match_list)} matches for query {nr}") #:\n{patterns[nr]}
         matches_for_pattern[nr] = match_list  # store the list of matches in a dict with patter nr as key
         for match in match_list:  # TODO not needed
-            sent_id = match['sent_id']
-            if sent_id not in unique_ids:  # set() allows fast membership testing
-                unique_ids.add(sent_id)  # Add the sent_id to the set
-                all_matches.append(match)  # Append the full match object to the list
-    print(f"Found {len(unique_ids)} matches for all the patterns")
+            graph = corpus[match['sent_id']] # get the graph for this sent_id
+#            print(f"MATCH: {match} \nGRAPH: {graph.meta}")
+#            print(f"MATCH GRAPH = {graph}")
+#            if sent_id not in unique_ids:  # set() allows fast membership testing
+#                unique_ids.add(sent_id)  # Add the sent_id to the set
+#                all_matches.append(match)  # Append the full match object to the list
+#    print(f"Found {len(unique_ids)} matches for all the patterns")
 #    return unique_ids, all_matches
     return matches_for_pattern
 
@@ -83,7 +82,7 @@ def match_sentences_with_query_ALT(conllu_file, query_content):
     """
     Match each sentence against queries. Add codings if present.
     """
-    corpus = init_grew_corpus(conllu_file)
+    corpus = init_corpus(conllu_file)
     codings, patterns = parse_grew_query(query_content)
 #    unique_ids, all_matches = find_matches(corpus, patterns)
     matches_for_pattern = find_matches(corpus, patterns)
@@ -115,42 +114,44 @@ def match_sentences_with_query_ALT(conllu_file, query_content):
     return matched_graphs
 
 def match_sentences_with_query(conllu_file, query_content):
-    grew_corpus = init_grew_corpus(conllu_file)
+    corpus = init_corpus(conllu_file)
     codings, patterns = parse_grew_query(query_content)
-#    unique_ids, all_matches = find_matches(corpus, patterns)
-    matches_for_pattern = find_matches(grew_corpus, patterns)
-    print("Make draft corpus")
+    matches_for_pattern = find_matches(corpus, patterns)
     # Convert it to a CorpusDraft if it isn't already
-    corpus = CorpusDraft(grew_corpus) if not isinstance(grew_corpus, CorpusDraft) else grew_corpus
-    print("Done.")
-    # corpus is a dict of sent_id:GraphObject
-    for sent_id, graph in corpus.items():
-        add_coding(graph, sent_id, matches_for_pattern[1])
+    draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
+    # map sent_id on matches
+    nr=1  # TODO make loop
+    sent_id2match = {}
+    for match in matches_for_pattern[nr]:
+        sent_id2match[match['sent_id']] = match
+    # loop through corpus items (sent_id:GraphObject) and apply add_coding
+    for sent_id, graph in draft_corpus.items():
+        item_id = graph.meta['item_id']
+        add_coding(graph, sent_id, item_id, sent_id2match, codings[nr])
 
-def add_coding(graph, sent_id, match_ids):
+def add_coding(graph, sent_id, item_id, sent_id2match, coding):
     """
-    The Corpus itself seems to serve as a container for Graph objects, without direct access to the metadata of each graph.
-    We need to retrieve each Graph individually and then access its meta attribute using .json_data()
-    QUESTION: how can I assign modified data back to the graph ???
+    Apply coding if this sent_id is in the list of matches, else print.
+    Matches have an internally created item_id (e.g. file.conllu_00140).
+       e.g.: {'sent_id': 'out.conllu_06242', 'matching': {'nodes': {'V': '3', 'MOD': '2'}, 'edges': {}}}
+    Graphs contain the meta information (graph.meta) including sent_id (graph.meta['sent_id'])
     """
-    # Only apply coding if this sent_id is in the list of matches
-    j_graph = graph.json_data()
-    for match in match_ids:
-        #print(f" sent_id = {sent_id} >>>{m}")
-        if sent_id == match['sent_id']:
-            print(f" matching nodes: {match['matching']}")
-            print(f"JSON: {graph.json_data()['meta']}")
-            # Perform modifications
-            j_graph['meta']["coding"] = '' # add empty coding line
-            print(f" sent_id = {sent_id} >>>{match['matching']}\n   New Graph: {j_graph.to_conll()}")
+    misc = ''  # the complete string of column 'misc' (not splitted into features)
+    coding_string = ''
+    if sent_id in sent_id2match:
+        match = sent_id2match[sent_id]  # select the match for this graph
+        node_id = match['matching']['nodes'][coding['node']]  # the ID of the node specified in coding node=...
+        add_node = match['matching']['nodes'][coding['add']]
+        coding_string = f"{coding['att']}={coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
+        graph.meta['coding'] = coding_string
+#        misc = get_misc_string(graph, node_id)
+#        print(f"MISC: {misc}")
+        graph[node_id]['coding'] = coding_string  # this (miraculously) adds coding as a feature to column 'misc'
+        print(graph.to_conll())
+#        print(graph[node_id])
         
     # Return the modified graph (or unmodified if no match)
     return graph
-
-def get_meta(corpus, sent_id):
-    # get meta from Grew corpus object for a sentence
-    meta = corpus['meta'][sent_id]
-    return meta
 
 def add_coding_ALT(match, j_graph, coding, pattern):
     """Add coding to this sentence in meta header and in misc column of the specified node"""
@@ -165,7 +166,7 @@ def add_coding_ALT(match, j_graph, coding, pattern):
     j_graph['nodes'][coding_node_id]['coding'] = coding_string
     return j_graph
 
-def init_grew_corpus(conllu_file):
+def init_corpus(conllu_file):
     # init Grew corpus object (this is slow: print estimate)
     count = count_graphs(conllu_file)
     per_min = 450000  # processed sentences per min on Mac M2

@@ -67,51 +67,7 @@ def find_matches(corpus, patterns):
         match_list = corpus.search(request)  # matches for this pattern
         print(f"    Found {len(match_list)} matches for query {nr}") #:\n{patterns[nr]}
         matches_for_pattern[nr] = match_list  # store the list of matches in a dict with patter nr as key
-        for match in match_list:  # TODO not needed
-            graph = corpus[match['sent_id']] # get the graph for this sent_id
-#            print(f"MATCH: {match} \nGRAPH: {graph.meta}")
-#            print(f"MATCH GRAPH = {graph}")
-#            if sent_id not in unique_ids:  # set() allows fast membership testing
-#                unique_ids.add(sent_id)  # Add the sent_id to the set
-#                all_matches.append(match)  # Append the full match object to the list
-#    print(f"Found {len(unique_ids)} matches for all the patterns")
-#    return unique_ids, all_matches
     return matches_for_pattern
-
-def match_sentences_with_query_ALT(conllu_file, query_content):
-    """
-    Match each sentence against queries. Add codings if present.
-    """
-    corpus = init_corpus(conllu_file)
-    codings, patterns = parse_grew_query(query_content)
-#    unique_ids, all_matches = find_matches(corpus, patterns)
-    matches_for_pattern = find_matches(corpus, patterns)
-    corpus.apply(lambda g: print_or_code(g, match_ids))
-    # Iterate through each matching graph
-    match_nr = 0 
-    matched_graphs = []
-    for nr in matches_for_pattern.keys():
-        all_matches = matches_for_pattern[nr]
-        for match in all_matches:
-            match_nr += 1
-            sent_id = match['sent_id']
-            graph = corpus.get(sent_id)  # get graph for this id
-            if match_nr > args.max:
-                print(f"Maximum match number {args.max} reached: search stopped.")
-                return matched_graphs
-            matched_graphs.append(graph)
-            print(graph.to_sentence())
-            j_graph = graph.json_data()  # graph in JSON format
-            # add coding data
-            for nr in codings.keys():
-                add_coding(match, j_graph, codings[nr], patterns[nr])
-            # add utterance to meta
-            get_misc_string(graph, "1")
-            j_graph["meta"]["utterance"] = graph.to_sentence()
-            print(graph.to_conll())  # Print matched sentences in CoNLL-U format
-#        sent_id = match['sent_id']
-#        nodes = match['matching']['nodes']
-    return matched_graphs
 
 def match_sentences_with_query(conllu_file, query_content):
     corpus = init_corpus(conllu_file)
@@ -131,6 +87,7 @@ def match_sentences_with_query(conllu_file, query_content):
 
 def add_coding(graph, sent_id, item_id, sent_id2match, coding):
     """
+    Modify the Graph of the DraftCorpus object
     Apply coding if this sent_id is in the list of matches, else print.
     Matches have an internally created item_id (e.g. file.conllu_00140).
        e.g.: {'sent_id': 'out.conllu_06242', 'matching': {'nodes': {'V': '3', 'MOD': '2'}, 'edges': {}}}
@@ -142,29 +99,15 @@ def add_coding(graph, sent_id, item_id, sent_id2match, coding):
         match = sent_id2match[sent_id]  # select the match for this graph
         node_id = match['matching']['nodes'][coding['node']]  # the ID of the node specified in coding node=...
         add_node = match['matching']['nodes'][coding['add']]
-        coding_string = f"{coding['att']}={coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
+        coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
         graph.meta['coding'] = coding_string
-#        misc = get_misc_string(graph, node_id)
-#        print(f"MISC: {misc}")
+        #misc = get_misc_string(graph, node_id) # not needed.  Why not?
         graph[node_id]['coding'] = coding_string  # this (miraculously) adds coding as a feature to column 'misc'
-        print(graph.to_conll())
-#        print(graph[node_id])
-        
+
+    print(graph.to_conll())
+       
     # Return the modified graph (or unmodified if no match)
     return graph
-
-def add_coding_ALT(match, j_graph, coding, pattern):
-    """Add coding to this sentence in meta header and in misc column of the specified node"""
-    j_graph["meta"]["coding"] = '' # add empty coding line
-    # add coding to meta
-    addlemma_node_id = match['matching']['nodes'][coding['add']] # id of coding node
-    lemma = j_graph['nodes'][addlemma_node_id]['lemma']           # lemma of this node
-    coding_string = f"{coding['att']}={coding['val']}({lemma})"
-    j_graph["meta"]["coding"] += f"{coding_string}"
-    # add coding to node specified in the coding instruction
-    coding_node_id = match['matching']['nodes'][coding['node']] # id of coding node
-    j_graph['nodes'][coding_node_id]['coding'] = coding_string
-    return j_graph
 
 def init_corpus(conllu_file):
     # init Grew corpus object (this is slow: print estimate)

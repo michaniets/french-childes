@@ -13,6 +13,7 @@ __license__ = "GPL"
 import sys
 import re
 import argparse
+sys.stderr.write("Initializing grewpy library...")
 from grewpy import Corpus, Request, CorpusDraft #Graph
 
 def main(query_file, conllu_file, args):
@@ -114,6 +115,7 @@ def add_coding(graph, sent_id, sent_id2match, coding):
        e.g.: {'sent_id': 'out.conllu_06242', 'matching': {'nodes': {'V': '3', 'MOD': '2'}, 'edges': {}}}
     Graphs contain the meta information (graph.meta) including sent_id (graph.meta['sent_id'])
     """
+    # if sent_id has been stored with a match, modify the graph
     if sent_id in sent_id2match:
         match = sent_id2match[sent_id]  # select the match for this graph
         node_id = match['matching']['nodes'][coding['node']]  # the ID of the node specified in coding node=...
@@ -125,10 +127,9 @@ def add_coding(graph, sent_id, sent_id2match, coding):
             sys.stderr.write(f"Appending to existing coding: {graph.meta['coding']}\n")
         else:
             graph.meta['coding'] = coding_string  # add to meta
-        # this (miraculously) adds coding as a feature to column 'misc' (get_misc_string() not needed)
-        graph[node_id]['coding'] = coding_string  
-   
-    # Return the modified graph (or unmodified if no match)
+        if args.code_node:   
+            graph[node_id]['coding'] = coding_string   # add coding as a feature to column 'misc'
+    # Return the graph (modified or not)
     return graph
 
 def init_corpus(conllu_file):
@@ -170,6 +171,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("query_file", help="File with Grew query")
     parser.add_argument("conllu_file", help="CoNLL-U file with parsed data")
+    parser.add_argument(
+       '-n', '--code_node', action='store_true',
+       help='Add coding column misc of the node specified in the coding instruction (node=<Grew Node>)')
     parser.add_argument(
        '-m', '--max', default = float('inf'), type = int,
        help='Max output: stop after <int> matches')

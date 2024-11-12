@@ -2,7 +2,7 @@
 """
 TODO:
 - options where to add coding
-- pattern loop
+- re-import in Childes csv
 """
 __author__ = "Achim Stein"
 __version__ = "0.1"
@@ -75,7 +75,7 @@ def find_matches(corpus, patterns):
     """
     matches_for_patterns = {}
     for nr in patterns.keys():
-        sys.stderr.write(f"Searching corpus query {nr}...")
+        sys.stderr.write(f"  Searching corpus query {nr}...")
         request = Request.parse(patterns[nr])
         match_list = corpus.search(request)  # matches for this pattern
         sys.stderr.write(f" {len(match_list)} matches\n")
@@ -114,7 +114,6 @@ def add_coding(graph, sent_id, sent_id2match, coding):
        e.g.: {'sent_id': 'out.conllu_06242', 'matching': {'nodes': {'V': '3', 'MOD': '2'}, 'edges': {}}}
     Graphs contain the meta information (graph.meta) including sent_id (graph.meta['sent_id'])
     """
-#    coding_string = ''
     if sent_id in sent_id2match:
         match = sent_id2match[sent_id]  # select the match for this graph
         node_id = match['matching']['nodes'][coding['node']]  # the ID of the node specified in coding node=...
@@ -122,7 +121,7 @@ def add_coding(graph, sent_id, sent_id2match, coding):
         # build the coding string
         coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
         if 'coding' in graph.meta:
-            graph.meta['coding'] += f"; {coding_string}"
+            graph.meta['coding'] += f"; {coding_string}"  # append to existing coding
             sys.stderr.write(f"Appending to existing coding: {graph.meta['coding']}\n")
         else:
             graph.meta['coding'] = coding_string  # add to meta

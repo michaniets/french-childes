@@ -1,6 +1,15 @@
-% coding attribute=modal value=verb node=MOD addlemma=V
+% coding attribute=modal value=other node=MOD addlemma=V
 pattern {
     MOD [lemma="pouvoir"] | [lemma="vouloir"];
     V [upos="VERB"];
-    MOD -[re".*"]-> V;  % mostly xcomp
+    MOD -[re"xcomp"]-> V;  % test comment
+}
+without {
+    MOD [lemma="savoir"]
+}
+% coding attribute=modal value=savoir node=MOD addlemma=V
+pattern {
+    MOD [lemma="savoir"];
+    V [upos="VERB"];
+    MOD -[re".*"]-> V;
 }

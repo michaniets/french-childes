@@ -2,6 +2,7 @@
 """
 TODO:
 - re-import in Childes csv
+- implement options -f and -m
 """
 __author__ = "Achim Stein"
 __version__ = "0.1"

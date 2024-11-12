@@ -93,4 +93,33 @@ Don't combine the files, but copy the values of some CSV columns into the CoNLL-
 
 ## dql.py
 
-Applies a Grew query to a corpus, adds coding strings to meta data.
+Applies Grew queries to a corpus, adds coding strings to meta data (and optionally nodes).
+
+- Default: Prints the complete corpus with added codings
+- Option --coding_only: prints only graphs matching the query (with coding)
+
+```{shell}
+dql.py dql.query <query file> <input file> [--code_node] [--coding_only] [> <output file>]
+```
+
+More than one Grew query can be concatenated in the query file.  Each query starts with a comment line containing the coding specifications (format: attribute=value).
+
+The example below combines two query patterns and produces two codings. If the patterns match the same graph, codings are appended, e.g. *modal:other(7>9_bouger); modal:savoir(3>7_vouloir)*
+
+```{grew}
+% coding attribute=modal value=other node=MOD addlemma=V
+pattern {
+    MOD [lemma="pouvoir"] | [lemma="vouloir"];
+    V [upos="VERB"];
+    MOD -[re"xcomp"]-> V;  % test comment
+}
+without {
+    MOD [lemma="savoir"]
+}
+% coding attribute=modal value=savoir node=MOD addlemma=V
+pattern {
+    MOD [lemma="savoir"];
+    V [upos="VERB"];
+    MOD -[re".*"]-> V;
+}
+```

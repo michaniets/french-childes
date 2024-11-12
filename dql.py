@@ -24,13 +24,19 @@ def main(query_file, conllu_file, args):
     new_graphs = match_sentences_with_query(conllu_file, query_content)
     
     # Output matched sentences
-    for graph in new_graphs:
-        if args.coding_only:  # print only coded output
+    out_matches = 0
+    if args.coding_only:  # print only coded output
+        for graph in new_graphs:
             if 'coding' in graph.meta:
                 print(graph.to_conll())
-        else:
+                out_matches +=1
+        sys.stderr.write(f"{out_matches} matches printed (of total {len(new_graphs)} graphs)\n")
+    else:
+        for graph in new_graphs:
             print(graph.to_conll())  # print every graph
-
+            if 'coding' in graph.meta:
+                out_matches +=1
+        sys.stderr.write(f"{len(new_graphs)} graphs printed ({out_matches} matches)\n")
 def read_grew_query(query_file):
     # Read Grew query file.
     with open(query_file, 'r', encoding='utf-8') as f:
@@ -99,7 +105,7 @@ def match_sentences_with_query(conllu_file, query_content):
     # Convert it to a CorpusDraft if it isn't already
     draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
     for nr in matches_for_patterns.keys():
-        sys.stderr.write(f"Modifying matching graphs for query {nr}...\n   Coding: {codings[nr]}\n")
+        sys.stderr.write(f"Modifying matching graphs for query {nr}...\n  Coding: {codings[nr]}\n")
         sent_id2match = {}
         for match in matches_for_patterns[nr]:
             sent_id2match[match['sent_id']] = match  # map sent_id -> match
@@ -127,7 +133,7 @@ def add_coding(graph, sent_id, sent_id2match, coding):
         coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
         if 'coding' in graph.meta:
             graph.meta['coding'] += f"; {coding_string}"  # append to existing coding
-            sys.stderr.write(f"Appending to existing coding: {graph.meta['coding']}\n")
+            sys.stderr.write(f"    Appending to existing coding: {graph.meta['coding']}\n")
         else:
             graph.meta['coding'] = coding_string  # add to meta
         if args.code_node:   

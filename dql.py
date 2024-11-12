@@ -1,7 +1,6 @@
 #!/usr/local/bin/python3
 """
 TODO:
-- options where to add coding
 - re-import in Childes csv
 """
 __author__ = "Achim Stein"
@@ -26,7 +25,11 @@ def main(query_file, conllu_file, args):
     
     # Output matched sentences
     for graph in new_graphs:
-        print(graph.to_conll())
+        if args.coding_only:  # print only coded output
+            if 'coding' in graph.meta:
+                print(graph.to_conll())
+        else:
+            print(graph.to_conll())  # print every graph
 
 def read_grew_query(query_file):
     # Read Grew query file.
@@ -129,7 +132,7 @@ def add_coding(graph, sent_id, sent_id2match, coding):
             graph.meta['coding'] = coding_string  # add to meta
         if args.code_node:   
             graph[node_id]['coding'] = coding_string   # add coding as a feature to column 'misc'
-    # Return the graph (modified or not)
+    # returns changed and unchanged graphs
     return graph
 
 def init_corpus(conllu_file):
@@ -172,8 +175,11 @@ if __name__ == "__main__":
     parser.add_argument("query_file", help="File with Grew query")
     parser.add_argument("conllu_file", help="CoNLL-U file with parsed data")
     parser.add_argument(
+       '-c', '--coding_only', action='store_true',
+       help='Print only coded graphs (query matches). Default: print everything')
+    parser.add_argument(
        '-n', '--code_node', action='store_true',
-       help='Add coding column misc of the node specified in the coding instruction (node=<Grew Node>)')
+       help='Add coding also to column misc of the specified node (this option implies --coding)')
     parser.add_argument(
        '-m', '--max', default = float('inf'), type = int,
        help='Max output: stop after <int> matches')

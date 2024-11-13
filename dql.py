@@ -7,14 +7,16 @@ TODO:
 __author__ = "Achim Stein"
 __version__ = "0.1"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "12.11.24"
+__status__ = "13.11.24"
 __license__ = "GPL"
 
 import sys
 import re
 import argparse
 sys.stderr.write("Initializing grewpy library...")
-from grewpy import Corpus, Request, CorpusDraft #Graph
+import csv
+import os
+from grewpy import Corpus, Request, CorpusDraft, Graph
 
 def main(query_file, conllu_file, args):
     # Read and parse the Grew query
@@ -173,6 +175,168 @@ def count_graphs(conllu_file):
                 graph_count += 1
     return graph_count
 
+def conllu_to_graphs(conllu_file):
+    "read conllu format into a list of Graph objects"
+    graphs = []
+    sent = ''
+    with open(conllu_file, 'r', encoding='utf-8') as file:
+        for line in file:
+            if line.strip() == '':  # on empty line
+                #print(f"CONLL2GRAPH:\n{sent}")
+                graphs.append(Graph(sent))
+                show(Graph(sent))
+                sent = ''
+            else:
+                sent += f"{line}" 
+    print(f"CONLL2GRAPHS: {len(graphs)}")
+    exit()    
+    return graphs
+
+def show(graph):
+    print(graph.meta)
+    exit()
+
+def merge_with_csv(conllu_file, csv_file):
+    #conllu_to_graphs(conllu_file)
+    # read conllu_file as Grew corpus
+    corpus = init_corpus(conllu_file)
+
+
+
+    # Read current CSV data (or create new header if CSV is empty or does not exist)
+    rows = []
+    headers = ['utt_id']  # Ensure utt_id is the first column in headers
+    if os.path.exists(csv_file):
+        with open(csv_file, mode='r', newline='', encoding='utf-8') as file:
+            reader = csv.DictReader(file, delimiter='\t')
+            headers = reader.fieldnames if reader.fieldnames else headers
+            rows = list(reader)
+    
+    # create DraftCorpus and loop through graphs
+    draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
+    sys.stderr.write(f"Mapping item_id -> coding...")
+    id_meta = {}
+    coded = 0
+    for sent_id, graph in draft_corpus.items():
+        coding = graph.meta.get('coding')
+        item_id = graph.meta.get('item_id')
+        if coding:
+            coded +=1
+            id_meta[item_id] = coding
+        else:
+            id_meta[item_id] = ''
+    sys.stderr.write(f"{len(id_meta.keys())} graphs, {coded} codings\n")
+    coding_to_csv(sent_id, id_meta, headers, rows)
+
+def coding_to_csv(sent_id, id_meta, headers, rows):
+    """
+    Extract coding from a CoNLL-U graph and append it to a CSV file.
+    
+    Parameters:
+        graph (grewpy.graph.Graph): The graph from which to extract codings.
+        csv_file (str): The path to the CSV file where codings will be saved.
+    """
+    # Create a mapping of utt_id to row for quick access
+    sys.stderr.write(f"Mapping CSV IDs to rows...\n")
+    row_dict = {row['utt_id']: row for row in rows}# Find the row with matching 'utt_id' or create a new one if not found
+
+    # Loop through the stored meta information
+    for sent_id in id_meta.keys():
+        sys.stderr.write(f"Checking {sent_id}...\n")
+        coding = id_meta[sent_id] #graph.meta.get('coding') #graph.meta['coding']
+        
+        # Check if coding exists; if not, skip
+        if coding != '':
+            # Parse coding entries into a dictionary of attributes and values
+            coding_entries = coding.split(';')
+            coding_dict = {}
+            for entry in coding_entries:
+                # Split by attribute:value
+                attr, val = entry.split(':')
+                # TODO get node value from coding string
+                coding_dict[attr.strip()] = val.strip()
+
+            # Add any new columns for attributes found in coding_dict
+            for attr in coding_dict.keys():
+                if attr not in headers:
+                    headers.append(attr)
+
+        # Find matching row by item_id (utt_id) and update
+        this_id = sent_id + "_w1"  ## TODO use coding node here
+        sys.stderr.write(f"  Looking up {this_id}...\n")
+        if this_id in row_dict:
+            row = row_dict[this_id]
+            for key, value in coding_dict.items():
+                # Add a new column if not already present in headers
+                if key not in headers:
+                    headers.append(key)
+                # Update the row with new data
+                row[key] = value
+
+    # Write updated data to CSV
+    with open('tmp.csv', mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=headers, delimiter='\t')
+        writer.writeheader()
+        writer.writerows(row_dict.values())  # updated rows from row_dict
+
+    #print(f"Coding for {item_id} added/updated in {csv_file}.")
+
+def coding_to_csv_ALT(sent_id, id_meta, headers, rows):
+    """
+    Extract coding from a CoNLL-U graph and append it to a CSV file.
+    
+    Parameters:
+        graph (grewpy.graph.Graph): The graph from which to extract codings.
+        csv_file (str): The path to the CSV file where codings will be saved.
+    """
+    # Get item_id and coding string from graph meta
+    item_id = graph.meta.get('item_id')
+    coding = graph.meta.get('coding') #graph.meta['coding']
+    
+    # Check if coding exists; if not, skip
+    if not coding:
+        print(f"No coding found in graph {item_id}")
+        return
+    
+    # Parse coding entries into a dictionary of attributes and values
+    coding_entries = coding.split(';')
+    coding_dict = {}
+    for entry in coding_entries:
+        # Split by attribute:value
+        attr, val = entry.split(':')
+        coding_dict[attr.strip()] = val.strip()
+
+
+    # Add any new columns for attributes found in coding_dict
+    for attr in coding_dict.keys():
+        if attr not in headers:
+            headers.append(attr)
+
+    # Find the row with matching 'utt_id' or create a new one if not found
+    row_found = False
+    for row in rows:
+        if row.get('utt_id') == item_id:
+            # Update row with coding values
+            for attr, val in coding_dict.items():
+                row[attr] = val
+            row_found = True
+            break
+
+    if not row_found:
+        # Create a new row if 'utt_id' was not found
+        new_row = {'utt_id': item_id}
+        for attr, val in coding_dict.items():
+            new_row[attr] = val
+        rows.append(new_row)
+
+    # Write updated data to CSV
+    with open('tmp.csv', mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    #print(f"Coding for {item_id} added/updated in {csv_file}.")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=
         '''Query CoNLL-U corpus using Grew query language.
@@ -188,11 +352,21 @@ if __name__ == "__main__":
        '-n', '--code_node', action='store_true',
        help='Add coding also to column misc of the specified node (this option implies --coding)')
     parser.add_argument(
-       '-m', '--max', default = float('inf'), type = int,
+       '--max', default = float('inf'), type = int,
        help='Max output: stop after <int> matches')
+    parser.add_argument(
+       '--merge', default = '', type = str,
+       help='Merge coding strings with table, based on item_id, with attributes as columns')
     parser.add_argument(
        '-f', '--format', default = float('inf'), type = int,
        help='Output format (or list of formats), e.g. conll,text,json')
     args = parser.parse_args()
 
-    main(args.query_file, args.conllu_file,args)
+
+    if args.merge:
+        # merge codings with csv file
+        sys.stderr.write(f"Merge codings from {args.conllu_file} to {args.merge}\n")
+        merge_with_csv(args.conllu_file, args.merge)
+    else:
+        # default: query and code
+        main(args.query_file, args.conllu_file,args)

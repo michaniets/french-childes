@@ -2,6 +2,7 @@
 """
 TODO:
 - re-import in Childes csv
+  - OK, but _w1 needs to be replaced by node number
 - implement options -f and -m
 """
 __author__ = "Achim Stein"
@@ -242,7 +243,6 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
 
     # Loop through the stored meta information
     for sent_id in id_meta.keys():
-        sys.stderr.write(f"Checking {sent_id}...\n")
         coding = id_meta[sent_id] #graph.meta.get('coding') #graph.meta['coding']
         
         # Check if coding exists; if not, skip
@@ -263,7 +263,6 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
 
         # Find matching row by item_id (utt_id) and update
         this_id = sent_id + "_w1"  ## TODO use coding node here
-        sys.stderr.write(f"  Looking up {this_id}...\n")
         if this_id in row_dict:
             row = row_dict[this_id]
             for key, value in coding_dict.items():
@@ -272,6 +271,9 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                     headers.append(key)
                 # Update the row with new data
                 row[key] = value
+        else:
+            sys.stderr.write(f"ID not found in CSV: {this_id}")
+            exit()
 
     # Write updated data to CSV
     with open('tmp.csv', mode='w', newline='', encoding='utf-8') as file:

@@ -321,7 +321,7 @@ if __name__ == "__main__":
         # merge codings with csv file
         sys.stderr.write(f"Merge codings from {args.conllu_file} to {args.merge}\n")
         merge_with_csv(args.conllu_file, args.merge)
-    elif:
+    elif args.query_file:
         # default: run query/coding functions
         main(args.query_file, args.conllu_file,args)
     else:

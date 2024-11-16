@@ -1,11 +1,7 @@
 #!/usr/local/bin/python3
-"""
-TODO:
-- with --merge , get rid of arg1 (query file)
-- implement options -f and -m
-"""
+
 __author__ = "Achim Stein"
-__version__ = "0.2"
+__version__ = "0.3"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
 __status__ = "16.11.24"
 __license__ = "GPL"
@@ -305,14 +301,8 @@ if __name__ == "__main__":
        '-n', '--code_node', action='store_true',
        help='Add coding also to column misc of the specified node (this option implies --coding)')
     parser.add_argument(
-       '--max', default = float('inf'), type = int,
-       help='Max output: stop after <int> matches')
-    parser.add_argument(
        '--merge', default = '', type = str,
        help='Merge coding strings with table, based on item_id, with attributes as columns')
-    parser.add_argument(
-       '-f', '--format', default = float('inf'), type = int,
-       help='Output format (or list of formats), e.g. conll,text,json')
     args = parser.parse_args()
 
     if args.merge:

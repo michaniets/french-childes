@@ -13,9 +13,37 @@ pattern {
     V [upos="VERB"];
     MOD -[re".*"]-> V;
 }
+
+%--------------------------------------------------------
+% Linear order based on pos
+%--------------------------------------------------------
 % coding attribute=mod_linear value=inf node=MOD addlemma=V
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir)/];
     V [upos="VERB"];
     MOD < V;
 }
+% coding attribute=mod_linear value=inf node=MOD addlemma=V
+pattern {
+    MOD [lemma=/(pouvoir|vouloir|devoir)/];
+    V [upos="VERB"];
+    X [upos=/(ADV|PRO).*/];
+    MOD < X;  X < V;
+}
+% coding attribute=mod_linear value=inf node=MOD addlemma=V
+pattern {
+    MOD [lemma=/(pouvoir|vouloir|devoir)/];
+    V [upos="VERB"];
+    X [upos=/(ADV|PRO).*/];
+    X2 [upos=/(ADV|PRO).*/];
+    MOD < X;    X < X2;    X2 < V;
+}
+% coding attribute=mod_clitic value=preinf node=MOD addlemma=V
+pattern {
+    MOD [lemma=/(pouvoir|vouloir|devoir)/];
+    V [upos="VERB"];
+    PRO [upos=/PRO.*/];
+    MOD << V;    PRO < V;
+}
+
+

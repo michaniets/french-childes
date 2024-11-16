@@ -53,8 +53,10 @@ def parse_grew_query(query_file):
     coding_nr = 0
     # split query file in Grew queries, separated by '% coding ...'
     sys.stderr.write("Parsing grew query...\n")
-    pattern_list = query_file.split('% coding')
+    pattern_list = re.split(r'%\s*(coding|CODING)', query_file)
     for p in pattern_list:
+        if not re.search(r'(PATTERN|pattern)\s*{', p):  # each query needs a pattern { }
+            continue
         coding = {}  # dictionary stores one coding
         pattern = ''
         m = re.search(r'^(.*?)\n(.*)\n', p, re.DOTALL)
@@ -62,13 +64,13 @@ def parse_grew_query(query_file):
         if m:
             coding_line = m.group(1)
             pattern = m.group(2)
-            match_coding = re.search(r'attribute=(?P<att>\w+).*val(ue)?=(?P<val>\w+).*node=(?P<node>\w+).*(add|addlemma)=(?P<add>\w+)', coding_line)
+            match_coding = re.search(r'attribute=(?P<att>\w+).*val(ue)?=(?P<val>\w+).*node=(?P<node>\w+)(.*(add|addlemma)=(?P<add>\w+))?', coding_line)
             if match_coding:
                 coding_nr += 1
                 for v in coding_info:
                     coding[v] = match_coding.group(v)
             else: 
-                sys.stderr.write("  Malformed coding line: {coding_line}\n")
+                sys.stderr.write(f"  Malformed coding line: {coding_line}\n")
         else:
             continue   # ignore queries without coding line
         # store codings and patterns in dictionaries with the same keys
@@ -126,9 +128,13 @@ def add_coding(graph, sent_id, sent_id2match, coding):
     if sent_id in sent_id2match:
         match = sent_id2match[sent_id]  # select the match for this graph
         node_id = match['matching']['nodes'][coding['node']]  # the ID of the node specified in coding node=...
-        add_node = match['matching']['nodes'][coding['add']]
+        if coding['add']:
+            add_node = match['matching']['nodes'][coding['add']]
+            coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
+        else:
+            add_node = 0
+            coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node})"
         # build the coding string
-        coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
         if 'coding' in graph.meta:
             graph.meta['coding'] += f"; {coding_string}"  # append to existing coding
         else:

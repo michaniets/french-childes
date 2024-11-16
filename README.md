@@ -116,6 +116,13 @@ More than one Grew query can be concatenated in the query file.  Each query star
 
 The example below combines several query patterns and produces two codings. If the patterns match the same graph, codings are appended, e.g. *modal:other(7>9_bouger); modal:savoir(3>7_vouloir)*
 
+Note that if more than one coding matches for a given attribute, codings are **appended**.
+For example we get two codings for the attribute 'modal_graph' from two matching rules:
+
+```{conll}
+# coding = modal_graph:xcomp(9>10_faire); modal_graph:noRule(9>0); mod_linear:inf(9>10_faire)
+```
+
 ## Merge CoNLL-U codings with CSV
 
 Example:
@@ -123,6 +130,8 @@ Example:
 ```{shell}
 dql.py dql.query --merge childes-all.cha.tagged.csv childes-all.coded.conllu
 ```
+
+Note that if more than one coding is present for a given attribute in the CoNLL-U meta data (e.g. 'modal_graph' above), _merge_ will copy only the last value to the CSV file (e.g. 'noRule...').
 
 ## Sample query file
 

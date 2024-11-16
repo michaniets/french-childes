@@ -1,20 +1,18 @@
 #!/usr/local/bin/python3
 """
 TODO:
-- re-import in Childes csv
-  - OK, but _w1 needs to be replaced by node number
+- with --merge , get rid of arg1 (query file)
 - implement options -f and -m
 """
 __author__ = "Achim Stein"
-__version__ = "0.1"
+__version__ = "0.2"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "13.11.24"
+__status__ = "16.11.24"
 __license__ = "GPL"
 
 import sys
 import re
 import argparse
-sys.stderr.write("Initializing grewpy library...")
 import csv
 import os
 from grewpy import Corpus, Request, CorpusDraft, Graph
@@ -215,7 +213,7 @@ def merge_with_csv(conllu_file, csv_file):
     
     # create DraftCorpus and loop through graphs
     draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
-    sys.stderr.write(f"Mapping item_id -> coding...")
+    sys.stderr.write(f"- Mapping item_id -> coding...")
     id_meta = {}
     coded = 0
     for sent_id, graph in draft_corpus.items():
@@ -238,22 +236,26 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
         csv_file (str): The path to the CSV file where codings will be saved.
     """
     # Create a mapping of utt_id to row for quick access
-    sys.stderr.write(f"Mapping CSV IDs to rows...\n")
+    sys.stderr.write(f"- Mapping CSV IDs to rows...\n")
     row_dict = {row['utt_id']: row for row in rows}# Find the row with matching 'utt_id' or create a new one if not found
 
     # Loop through the stored meta information
     for sent_id in id_meta.keys():
+        node_id = 1  # coding value is added to the row of this node  (assuming IDs with '_w1' etc)
         coding = id_meta[sent_id] #graph.meta.get('coding') #graph.meta['coding']
-        
-        # Check if coding exists; if not, skip
+        # if coding exists, parse and store in a dict of attributes and values
         if coding != '':
-            # Parse coding entries into a dictionary of attributes and values
             coding_entries = coding.split(';')
             coding_dict = {}
             for entry in coding_entries:
-                # Split by attribute:value
                 attr, val = entry.split(':')
-                # TODO get node value from coding string
+                # get node value from coding string, e.g. attribute = value(2>3_verb)
+                reNode = re.compile(r'.*?\((\d)+')
+                m = re.search(reNode, val)
+                if m:
+                    node_id = m.group(1)
+                else:
+                    sys.stderr.write(f"   No node info found in coding {entry}. Adding coding to node 1 instead.\n")
                 coding_dict[attr.strip()] = val.strip()
 
             # Add any new columns for attributes found in coding_dict
@@ -262,7 +264,10 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                     headers.append(attr)
 
         # Find matching row by item_id (utt_id) and update
-        this_id = sent_id + "_w1"  ## TODO use coding node here
+        if node_id == "0":
+            sys.stderr.write(f"   Can't write to node '0'. Adding coding to node 1 instead.\n")
+            node_id = 1
+        this_id = sent_id + f"_w{node_id}"  ## combine sent and word ID in order to match the row ID
         if this_id in row_dict:
             row = row_dict[this_id]
             for key, value in coding_dict.items():
@@ -272,70 +277,16 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                 # Update the row with new data
                 row[key] = value
         else:
-            sys.stderr.write(f"ID not found in CSV: {this_id}")
+            sys.stderr.write(f"ID not found in CSV: {this_id}\n")
             exit()
 
     # Write updated data to CSV
-    with open('tmp.csv', mode='w', newline='', encoding='utf-8') as file:
+    merged_file = re.sub(r'(\.\w+)$', '.coded\\1', args.merge) # , flags=re.I
+    sys.stderr.write(f"Writing output to {merged_file}\n")
+    with open(merged_file, mode='w', newline='', encoding='utf-8') as file:
         writer = csv.DictWriter(file, fieldnames=headers, delimiter='\t')
         writer.writeheader()
         writer.writerows(row_dict.values())  # updated rows from row_dict
-
-    #print(f"Coding for {item_id} added/updated in {csv_file}.")
-
-def coding_to_csv_ALT(sent_id, id_meta, headers, rows):
-    """
-    Extract coding from a CoNLL-U graph and append it to a CSV file.
-    
-    Parameters:
-        graph (grewpy.graph.Graph): The graph from which to extract codings.
-        csv_file (str): The path to the CSV file where codings will be saved.
-    """
-    # Get item_id and coding string from graph meta
-    item_id = graph.meta.get('item_id')
-    coding = graph.meta.get('coding') #graph.meta['coding']
-    
-    # Check if coding exists; if not, skip
-    if not coding:
-        print(f"No coding found in graph {item_id}")
-        return
-    
-    # Parse coding entries into a dictionary of attributes and values
-    coding_entries = coding.split(';')
-    coding_dict = {}
-    for entry in coding_entries:
-        # Split by attribute:value
-        attr, val = entry.split(':')
-        coding_dict[attr.strip()] = val.strip()
-
-
-    # Add any new columns for attributes found in coding_dict
-    for attr in coding_dict.keys():
-        if attr not in headers:
-            headers.append(attr)
-
-    # Find the row with matching 'utt_id' or create a new one if not found
-    row_found = False
-    for row in rows:
-        if row.get('utt_id') == item_id:
-            # Update row with coding values
-            for attr, val in coding_dict.items():
-                row[attr] = val
-            row_found = True
-            break
-
-    if not row_found:
-        # Create a new row if 'utt_id' was not found
-        new_row = {'utt_id': item_id}
-        for attr, val in coding_dict.items():
-            new_row[attr] = val
-        rows.append(new_row)
-
-    # Write updated data to CSV
-    with open('tmp.csv', mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=headers)
-        writer.writeheader()
-        writer.writerows(rows)
 
     #print(f"Coding for {item_id} added/updated in {csv_file}.")
 

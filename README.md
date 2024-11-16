@@ -63,11 +63,11 @@ Example:
 
 ## Use UDPipe (or other parser)
 
-UDPipe fails when uploaded files are too large. Split them:
+UDPipe my fail when uploaded files are too large. Split them, e.g. in chunks of 10000 graphs:
 
 > conll-util.py -S 10000 parseme.conllu
 
-Process the splitted files in a loop and concatenate the output:
+Process the chunnks and concatenate the output:
 
 ```{shell}
 bash call-udpipe.sh                     # loop through splitted data
@@ -76,6 +76,8 @@ rm parseme_* udpiped-parseme_*          # delete temporary files
 ```
 
 ## Merge
+
+There are several options for combining table (csv) with the parser output (conllu).
 
 ### Add CoNLL-U to CSV table
 
@@ -89,11 +91,19 @@ Don't combine the files, but copy the values of some CSV columns into the CoNLL-
 
 > python3 merge-csv-conllu.py --enrich_conllu speaker,age_days childes.cha.tagged.csv udpiped.conllu out.conllu
 
-# Work in progress
+### Run coding query on ConLL-U and add codings
 
-## dql.py
+see below (dql.py)
 
-Applies Grew queries to a corpus, adds coding strings to meta data (and optionally nodes).
+
+# Dependency query language (dql.py)
+
+*This is work in progress*
+
+This script uses the Grew query language and Python library [Link](https://grew.fr).
+It applies Grew queries to a corpus, adds coding strings to meta data (and optionally nodes).
+
+## Query CoNLL-U files
 
 - Default: Prints the complete corpus with added codings
 - Option --coding_only: prints only graphs matching the query (with coding)
@@ -122,4 +132,12 @@ pattern {
     V [upos="VERB"];
     MOD -[re".*"]-> V;
 }
+```
+
+## Merge CoNLL-U codings with CSV
+
+Example:
+
+```{shell}
+dql.py dql.query --merge childes-all.cha.tagged.csv childes-all.coded.conllu
 ```

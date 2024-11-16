@@ -13,3 +13,9 @@ pattern {
     V [upos="VERB"];
     MOD -[re".*"]-> V;
 }
+% coding attribute=mod_linear value=inf node=MOD addlemma=V
+pattern {
+    MOD [lemma=/(pouvoir|vouloir|devoir)/];
+    V [upos="VERB"];
+    MOD < V;
+}

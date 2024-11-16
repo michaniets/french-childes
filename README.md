@@ -36,11 +36,13 @@ With option --add_annotation to apply the annotation rules specified in _tag_ana
 ### Annotation (-a --add_annotation)
 
 Rules for automatic annotation based on the tagged utterance can be added to _tag_analyser.py_.
-(This is a very shakey implementation and should be improved, but it works).
+(This is a very shaky implementation and should be improved, but it works).
 
 Rules are based on regular expressions that match the tagged string of the format:
 : word_tag=lemma word_tag=lemma word_tag=lemma ...
 They are applied during chat-to-csv conversion.
+
+**Tipp**: If you have access to a dependency parser or UDPipe, don't use _--add_annotation_, but _--conllu_, then parse the output and use _dql.py_ for querying and coding the parsed corpus.
 
 ### Bugs
 
@@ -97,8 +99,6 @@ see below (dql.py)
 
 
 # Dependency query language (dql.py)
-
-*This is work in progress*
 
 This script uses the Grew query language and Python library [Link](https://grew.fr).
 It applies Grew queries to a corpus, adds coding strings to meta data (and optionally nodes).

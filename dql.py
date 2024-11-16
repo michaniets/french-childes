@@ -204,6 +204,7 @@ def merge_with_csv(conllu_file, csv_file):
 
 
     # Read current CSV data (or create new header if CSV is empty or does not exist)
+    sys.stderr.write(f"Reading table {csv_file}...\n")
     rows = []
     headers = ['utt_id']  # Ensure utt_id is the first column in headers
     if os.path.exists(csv_file):
@@ -249,7 +250,7 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
             coding_entries = coding.split(';')
             coding_dict = {}
             for entry in coding_entries:
-                attr, val = entry.split(':')
+                attr, val = entry.split(':', 1)  # maxsplit option: split only once, to avoid errors
                 # get node value from coding string, e.g. attribute = value(2>3_verb)
                 reNode = re.compile(r'.*?\((\d)+')
                 m = re.search(reNode, val)

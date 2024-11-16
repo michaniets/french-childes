@@ -1,28 +1,29 @@
 %--------------------------------------------------------
 % Structures based on graph
 %--------------------------------------------------------
-% coding attribute=modal_graph value=xcomp node=MOD addlemma=V
+% coding attribute=modal_graph value=inf node=MOD addlemma=V
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
-    V [upos="VERB", VerbForm="Inf"];
+    V [upos=/AUX|VERB/, VerbForm="Inf"];
     MOD -[re"xcomp"]-> V;
 }
 % ======= complement clause
-% coding attribute=modal_graph value=mark node=MOD addlemma=V
+% coding attribute=modal_graph value=clause node=MOD addlemma=V
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
     V [upos="VERB"];
     MOD -[ccomp]-> V;
     V -[mark]-> *;  % any conjunction
 }
-% ======= nominal object
-% coding attribute=modal_graph value=obj node=MOD add=N
+% ======= lexical object
+% coding attribute=modal_graph value=obj_lex node=MOD add=N
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
     MOD -[obj]-> N;
 }
+
 % ======= clitic object
-% coding attribute=modal_graph value=objcl node=MOD addlemma=PRO
+% coding attribute=modal_graph value=obj_clit node=MOD addlemma=PRO
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
     PRO [form=/^(le|la|les|l')$/, PronType="Prs"];
@@ -32,12 +33,22 @@ pattern {
 %--------------------------------------------------------
 % Linear order based on pos
 %--------------------------------------------------------
+% Nominal object
+% coding attribute=mod_linear value=obj node=MOD addlemma=DET
+pattern {
+    MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
+    DET [upos="DET"];
+    MOD < DET;
+%    length(MOD, CON) <= 2;
+}
+% Infinitive adjacent
 % coding attribute=mod_linear value=inf node=MOD addlemma=V
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
     V [upos="VERB", VerbForm="Inf"];
     MOD < V;
 }
+% .... MOD [] V
 % coding attribute=mod_linear value=inf node=MOD addlemma=V
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
@@ -45,6 +56,7 @@ pattern {
     X [upos=/(ADV|PRO).*/];
     MOD < X;  X < V;
 }
+% .... MOD [] [] V
 % coding attribute=mod_linear value=inf node=MOD addlemma=V
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
@@ -53,6 +65,16 @@ pattern {
     X2 [upos=/(ADV|PRO).*/];
     MOD < X;    X < X2;    X2 < V;
 }
+% coding attribute=mod_linear value=clause node=MOD addlemma=V
+pattern {
+    MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
+    V [upos="VERB", VerbForm<>"Inf"];
+    CON [upos="SCONJ"];
+    MOD << V;    CON << V;
+    length(MOD, CON) <= 2;
+}
+
+% ======= Clitics
 % coding attribute=mod_clitic value=preinf node=MOD addlemma=V
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
@@ -60,16 +82,6 @@ pattern {
     PRO [upos=/PRO.*/];
     MOD << V;    PRO < V;
     length(MOD, V) <= 3;
-}
-
-% ======= Clausal object
-% coding attribute=mod_clitic value=clause node=MOD addlemma=V
-pattern {
-    MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
-    V [upos="VERB", VerbForm<>"Inf"];
-    CON [upos="SCONJ"];
-    MOD << V;    CON << V;
-    length(MOD, CON) <= 2;
 }
 
 

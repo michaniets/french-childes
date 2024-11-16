@@ -42,7 +42,7 @@ def main(query_file, conllu_file, args):
 def read_grew_query(query_file):
     # Read Grew query file.
     with open(query_file, 'r', encoding='utf-8') as f:
-        query_content = f.read()
+        query_content = f.read() + '\n'  # append new line to avoid Grew error if missing
     return query_content
 
 def parse_grew_query(query_file): 
@@ -135,7 +135,6 @@ def add_coding(graph, sent_id, sent_id2match, coding):
         coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
         if 'coding' in graph.meta:
             graph.meta['coding'] += f"; {coding_string}"  # append to existing coding
-            sys.stderr.write(f"    Appending to existing coding: {graph.meta['coding']}\n")
         else:
             graph.meta['coding'] = coding_string  # add to meta
         if args.code_node:   
@@ -296,7 +295,8 @@ if __name__ == "__main__":
         This script was designed to process CHILDES data created by childes.py.
         '''
     )
-    parser.add_argument("query_file", help="File with Grew query")
+#    parser.add_argument("query_file", help="File with Grew query")
+    parser.add_argument("query_file", nargs="?", default=None, help="File with Grew query")
     parser.add_argument("conllu_file", help="CoNLL-U file with parsed data")
     parser.add_argument(
        '-c', '--coding_only', action='store_true',
@@ -315,11 +315,14 @@ if __name__ == "__main__":
        help='Output format (or list of formats), e.g. conll,text,json')
     args = parser.parse_args()
 
-
     if args.merge:
+        if not args.merge:
+            parser.error("--merge requires a file path as an argument.")
         # merge codings with csv file
         sys.stderr.write(f"Merge codings from {args.conllu_file} to {args.merge}\n")
         merge_with_csv(args.conllu_file, args.merge)
-    else:
-        # default: query and code
+    elif:
+        # default: run query/coding functions
         main(args.query_file, args.conllu_file,args)
+    else:
+        parser.error("Either 'query_file' must be specified or '--merge' must be used.")

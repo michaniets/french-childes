@@ -114,14 +114,30 @@ dql.py dql.query <query file> <input file> [--code_node] [--coding_only] [> <out
 
 More than one Grew query can be concatenated in the query file.  Each query starts with a comment line containing the coding specifications (format: attribute=value).
 
-The example below combines two query patterns and produces two codings. If the patterns match the same graph, codings are appended, e.g. *modal:other(7>9_bouger); modal:savoir(3>7_vouloir)*
+The example below combines several query patterns and produces two codings. If the patterns match the same graph, codings are appended, e.g. *modal:other(7>9_bouger); modal:savoir(3>7_vouloir)*
+
+## Merge CoNLL-U codings with CSV
+
+Example:
+
+```{shell}
+dql.py dql.query --merge childes-all.cha.tagged.csv childes-all.coded.conllu
+```
+
+## Sample query file
+
+Below is an example consisting of three queries (which don't necessarily make sense).
+When you build your query file, you may want to debug the individual query blocks using the Grew online query tool [here](https://universal.grew.fr/?corpus=UD_French-GSD@2.14).
+The discussion of Grew's issues is another useful resource, on [GitHub](https://github.com/grew-nlp/grew/issues/).
+
+Some expression may require a recent version of Grew. Perl-style regular expressions work with Grew 1.16 and grewpy backend 0.5.4.
 
 ```{grew}
 % coding attribute=modal value=other node=MOD addlemma=V
 pattern {
     MOD [lemma="pouvoir"] | [lemma="vouloir"];
     V [upos="VERB"];
-    MOD -[re"xcomp"]-> V;  % test comment
+    MOD -[re"xcomp"]-> V;
 }
 without {
     MOD [lemma="savoir"]
@@ -132,12 +148,10 @@ pattern {
     V [upos="VERB"];
     MOD -[re".*"]-> V;
 }
-```
-
-## Merge CoNLL-U codings with CSV
-
-Example:
-
-```{shell}
-dql.py dql.query --merge childes-all.cha.tagged.csv childes-all.coded.conllu
+% coding attribute=mod_linear value=inf node=MOD addlemma=V
+pattern {
+    MOD [lemma=/(pouvoir|vouloir|devoir)/];   % requires Grew 1.16/grewpy 0.5.4
+    V [upos="VERB"];
+    MOD < V;
+}
 ```

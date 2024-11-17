@@ -164,3 +164,7 @@ pattern {
     MOD < V;
 }
 ```
+
+## Complete workflow for processing Childes files
+
+![Childes processing workflow](https://github.com/user-attachments/assets/ee7950a7-f503-44f0-9211-7ab5af7f1a3f)

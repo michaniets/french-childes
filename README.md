@@ -114,7 +114,7 @@ dql.py <query file> <conllu file> [--coding_only] [> <output file>]
 
 More than one Grew query can be concatenated in the query file.  Each query starts with a comment line containing the coding specifications (format: attribute=value).
 
-The example below combines several query patterns and produces two codings. If the patterns match the same graph, codings are appended, e.g. *modal:other(7>9_bouger); modal:savoir(3>7_vouloir)*
+The *.query files contain examples of Grew queries with coding instructions. If no *.query file is included, look at the example below. It produces two codings. If the patterns match the same graph, codings are appended, e.g. *modal:other(7>9_bouger); modal:savoir(3>7_vouloir)*
 
 Note that if more than one coding matches for a given attribute, codings are **appended**.
 For example we get two codings for the attribute 'modal_graph' from two matching rules:
@@ -122,6 +122,11 @@ For example we get two codings for the attribute 'modal_graph' from two matching
 ```{conll}
 # coding = code_modal:xcomp(9>10_faire); code_modal:noRule(9>0); ...
 ```
+
+When you build your query file, you may want to debug the individual query blocks using the Grew online query tool [here](https://universal.grew.fr/?corpus=UD_French-GSD@2.14).
+The discussion of Grew's issues is another useful resource, on [GitHub](https://github.com/grew-nlp/grew/issues/).
+Some expression may require a recent version of Grew. Perl-style regular expressions work with Grew 1.16 and grewpy backend 0.5.4.
+
 
 ## Merge CoNLL-U codings with CSV
 
@@ -133,13 +138,8 @@ dql.py --merge childes-all.cha.tagged.csv childes-all.coded.conllu
 
 Note that if more than one coding is present for a given attribute in the CoNLL-U meta data (e.g. 'modal_graph' above), _merge_ will copy only the last value to the CSV file (e.g. 'noRule...').
 
+
 ## Sample query file
-
-SBelow is an example consisting of three queries (which don't necessarily make sense).
-When you build your query file, you may want to debug the individual query blocks using the Grew online query tool [here](https://universal.grew.fr/?corpus=UD_French-GSD@2.14).
-The discussion of Grew's issues is another useful resource, on [GitHub](https://github.com/grew-nlp/grew/issues/).
-
-Some expression may require a recent version of Grew. Perl-style regular expressions work with Grew 1.16 and grewpy backend 0.5.4.
 
 ```{grew}
 % coding attribute=modal value=other node=MOD addlemma=V

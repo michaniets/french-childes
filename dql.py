@@ -250,7 +250,12 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
             coding_entries = coding.split(';')
             coding_dict = {}
             for entry in coding_entries:
-                attr, val = entry.split(':', 1)  # maxsplit option: split only once, to avoid errors
+                parts = re.split(r':', entry, maxsplit=1)
+                attr = parts[0]
+                val = parts[1] if len(parts) > 1 else None  # Default value if no ':'
+                if val is None:
+                    sys.stderr.write(f"   Missing value for attribute {attr}. Skipping entry.\n")
+                    continue
                 # get node value from coding string, e.g. attribute = value(2>3_verb)
                 reNode = re.compile(r'.*?\((\d)+')
                 m = re.search(reNode, val)
@@ -309,7 +314,7 @@ if __name__ == "__main__":
        help='Add coding also to column misc of the specified node (this option implies --coding)')
     parser.add_argument(
        '--merge', default = '', type = str,
-       help='Merge coding strings with table, based on item_id, with attributes as columns')
+       help='Argument is a CSV file. Adds codings from CoNLL-U file to CSV file, with attributes as columns, based on sentence and word IDs.')
     args = parser.parse_args()
 
     if args.merge:

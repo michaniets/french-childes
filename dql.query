@@ -1,14 +1,18 @@
 %--------------------------------------------------------
-% Structures based on graph
+% Rules for structures based on graph (UDPipe French GSD)
 %--------------------------------------------------------
-% coding attribute=modal_graph value=inf node=MOD addlemma=V
+
+% 1. MODAL VERBS
+
+% ======= infinitive
+% coding attribute=code_modal value=inf node=MOD addlemma=V
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
     V [upos=/AUX|VERB/, VerbForm="Inf"];
     MOD -[re"xcomp"]-> V;
 }
 % ======= complement clause
-% coding attribute=modal_graph value=clause node=MOD addlemma=V
+% coding attribute=code_modal value=clause node=MOD addlemma=V
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
     V [upos="VERB"];
@@ -16,72 +20,40 @@ pattern {
     V -[mark]-> *;  % any conjunction
 }
 % ======= lexical object
-% coding attribute=modal_graph value=obj_lex node=MOD add=N
+% coding attribute=code_modal value=obj_lex node=MOD add=N
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
     MOD -[obj]-> N;
 }
 
 % ======= clitic object
-% coding attribute=modal_graph value=obj_clit node=MOD addlemma=PRO
+% coding attribute=code_modal value=obj_clit node=MOD addlemma=PRO
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
     PRO [form=/^(le|la|les|l')$/, PronType="Prs"];
     MOD -[obj]-> PRO;
 }
 
-%--------------------------------------------------------
-% Linear order based on pos
-%--------------------------------------------------------
-% Nominal object
-% coding attribute=mod_linear value=obj node=MOD addlemma=DET
+% 2. ALL VERBS
+
+% ======= bare infinitive complements
+% coding attribute=code_verb value=inf_bare node=V addlemma=INF
 pattern {
-    MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
-    DET [upos="DET"];
-    MOD < DET;
-%    length(MOD, CON) <= 2;
+    V [upos=/AUX|VERB/];
+    INF [upos=/AUX|VERB/, VerbForm="Inf"];
+    V -[xcomp]-> INF;
 }
-% Infinitive adjacent
-% coding attribute=mod_linear value=inf node=MOD addlemma=V
-pattern {
-    MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
-    V [upos="VERB", VerbForm="Inf"];
-    MOD < V;
-}
-% .... MOD [] V
-% coding attribute=mod_linear value=inf node=MOD addlemma=V
-pattern {
-    MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
-    V [upos="VERB", VerbForm="Inf"];
-    X [upos=/(ADV|PRO).*/];
-    MOD < X;  X < V;
-}
-% .... MOD [] [] V
-% coding attribute=mod_linear value=inf node=MOD addlemma=V
-pattern {
-    MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
-    V [upos="VERB", VerbForm="Inf"];
-    X [upos=/(ADV|PRO).*/];
-    X2 [upos=/(ADV|PRO).*/];
-    MOD < X;    X < X2;    X2 < V;
-}
-% coding attribute=mod_linear value=clause node=MOD addlemma=V
-pattern {
-    MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
-    V [upos="VERB", VerbForm<>"Inf"];
-    CON [upos="SCONJ"];
-    MOD << V;    CON << V;
-    length(MOD, CON) <= 2;
+without {
+    INF -[mark]-> *;  % exclude de/à + Inf
 }
 
-% ======= Clitics
-% coding attribute=mod_clitic value=preinf node=MOD addlemma=V
+% ======= bare infinitive complements
+% coding attribute=code_verb value=inf_prep node=V addlemma=INF
 pattern {
-    MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
-    V [upos="VERB", VerbForm="Inf"];
-    PRO [upos=/PRO.*/];
-    MOD << V;    PRO < V;
-    length(MOD, V) <= 3;
+    V [upos=/AUX|VERB/];
+    INF [upos=/AUX|VERB/, VerbForm="Inf"];
+    V -[xcomp]-> INF;
+    INF -[mark]-> *;
 }
 
 

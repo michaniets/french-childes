@@ -257,12 +257,15 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                     sys.stderr.write(f"   Missing value for attribute {attr}. Skipping entry.\n")
                     continue
                 # get node value from coding string, e.g. attribute = value(2>3_verb)
-                reNode = re.compile(r'.*?\((\d)+')
+                reNode = re.compile(r'.*?\((\d+)')
                 m = re.search(reNode, val)
                 if m:
                     node_id = m.group(1)
                 else:
                     sys.stderr.write(f"   No node info found in coding {entry}. Adding coding to node 1 instead.\n")
+                if node_id == "0":
+                    sys.stderr.write(f"   WARNING: Can't write to node '0'. Adding coding to node 1 instead. VAL = {val}\n")
+                    node_id = 1
                 coding_dict[attr.strip()] = val.strip()
 
             # Add any new columns for attributes found in coding_dict
@@ -271,9 +274,9 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                     headers.append(attr)
 
         # Find matching row by item_id (utt_id) and update
-        if node_id == "0":
-            sys.stderr.write(f"   Can't write to node '0'. Adding coding to node 1 instead.\n")
-            node_id = 1
+#        if node_id == "0":
+#            sys.stderr.write(f"   Can't write to node '0'. Adding coding to node 1 instead.\n")
+#            node_id = 1
         this_id = sent_id + f"_w{node_id}"  ## combine sent and word ID in order to match the row ID
         if this_id in row_dict:
             row = row_dict[this_id]
@@ -281,6 +284,7 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                 # Add a new column if not already present in headers
                 if key not in headers:
                     headers.append(key)
+                    sys.stderr.write(f"  New key in header: {key}\n")
                 # Update the row with new data
                 row[key] = value
         else:

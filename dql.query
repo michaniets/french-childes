@@ -42,18 +42,54 @@ pattern {
     V [upos=/AUX|VERB/];
     INF [upos=/AUX|VERB/, VerbForm="Inf"];
     V -[xcomp]-> INF;
+    V >> INF;
 }
 without {
     INF -[mark]-> *;  % exclude de/à + Inf
 }
 
-% ======= bare infinitive complements
+% ======= prepositional infinitive complements
 % coding attribute=code_verb value=inf_prep node=V addlemma=INF
 pattern {
     V [upos=/AUX|VERB/];
     INF [upos=/AUX|VERB/, VerbForm="Inf"];
     V -[xcomp]-> INF;
     INF -[mark]-> *;
+    V << INF;
 }
+
+% 3. NEGATION
+
+% ======= negation high with bare infinitive complements
+% coding attribute=code_neg value=inf_high node=V addlemma=INF
+pattern {
+    V [upos=/AUX|VERB/];
+    INF [upos=/AUX|VERB/, VerbForm="Inf"];
+    V -[xcomp]-> INF;
+    V << INF;
+    NEG [form=/n.*/];
+    V -[advmod]-> NEG;
+    NEG << V;
+}
+without {
+    INF -[mark]-> *;  % exclude de/à + Inf
+}
+
+% ======= negation low with bare infinitive complements
+% coding attribute=code_neg value=inf_low node=V addlemma=INF
+pattern {
+    V [upos=/AUX|VERB/];
+    INF [upos=/AUX|VERB/, VerbForm="Inf"];
+    V -[xcomp]-> INF;
+    V << INF;
+    NEG [form=/n.*/];
+    INF -[advmod]-> NEG;
+    NEG << INF;
+}
+without {
+    INF -[mark]-> *;  % exclude de/à + Inf
+}
+
+
 
 

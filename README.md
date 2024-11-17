@@ -63,7 +63,7 @@ Options:
 Example:
 > childes.py -m VER --add_annotation --tagger_output --pos_utterance VER -p perceo-spoken-french-utf.par --conllu childes-all.cha
 
-## Use UDPipe (or other parser)
+## Use UDPipe (or any other dependency parser)
 
 UDPipe my fail when uploaded files are too large. Split them, e.g. in chunks of 10000 graphs:
 
@@ -165,6 +165,8 @@ pattern {
 }
 ```
 
-## Complete workflow for processing Childes files
+## Workflow for processing Childes files
+
+Adapt the script _childes-pipeline.sh_ to your installation. It lists the commands for most of the steps depicted below.
 
 ![Childes processing workflow](https://github.com/user-attachments/assets/ee7950a7-f503-44f0-9211-7ab5af7f1a3f)

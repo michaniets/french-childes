@@ -109,7 +109,7 @@ It applies Grew queries to a corpus, adds coding strings to meta data (and optio
 - Option --coding_only: prints only graphs matching the query (with coding)
 
 ```{shell}
-dql.py dql.query <query file> <input file> [--code_node] [--coding_only] [> <output file>]
+dql.py <query file> <conllu file> [--coding_only] [> <output file>]
 ```
 
 More than one Grew query can be concatenated in the query file.  Each query starts with a comment line containing the coding specifications (format: attribute=value).
@@ -120,22 +120,22 @@ Note that if more than one coding matches for a given attribute, codings are **a
 For example we get two codings for the attribute 'modal_graph' from two matching rules:
 
 ```{conll}
-# coding = modal_graph:xcomp(9>10_faire); modal_graph:noRule(9>0); mod_linear:inf(9>10_faire)
+# coding = code_modal:xcomp(9>10_faire); code_modal:noRule(9>0); ...
 ```
 
 ## Merge CoNLL-U codings with CSV
 
-Example:
+Example: The following command takes the CoNLL-U file as in put and merges it with the CSV referenced by _--merge_. The output will be written to childes-all.cha.tagged.coded.csv
 
 ```{shell}
-dql.py dql.query --merge childes-all.cha.tagged.csv childes-all.coded.conllu
+dql.py --merge childes-all.cha.tagged.csv childes-all.coded.conllu
 ```
 
 Note that if more than one coding is present for a given attribute in the CoNLL-U meta data (e.g. 'modal_graph' above), _merge_ will copy only the last value to the CSV file (e.g. 'noRule...').
 
 ## Sample query file
 
-Below is an example consisting of three queries (which don't necessarily make sense).
+SBelow is an example consisting of three queries (which don't necessarily make sense).
 When you build your query file, you may want to debug the individual query blocks using the Grew online query tool [here](https://universal.grew.fr/?corpus=UD_French-GSD@2.14).
 The discussion of Grew's issues is another useful resource, on [GitHub](https://github.com/grew-nlp/grew/issues/).
 

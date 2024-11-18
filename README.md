@@ -105,8 +105,10 @@ It applies Grew queries to a corpus, adds coding strings to meta data (and optio
 
 ## Query CoNLL-U files
 
-- Default: Prints the complete corpus with added codings
-- Option --coding_only: prints only graphs matching the query (with coding)
+- Default is 'search': Prints the complete corpus with added codings
+- Option --coding_only: prints only graphs matching the query (with added codings)
+
+Use _--coding_only_ if you if you want to merge the result back into the table.
 
 ```{shell}
 dql.py <query file> <conllu file> [--coding_only] [> <output file>]

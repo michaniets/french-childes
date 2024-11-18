@@ -7,9 +7,14 @@ FILE=$1
 MYPATH="$HOME/git/french-childes"
 SHELLCMD="bash"
 
+if [ ! -f ${FILE}.cha ]
+then
+    echo "Error: filenot found: ${FILE}.cha"
+fi
+
 check_success() {
   if [ $? -ne 0 ]; then
-    echo "Error: Command failed at $1" >&2
+    echo "Error: Command failed at: $1" >&2
     exit 1
   fi
 }

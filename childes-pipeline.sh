@@ -2,7 +2,7 @@
 
 FILE=$1
 
-PATH="~/git/french-childes/childes.py"
+PATH="$HOME/git/french-childes"
 
 # convert Childes CHAT format
 ${PATH}/childes.py -m VER --add_annotation --tagger_output --pos_utterance VER -p perceo-spoken-french-utf.par --conllu ${FILE}.cha

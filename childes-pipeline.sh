@@ -9,7 +9,7 @@ SHELLCMD="bash"
 
 if [ ! -f ${FILE}.cha ]
 then
-    echo "Error: filenot found: ${FILE}.cha"
+    echo "Error: file not found: ${FILE}.cha"
 fi
 
 check_success() {

@@ -1,9 +1,9 @@
 #!/usr/local/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "0.3"
+__version__ = "0.4"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "16.11.24"
+__status__ = "18.11.24"
 __license__ = "GPL"
 
 import sys
@@ -266,30 +266,24 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                 if node_id == "0":
                     sys.stderr.write(f"   WARNING: Can't write to node '0'. Adding coding to node 1 instead. VAL = {val}\n")
                     node_id = 1
-                coding_dict[attr.strip()] = val.strip()
+                coding_dict[attr.strip()] = (val.strip(), node_id)
 
             # Add any new columns for attributes found in coding_dict
             for attr in coding_dict.keys():
                 if attr not in headers:
+                    sys.stderr.write(f"  Adding attribute as new column header: {attr}\n")
                     headers.append(attr)
 
-        # Find matching row by item_id (utt_id) and update
-#        if node_id == "0":
-#            sys.stderr.write(f"   Can't write to node '0'. Adding coding to node 1 instead.\n")
-#            node_id = 1
-        this_id = sent_id + f"_w{node_id}"  ## combine sent and word ID in order to match the row ID
-        if this_id in row_dict:
-            row = row_dict[this_id]
-            for key, value in coding_dict.items():
-                # Add a new column if not already present in headers
-                if key not in headers:
-                    headers.append(key)
-                    sys.stderr.write(f"  New key in header: {key}\n")
-                # Update the row with new data
-                row[key] = value
-        else:
-            sys.stderr.write(f"ID not found in CSV: {this_id}\n")
-            exit()
+        # Process each attribute and update the CSV row
+        for attr, (val, node_id) in coding_dict.items():
+            # Combine sentence ID and node ID to form the row ID
+            this_id = sent_id + f"_w{node_id}"
+            if this_id in row_dict:
+                row = row_dict[this_id]
+                row[attr] = val   # Update the row with the new data
+            else:
+                sys.stderr.write(f"ID not found in CSV: {this_id}\n")
+                exit()
 
     # Write updated data to CSV
     merged_file = re.sub(r'(\.\w+)$', '.coded\\1', args.merge) # , flags=re.I

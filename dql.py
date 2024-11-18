@@ -103,7 +103,7 @@ def match_sentences_with_query(conllu_file, query_content):
     corpus = init_corpus(conllu_file)
     codings, patterns = parse_grew_query(query_content)
     matches_for_patterns = find_matches(corpus, patterns)
-    # Convert it to a CorpusDraft if it isn't already
+    # Convert corpus to a CorpusDraft object if it isn't already
     draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
     for nr in matches_for_patterns.keys():
         sys.stderr.write(f"Modifying matching graphs for query {nr}...\n  Coding: {codings[nr]}\n")
@@ -257,6 +257,7 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
         if coding != '':
             coding_entries = coding.split(';')
             coding_dict = {}
+            # for each coding in the meta information
             for entry in coding_entries:
                 parts = re.split(r':', entry, maxsplit=1)
                 attr = parts[0]

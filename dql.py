@@ -1,7 +1,7 @@
 #!/usr/local/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "0.4"
+__version__ = "0.5"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
 __status__ = "18.11.24"
 __license__ = "GPL"
@@ -151,7 +151,7 @@ def init_corpus(conllu_file):
     per_min = 450000  # processed sentences per min on Mac M2
     secs = int(count / per_min * 60)
     minutes, seconds = divmod(secs, 60)
-    sys.stderr.write(f"Estimated time to read {count} graphs: {round(minutes,0)}m {seconds}s\n")
+    sys.stderr.write(f"Estimated time to read {count} graphs (Apple M2): {round(minutes,0)}m {seconds}s\n")
     corpus = Corpus(conllu_file)  # corpus file as Corpus object (slow)
     return corpus
 
@@ -205,13 +205,12 @@ def merge_with_csv(conllu_file, csv_file):
     sys.stderr.write(f"Reading table {csv_file}... (this can take a while)\n")
     rows = []
     headers = ['utt_id']  # Ensure utt_id is the first column in headers
-    """  with Pandas (output and row modification would also need to be modified)
     if os.path.exists(csv_file):
         with open(csv_file, mode='r', newline='', encoding='utf-8') as file:
             reader = csv.DictReader(file, delimiter='\t')
             headers = reader.fieldnames if reader.fieldnames else headers
             rows = list(reader)
-    """    
+    """  with Pandas (output and row modification would also need to be modified)
     if os.path.exists(csv_file):
         df = pd.read_csv(csv_file, delimiter='\t', encoding='utf-8')  # Read with Pandas
         headers = list(df.columns)  # Match reader.fieldnames
@@ -219,6 +218,7 @@ def merge_with_csv(conllu_file, csv_file):
     else:
         headers = ['utt_id']
         rows = []
+    """    
     # create DraftCorpus and loop through graphs
     draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
     sys.stderr.write(f"- Reading the corpus to map item_id -> coding")
@@ -262,7 +262,7 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                 attr = parts[0]
                 val = parts[1] if len(parts) > 1 else None  # Default value if no ':'
                 if val is None:
-                    sys.stderr.write(f"   Missing value for attribute {attr}. Skipping entry.\n")
+                    sys.stderr.write(f"   WARNING ({sent_id}): Missing value for attribute '{attr}'. Skipping entry.\n")
                     continue
                 # get node value from coding string, e.g. attribute = value(2>3_verb)
                 reNode = re.compile(r'.*?\((\d+)')
@@ -272,7 +272,7 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                 else:
                     sys.stderr.write(f"   No node info found in coding {entry}. Adding coding to node 1 instead.\n")
                 if node_id == "0":
-                    sys.stderr.write(f"   WARNING: Can't write to node '0'. Adding coding to node 1 instead. VAL = {val}\n")
+                    sys.stderr.write(f"   WARNING ({sent_id}): Can't write to node '0'. Adding coding to node 1 instead. VAL = {val}\n")
                     node_id = 1
                 coding_dict[attr.strip()] = (val.strip(), node_id)
 

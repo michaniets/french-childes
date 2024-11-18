@@ -10,6 +10,7 @@ import sys
 import re
 import argparse
 import csv
+import pandas as pd   # TODO test if Pandas is faster than DictReader with large tables
 import os
 from grewpy import Corpus, Request, CorpusDraft, Graph
 
@@ -176,7 +177,7 @@ def count_graphs(conllu_file):
     return graph_count
 
 def conllu_to_graphs(conllu_file):
-    "read conllu format into a list of Graph objects"
+    "read conllu format into a list of Graph objects (not used)"
     graphs = []
     sent = ''
     with open(conllu_file, 'r', encoding='utf-8') as file:
@@ -197,25 +198,30 @@ def show(graph):
     exit()
 
 def merge_with_csv(conllu_file, csv_file):
-    #conllu_to_graphs(conllu_file)
     # read conllu_file as Grew corpus
     corpus = init_corpus(conllu_file)
 
-
-
     # Read current CSV data (or create new header if CSV is empty or does not exist)
-    sys.stderr.write(f"Reading table {csv_file}...\n")
+    sys.stderr.write(f"Reading table {csv_file}... (this can take a while)\n")
     rows = []
     headers = ['utt_id']  # Ensure utt_id is the first column in headers
+    """  with Pandas (output and row modification would also need to be modified)
     if os.path.exists(csv_file):
         with open(csv_file, mode='r', newline='', encoding='utf-8') as file:
             reader = csv.DictReader(file, delimiter='\t')
             headers = reader.fieldnames if reader.fieldnames else headers
             rows = list(reader)
-    
+    """    
+    if os.path.exists(csv_file):
+        df = pd.read_csv(csv_file, delimiter='\t', encoding='utf-8')  # Read with Pandas
+        headers = list(df.columns)  # Match reader.fieldnames
+        rows = df.to_dict(orient='records')  # Match list(reader)
+    else:
+        headers = ['utt_id']
+        rows = []
     # create DraftCorpus and loop through graphs
     draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
-    sys.stderr.write(f"- Mapping item_id -> coding...")
+    sys.stderr.write(f"- Reading the corpus to map item_id -> coding")
     id_meta = {}
     coded = 0
     for sent_id, graph in draft_corpus.items():
@@ -245,7 +251,9 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
     for sent_id in id_meta.keys():
         node_id = 1  # coding value is added to the row of this node  (assuming IDs with '_w1' etc)
         coding = id_meta[sent_id] #graph.meta.get('coding') #graph.meta['coding']
-        # if coding exists, parse and store in a dict of attributes and values
+
+        # if coding exists, parse, make dict of attribute:value, modify row
+        #    else: don't modify anything
         if coding != '':
             coding_entries = coding.split(';')
             coding_dict = {}
@@ -274,16 +282,15 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                     sys.stderr.write(f"  Adding attribute as new column header: {attr}\n")
                     headers.append(attr)
 
-        # Process each attribute and update the CSV row
-        for attr, (val, node_id) in coding_dict.items():
-            # Combine sentence ID and node ID to form the row ID
-            this_id = sent_id + f"_w{node_id}"
-            if this_id in row_dict:
-                row = row_dict[this_id]
-                row[attr] = val   # Update the row with the new data
-            else:
-                sys.stderr.write(f"ID not found in CSV: {this_id}\n")
-                exit()
+            # Process each attribute and update the CSV row
+            for attr, (val, node_id) in coding_dict.items():
+                # Combine sentence ID and node ID to form the row ID
+                this_id = sent_id + f"_w{node_id}"
+                if this_id in row_dict:
+                    row = row_dict[this_id]
+                    row[attr] = val   # Update column 'attr' with this value
+                else:
+                    sys.stderr.write(f"! WARNING: ID not found in CSV: {this_id}\n")
 
     # Write updated data to CSV
     merged_file = re.sub(r'(\.\w+)$', '.coded\\1', args.merge) # , flags=re.I
@@ -293,7 +300,6 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
         writer.writeheader()
         writer.writerows(row_dict.values())  # updated rows from row_dict
 
-    #print(f"Coding for {item_id} added/updated in {csv_file}.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=

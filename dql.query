@@ -1,5 +1,11 @@
 %--------------------------------------------------------
-% Rules for structures based on graph (UDPipe French GSD)
+% Rules for graphs created with UDPipe / model French GSD
+%
+% Infinitival complements with
+% 1. modal verbs
+% 2. any verb
+%
+% AS Nov 24
 %--------------------------------------------------------
 
 % 1. MODAL VERBS
@@ -42,7 +48,8 @@ pattern {
     V [upos=/AUX|VERB/];
     INF [upos=/AUX|VERB/, VerbForm="Inf"];
     V -[xcomp]-> INF;
-    V >> INF;
+    V << INF;
+    V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
 }
 without {
     INF -[mark]-> *;  % exclude de/à + Inf
@@ -67,6 +74,7 @@ pattern {
     INF [upos=/AUX|VERB/, VerbForm="Inf"];
     V -[xcomp]-> INF;
     V << INF;
+    V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
     NEG [form=/n.*/];
     V -[advmod]-> NEG;
     NEG << V;
@@ -82,6 +90,7 @@ pattern {
     INF [upos=/AUX|VERB/, VerbForm="Inf"];
     V -[xcomp]-> INF;
     V << INF;
+    V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
     NEG [form=/n.*/];
     INF -[advmod]-> NEG;
     NEG << INF;

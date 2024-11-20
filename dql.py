@@ -276,6 +276,7 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                     sys.stderr.write(f"   WARNING ({sent_id}): Can't write to node '0'. Adding coding to node 1 instead. VAL = {val}\n")
                     node_id = 1
                 coding_dict[attr.strip()] = (val.strip(), node_id)
+                sys.stderr.write(f"       -----> coding_dict: adding {attr} -> {val} \n")
 
             # Add any new columns for attributes found in coding_dict
             for attr in coding_dict.keys():
@@ -290,10 +291,11 @@ def coding_to_csv(sent_id, id_meta, headers, rows):
                 if this_id in row_dict:
                     row = row_dict[this_id]
                     row[attr] = val   # Update column 'attr' with this value
+                    sys.stderr.write(f"       -----> updating row {this_id}: {attr} -> {val} \n")
                 else:
                     sys.stderr.write(f"! WARNING: ID not found in CSV: {this_id}\n")
 
-    # Write updated data to CSV
+    # Write updated data to new CSV file *.coded.csv
     merged_file = re.sub(r'(\.\w+)$', '.coded\\1', args.merge) # , flags=re.I
     sys.stderr.write(f"Writing output to {merged_file}\n")
     with open(merged_file, mode='w', newline='', encoding='utf-8') as file:

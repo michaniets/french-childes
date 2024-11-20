@@ -10,7 +10,6 @@ import sys
 import re
 import argparse
 import csv
-import pandas as pd   # TODO test if Pandas is faster than DictReader with large tables
 import os
 from grewpy import Corpus, Request, CorpusDraft, Graph
 
@@ -99,6 +98,7 @@ def match_sentences_with_query(conllu_file, query_content):
     Reads corpus as Grew object. Matches corpus against set of Grew patterns.
     Copies the corpus to a modifiable DraftCorpus.
     For each pattern, for each match for pattern: modifies graph, adds coding if present.
+    Returns draft corpus.
     """
     new_graphs = []  # modified graphs
     corpus = init_corpus(conllu_file)
@@ -220,15 +220,7 @@ def merge_with_csv(conllu_file, csv_file):
             reader = csv.DictReader(file, delimiter='\t')
             headers = reader.fieldnames if reader.fieldnames else headers
             rows = list(reader)
-    """  with Pandas (output and row modification would also need to be modified)
-    if os.path.exists(csv_file):
-        df = pd.read_csv(csv_file, delimiter='\t', encoding='utf-8')  # Read with Pandas
-        headers = list(df.columns)  # Match reader.fieldnames
-        rows = df.to_dict(orient='records')  # Match list(reader)
-    else:
-        headers = ['utt_id']
-        rows = []
-    """    
+
     # create DraftCorpus and loop through graphs
     draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
     sys.stderr.write(f"- Reading the corpus to map item_id -> coding...")

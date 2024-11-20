@@ -20,22 +20,23 @@ def main(query_file, conllu_file, args):
     sys.stderr.write(f"Query:\n{query_content}\n")
     
     # Match sentences in the CoNLL-U file against the GREW query
-    new_graphs = match_sentences_with_query(conllu_file, query_content)
-    
-    # Output matched sentences
+    updated_corpus = match_sentences_with_query(conllu_file, query_content)
+
+    # Output
     out_matches = 0
+    for graph in updated_corpus.values():
+        if args.coding_only and not 'coding' in graph.meta:
+            pass
+        else:
+            print(graph.to_conll())
+            out_matches +=1
+
+    # Output matched sentences
     if args.coding_only:  # print only coded output
-        for graph in new_graphs:
-            if 'coding' in graph.meta:
-                print(graph.to_conll())
-                out_matches +=1
-        sys.stderr.write(f"{out_matches} matches printed (of total {len(new_graphs)} graphs)\n")
+        sys.stderr.write(f"{out_matches} matches printed (of total {len(updated_corpus)} graphs)\n")
     else:
-        for graph in new_graphs:
-            print(graph.to_conll())  # print every graph
-            if 'coding' in graph.meta:
-                out_matches +=1
-        sys.stderr.write(f"{len(new_graphs)} graphs printed ({out_matches} matches)\n")
+        sys.stderr.write(f"{len(updated_corpus)} graphs printed ({out_matches} matches)\n")
+
 def read_grew_query(query_file):
     # Read Grew query file.
     with open(query_file, 'r', encoding='utf-8') as f:
@@ -105,17 +106,24 @@ def match_sentences_with_query(conllu_file, query_content):
     matches_for_patterns = find_matches(corpus, patterns)
     # Convert corpus to a CorpusDraft object if it isn't already
     draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
-    for nr in matches_for_patterns.keys():
+    for nr in matches_for_patterns:
         sys.stderr.write(f"Modifying matching graphs for query {nr}...\n  Coding: {codings[nr]}\n")
         sent_id2match = {}
+        match_list = []  # 
         for match in matches_for_patterns[nr]:
-            sent_id2match[match['sent_id']] = match  # map sent_id -> match
-        # loop through corpus items (sent_id:GraphObject) and apply add_coding
-        sys.stderr.write(f"  Loop through corpus graphs...\n")
+            sent_id = match['sent_id']
+            if sent_id in sent_id2match:
+                match_list = sent_id2match[sent_id]
+            else:
+                match_list = []
+            match_list.append(match)
+            sent_id2match[sent_id] = match_list
+
+        # Modify the corpus graphs by calling add_coding()
         for sent_id, graph in draft_corpus.items():
-            new_graph = add_coding(graph, sent_id, sent_id2match, codings[nr])
-            new_graphs.append(new_graph)
-    return new_graphs  # return list of modified graphs
+            add_coding(graph, sent_id, sent_id2match, codings[nr])
+
+    return draft_corpus   # return the modified corpus
 
 def add_coding(graph, sent_id, sent_id2match, coding):
     """
@@ -127,22 +135,25 @@ def add_coding(graph, sent_id, sent_id2match, coding):
     """
     # if sent_id has been stored with a match, modify the graph
     if sent_id in sent_id2match:
-        match = sent_id2match[sent_id]  # select the match for this graph
-        node_id = match['matching']['nodes'][coding['node']]  # the ID of the node specified in coding node=...
-        if coding['add']:
-            add_node = match['matching']['nodes'][coding['add']]
-            coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
-        else:
-            add_node = 0
-            coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node})"
-        # build the coding string
-        if 'coding' in graph.meta:
-            graph.meta['coding'] += f"; {coding_string}"  # append to existing coding
-        else:
-            graph.meta['coding'] = coding_string  # add to meta
-        if args.code_node:   
-            graph[node_id]['coding'] = coding_string   # add coding as a feature to column 'misc'
-    # returns changed and unchanged graphs
+        match_list = sent_id2match[sent_id]  # select the match for this graph
+        # for each match of the list (for one pattern)
+        for match in match_list:
+            node_id = match['matching']['nodes'][coding['node']]  # the ID of the node specified in coding node=...
+            if coding['add']:
+                add_node = match['matching']['nodes'][coding['add']]
+                coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
+            else:
+                add_node = 0
+                coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node})"
+            # build the coding string
+            if 'coding' in graph.meta:
+                graph.meta['coding'] += f"; {coding_string}"  # append to existing coding
+            else:
+                graph.meta['coding'] = coding_string  # add to meta
+            if args.code_node:   
+                graph[node_id]['coding'] = coding_string   # add coding as a feature to column 'misc'
+
+    # returns graph, changed or unchanged
     return graph
 
 def init_corpus(conllu_file):
@@ -220,7 +231,7 @@ def merge_with_csv(conllu_file, csv_file):
     """    
     # create DraftCorpus and loop through graphs
     draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
-    sys.stderr.write(f"- Reading the corpus to map item_id -> coding")
+    sys.stderr.write(f"- Reading the corpus to map item_id -> coding...")
     id_meta = {}
     coded = 0
     for sent_id, graph in draft_corpus.items():
@@ -232,9 +243,6 @@ def merge_with_csv(conllu_file, csv_file):
         else:
             id_meta[item_id] = ''
     sys.stderr.write(f"{len(id_meta.keys())} graphs, {coded} codings\n")
-    coding_to_csv(sent_id, id_meta, headers, rows)
-
-def coding_to_csv(sent_id, id_meta, headers, rows):
     """
     Extract coding from a CoNLL-U graph and append it to a CSV file.
     

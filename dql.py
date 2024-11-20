@@ -1,9 +1,9 @@
 #!/usr/local/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "0.5"
+__version__ = "0.6"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "18.11.24"
+__status__ = "20.11.24"
 __license__ = "GPL"
 
 import sys
@@ -183,7 +183,6 @@ def conllu_to_graphs(conllu_file):
     with open(conllu_file, 'r', encoding='utf-8') as file:
         for line in file:
             if line.strip() == '':  # on empty line
-                #print(f"CONLL2GRAPH:\n{sent}")
                 graphs.append(Graph(sent))
                 show(Graph(sent))
                 sent = ''

@@ -1,7 +1,7 @@
 #!/usr/local/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "0.6"
+__version__ = "0.7"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
 __status__ = "20.11.24"
 __license__ = "GPL"
@@ -274,8 +274,11 @@ def merge_with_csv(conllu_file, csv_file):
                 if node_id == "0":
                     sys.stderr.write(f"   WARNING ({sent_id}): Can't write to node '0'. Adding coding to node 1 instead. VAL = {val}\n")
                     node_id = 1
-                coding_dict[attr.strip()] = (val.strip(), node_id)
-                sys.stderr.write(f"       -----> coding_dict: adding {attr} -> {val} \n")
+                #  code_dict stores lists of tuples (value, node_id)
+                if attr.strip() in coding_dict:
+                    coding_dict[attr.strip()].append((val.strip(), node_id))
+                else:
+                    coding_dict[attr.strip()] = [(val.strip(), node_id)]
 
             # Add any new columns for attributes found in coding_dict
             for attr in coding_dict.keys():
@@ -284,15 +287,20 @@ def merge_with_csv(conllu_file, csv_file):
                     headers.append(attr)
 
             # Process each attribute and update the CSV row
-            for attr, (val, node_id) in coding_dict.items():
-                # Combine sentence ID and node ID to form the row ID
-                this_id = sent_id + f"_w{node_id}"
-                if this_id in row_dict:
-                    row = row_dict[this_id]
-                    row[attr] = val   # Update column 'attr' with this value
-                    sys.stderr.write(f"       -----> updating row {this_id}: {attr} -> {val} \n")
-                else:
-                    sys.stderr.write(f"! WARNING: ID not found in CSV: {this_id}\n")
+            for attr, values in coding_dict.items():  # 'values' is now a list of (val, node_id)
+                for val, node_id in values:  # Iterate through all (val, node_id) pairs for this attribute
+                    # Combine sentence ID and node ID to form the row ID
+                    this_id = sent_id + f"_w{node_id}"
+                    if this_id in row_dict:
+                        row = row_dict[this_id]
+                        if attr in row:
+                            # Append the new value to the existing value, separated by a delimiter (e.g., ";")
+                            row[attr] += f";{val}" if row[attr] else val
+                        else:
+                            # Add the new attribute and its value
+                            row[attr] = val
+                    else:
+                        sys.stderr.write(f"! WARNING: ID not found in CSV: {this_id}\n")
 
     # Write updated data to new CSV file *.coded.csv
     merged_file = re.sub(r'(\.\w+)$', '.coded\\1', args.merge) # , flags=re.I

@@ -3,7 +3,7 @@
 __author__ = "Achim Stein"
 __version__ = "0.7"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "20.11.24"
+__status__ = "21.11.24"
 __license__ = "GPL"
 
 import sys
@@ -21,7 +21,7 @@ def main(query_file, conllu_file, args):
     # Match sentences in the CoNLL-U file against the GREW query
     updated_corpus = match_sentences_with_query(conllu_file, query_content)
 
-    # Output
+    # Output coded matches only or everything
     out_matches = 0
     for graph in updated_corpus.values():
         if args.coding_only and not 'coding' in graph.meta:
@@ -104,7 +104,7 @@ def match_sentences_with_query(conllu_file, query_content):
     corpus = init_corpus(conllu_file)
     codings, patterns = parse_grew_query(query_content)
     matches_for_patterns = find_matches(corpus, patterns)
-    # Convert corpus to a CorpusDraft object if it isn't already
+    # Convert corpus to a CorpusDraft object: this allows to modify the graphs
     draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
     for nr in matches_for_patterns:
         sys.stderr.write(f"Modifying matching graphs for query {nr}...\n  Coding: {codings[nr]}\n")
@@ -208,6 +208,12 @@ def show(graph):
     exit()
 
 def merge_with_csv(conllu_file, csv_file):
+    """
+    Extract coding strings from the meta header of CoNLL-U graphs and append them to a CSV file.
+    Parameters:
+        graph (grewpy.graph.Graph): The graph from which to extract codings.
+        csv_file (str): The path to the CSV file where codings will be saved.
+    """
     # read conllu_file as Grew corpus
     corpus = init_corpus(conllu_file)
 
@@ -235,16 +241,9 @@ def merge_with_csv(conllu_file, csv_file):
         else:
             id_meta[item_id] = ''
     sys.stderr.write(f"{len(id_meta.keys())} graphs, {coded} codings\n")
-    """
-    Extract coding from a CoNLL-U graph and append it to a CSV file.
-    
-    Parameters:
-        graph (grewpy.graph.Graph): The graph from which to extract codings.
-        csv_file (str): The path to the CSV file where codings will be saved.
-    """
-    # Create a mapping of utt_id to row for quick access
+    # Map utt_id --> row for quick access
     sys.stderr.write(f"- Mapping CSV IDs to rows...\n")
-    row_dict = {row['utt_id']: row for row in rows}# Find the row with matching 'utt_id' or create a new one if not found
+    row_dict = {row['utt_id']: row for row in rows} # get row with matching 'utt_id'
 
     # Loop through the stored meta information
     for sent_id in id_meta.keys():

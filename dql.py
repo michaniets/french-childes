@@ -1,9 +1,9 @@
 #!/usr/local/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "0.7"
+__version__ = "0.8"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "21.11.24"
+__status__ = "24.11.24"
 __license__ = "GPL"
 
 import sys
@@ -141,7 +141,8 @@ def add_coding(graph, sent_id, sent_id2match, coding):
             node_id = match['matching']['nodes'][coding['node']]  # the ID of the node specified in coding node=...
             if coding['add']:
                 add_node = match['matching']['nodes'][coding['add']]
-                coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{graph[add_node]['lemma']})"
+                lemma = graph[add_node].get('lemma', 'unknown')  # Safely get 'lemma', default to 'unknown'
+                coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{lemma})"
             else:
                 add_node = 0
                 coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node})"

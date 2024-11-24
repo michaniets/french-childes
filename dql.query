@@ -8,7 +8,9 @@
 % AS Nov 24
 %--------------------------------------------------------
 
+%--------------------------------------------------------
 % 1. MODAL VERBS
+%--------------------------------------------------------
 
 % ======= infinitive
 % coding attribute=code_modal value=inf node=MOD addlemma=V
@@ -40,7 +42,9 @@ pattern {
     MOD -[obj]-> PRO;
 }
 
+%--------------------------------------------------------
 % 2. ALL VERBS
+%--------------------------------------------------------
 
 % ======= bare infinitive complements
 % coding attribute=code_verb value=inf_bare node=V addlemma=INF
@@ -65,7 +69,31 @@ pattern {
     V << INF;
 }
 
+% ======= complement clause
+% coding attribute=code_verb value=clause node=V addlemma=V2
+pattern {
+    V [upos="VERB"];
+    V -[ccomp]-> V2;
+    V -[mark]-> *;  % any conjunction
+}
+% ======= lexical object
+% coding attribute=code_verb value=obj_lex node=V add=N
+pattern {
+    V [upos="VERB"];
+    V -[obj]-> N;
+}
+
+% ======= clitic object
+% coding attribute=code_verb value=obj_clit node=V add=PRO
+pattern {
+    V [upos="VERB"];
+    PRO [form=/^(le|la|les|l')$/, PronType="Prs"];
+    V -[obj]-> PRO;
+}
+
+%--------------------------------------------------------
 % 3. NEGATION
+%--------------------------------------------------------
 
 % ======= negation high with bare infinitive complements
 % coding attribute=code_neg value=inf_high node=V addlemma=INF

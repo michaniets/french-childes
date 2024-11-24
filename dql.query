@@ -19,6 +19,7 @@ pattern {
     V [upos=/AUX|VERB/, VerbForm="Inf"];
     MOD -[re"xcomp"]-> V;
 }
+
 % ======= complement clause
 % coding attribute=code_modal value=clause node=MOD addlemma=V
 pattern {
@@ -27,6 +28,7 @@ pattern {
     MOD -[ccomp]-> V;
     V -[mark]-> *;  % any conjunction
 }
+
 % ======= lexical object
 % coding attribute=code_modal value=obj_lex node=MOD add=N
 pattern {
@@ -92,19 +94,22 @@ pattern {
 }
 
 %--------------------------------------------------------
-% 3. NEGATION
+% 3. NEGATIVE CLITIC
+% grep -c inf_high childes-all.coded.conllu
+% 2077
 %--------------------------------------------------------
 
 % ======= negation high with bare infinitive complements
-% coding attribute=code_neg value=inf_high node=V addlemma=INF
+% coding attribute=code_neg value=inf_high node=V addlemma=NEG
 pattern {
     V [upos=/AUX|VERB/];
     INF [upos=/AUX|VERB/, VerbForm="Inf"];
     V -[xcomp]-> INF;
     V << INF;
     V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
-    NEG [form=/n.*/];
+    NEG [form=/(ne|n'|non)/];
     V -[advmod]-> NEG;
+
     NEG << V;
 }
 without {
@@ -112,14 +117,14 @@ without {
 }
 
 % ======= negation low with bare infinitive complements
-% coding attribute=code_neg value=inf_low node=V addlemma=INF
+% coding attribute=code_neg value=inf_low node=V addlemma=NEG
 pattern {
     V [upos=/AUX|VERB/];
     INF [upos=/AUX|VERB/, VerbForm="Inf"];
     V -[xcomp]-> INF;
     V << INF;
     V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
-    NEG [form=/n.*/];
+    NEG [form=/(ne|n'|non)/];
     INF -[advmod]-> NEG;
     NEG << INF;
 }
@@ -127,6 +132,39 @@ without {
     INF -[mark]-> *;  % exclude de/à + Inf
 }
 
+%--------------------------------------------------------
+% 3. OBJECT CLITICS
+%--------------------------------------------------------
 
+% ======= object clitic high with bare infinitive complements
+% coding attribute=code_clit value=inf_high node=V addlemma=PRO
+pattern {
+    V [upos=/AUX|VERB/];
+    INF [upos=/AUX|VERB/, VerbForm="Inf"];
+    V -[xcomp]-> INF;
+    V << INF;
+    V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
+    PRO [form=/^(le|la|les|l'|lui|leur|y|en)$/, PronType="Prs"];
+    V -[obj|iobj]-> PRO;
+    PRO << V;
+}
+without {
+    INF -[mark]-> *;  % exclude de/à + Inf
+}
 
+% ======= object clitic low with bare infinitive complements
+% coding attribute=code_clit value=inf_low node=V addlemma=PRO
+pattern {
+    V [upos=/AUX|VERB/];
+    INF [upos=/AUX|VERB/, VerbForm="Inf"];
+    V -[xcomp]-> INF;
+    V << INF;
+    V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
+    PRO [form=/^(le|la|les|l'|lui|leur|y|en)$/, PronType="Prs"];
+    INF -[obj|iobj]-> PRO;
+    PRO << INF;
+}
+without {
+    INF -[mark]-> *;  % exclude de/à + Inf
+}
 

@@ -107,7 +107,7 @@ pattern {
     V -[xcomp]-> INF;
     V << INF;
     V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
-    NEG [form=/(ne|n'|non)/];
+    NEG [form=/^(ne|n'|non)/];
     V -[advmod]-> NEG;
 
     NEG << V;
@@ -124,7 +124,7 @@ pattern {
     V -[xcomp]-> INF;
     V << INF;
     V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
-    NEG [form=/(ne|n'|non)/];
+    NEG [form=/^(ne|n'|non)/];
     INF -[advmod]-> NEG;
     NEG << INF;
 }
@@ -144,7 +144,7 @@ pattern {
     V -[xcomp]-> INF;
     V << INF;
     V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
-    PRO [form=/^(le|la|les|l'|lui|leur|y|en)$/, PronType="Prs"];
+    PRO [form=/^(le|la|les|l'|lui|leur|se|s'|y|en)$/, PronType="Prs"];
     V -[obj|iobj]-> PRO;
     PRO << V;
 }
@@ -160,7 +160,7 @@ pattern {
     V -[xcomp]-> INF;
     V << INF;
     V.lemma <> INF.lemma;   % avoid repetitions like "couper couper!"
-    PRO [form=/^(le|la|les|l'|lui|leur|y|en)$/, PronType="Prs"];
+    PRO [form=/^(le|la|les|l'|lui|leur|se|s'|y|en)$/, PronType="Prs"];
     INF -[obj|iobj]-> PRO;
     PRO << INF;
 }

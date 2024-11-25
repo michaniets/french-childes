@@ -244,7 +244,13 @@ def merge_with_csv(conllu_file, csv_file):
     sys.stderr.write(f"{len(id_meta.keys())} graphs, {coded} codings\n")
     # Map utt_id --> row for quick access
     sys.stderr.write(f"- Mapping CSV IDs to rows...\n")
-    row_dict = {row['utt_id']: row for row in rows} # get row with matching 'utt_id'
+    row_dict = {}
+    for row in rows:
+        utt_id = row.get('utt_id')  # get 'utt_id' or return None
+        if utt_id is not None:      # add rows with a valid utt_id
+            row_dict[utt_id] = row
+        else:
+            sys.stderr.write(f"WARNING: Row missing 'utt_id': {row}\n")
 
     # Loop through the stored meta information
     for sent_id in id_meta.keys():
@@ -287,7 +293,7 @@ def merge_with_csv(conllu_file, csv_file):
                     headers.append(attr)
 
             # Process each attribute and update the CSV row
-            for attr, values in coding_dict.items():  # 'values' is now a list of (val, node_id)
+            for attr, values in coding_dict.items():  # 'values' is now a list of tuples (val, node_id)
                 for val, node_id in values:  # Iterate through all (val, node_id) pairs for this attribute
                     # Combine sentence ID and node ID to form the row ID
                     this_id = sent_id + f"_w{node_id}"

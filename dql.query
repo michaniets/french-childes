@@ -78,14 +78,15 @@ pattern {
     V -[ccomp]-> V2;
     V -[mark]-> *;  % any conjunction
 }
-% ======= lexical object
+% ======= lexical direct object
 % coding attribute=code_verb value=obj_lex node=V add=N
 pattern {
     V [upos="VERB"];
+    N [PronType<>"Prs"];  % exclude pronouns
     V -[obj]-> N;
 }
 
-% ======= clitic object
+% ======= clitic direct object
 % coding attribute=code_verb value=obj_clit node=V add=PRO
 pattern {
     V [upos="VERB"];
@@ -95,8 +96,6 @@ pattern {
 
 %--------------------------------------------------------
 % 3. NEGATIVE CLITIC
-% grep -c inf_high childes-all.coded.conllu
-% 2077
 %--------------------------------------------------------
 
 % ======= negation high with bare infinitive complements
@@ -134,6 +133,7 @@ without {
 
 %--------------------------------------------------------
 % 3. OBJECT CLITICS
+%    all the clitics (not only direct object, as above)
 %--------------------------------------------------------
 
 % ======= object clitic high with bare infinitive complements

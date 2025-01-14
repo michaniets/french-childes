@@ -3,7 +3,7 @@
 __author__ = "Achim Stein"
 __version__ = "0.8"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "24.11.24"
+__status__ = "14.1.25"
 __license__ = "GPL"
 
 import sys
@@ -25,16 +25,75 @@ def main(query_file, conllu_file, args):
     out_matches = 0
     for graph in updated_corpus.values():
         if args.coding_only and not 'coding' in graph.meta:
-            pass
+            continue
+        conll_str = graph.to_conll()  # graph as string
+        out_matches +=1
+        if args.print_text:
+            if args.mark_coding:
+                print(conllu_to_sentence_with_coding(conll_str))
+            else:
+                print(conllu_to_sentence(conll_str))
         else:
-            print(graph.to_conll())
-            out_matches +=1
+            print(conll_str)
 
     # Output matched sentences
     if args.coding_only:  # print only coded output
         sys.stderr.write(f"{out_matches} matches printed (of total {len(updated_corpus)} graphs)\n")
     else:
         sys.stderr.write(f"{len(updated_corpus)} graphs printed ({out_matches} matches)\n")
+
+def conllu_to_sentence(conllu_string):
+    """
+    Extracts the sentence from a CoNLL-U formatted string.
+        conllu_string (str): A string containing a CoNLL-U formatted graph.
+        returns a concatenated sentence from the word forms in the CoNLL-U data.
+    """
+    # Split the CoNLL-U string into lines and filter out comment lines and empty lines
+    lines = [line for line in conllu_string.splitlines() if line and not line.startswith("#")]
+    # Extract word forms from the lines
+    words = []
+    for line in lines:
+        fields = line.split("\t")
+        if len(fields) == 10 and not '-' in fields[0]:  # Skip non-standard lines (e.g., multiword tokens)
+            words.append(fields[1])  # Add the word form (2nd column in CoNLL-U)
+    # Join the word forms into a sentence
+    sentence = " ".join(words)
+    return sentence
+
+import re
+
+def conllu_to_sentence_with_coding(conllu_string):
+    """
+    Extracts the sentence from a CoNLL-U formatted string and applies coding rules to specific words.
+        conllu_string (str): A string containing a CoNLL-U formatted graph with coding metadata.
+        returns a sentence reconstructed from word forms, with specified coding rules applied.
+    """
+    # Extract coding metadata
+    coding_line = next((line for line in conllu_string.splitlines() if line.startswith("# coding")), None)
+    coding_map = {}
+    if coding_line:
+        match = re.search(r"# coding = (\w+):\w+\((\d+)", coding_line)
+        if match:
+            rule = match.group(1)  # Extract the rule (e.g., 'obj_clit')
+            target_id = match.group(2)  # Extract the target word ID (e.g., '8')
+            coding_map[int(target_id)] = rule
+    # Split the CoNLL-U string into lines and filter out comment lines and empty lines
+    lines = [line for line in conllu_string.splitlines() if line and not line.startswith("#")]
+    # Extract word forms and apply coding if applicable
+    words = []
+    for line in lines:
+        fields = line.split("\t")
+        if len(fields) == 10 and not '-' in fields[0]:  # Skip non-standard lines (e.g., multiword tokens)
+            word_id = int(fields[0])  # Extract the word ID (1st column in CoNLL-U)
+            word_form = fields[1]  # Extract the word form (2nd column in CoNLL-U)
+            # Apply coding rule if the word ID matches
+            if word_id in coding_map:
+                rule = coding_map[word_id]
+                word_form = f"<{rule}>{word_form}</{rule}>"
+            words.append(word_form)
+    # Join the word forms into a sentence
+    sentence = " ".join(words)
+    return sentence
 
 def read_grew_query(query_file):
     # Read Grew query file.
@@ -323,18 +382,23 @@ if __name__ == "__main__":
         This script was designed to process CHILDES data created by childes.py.
         '''
     )
-#    parser.add_argument("query_file", help="File with Grew query")
     parser.add_argument("query_file", nargs="?", default=None, help="File with Grew query")
     parser.add_argument("conllu_file", help="CoNLL-U file with parsed data")
     parser.add_argument(
        '-c', '--coding_only', action='store_true',
        help='Print only coded graphs (query matches). Default: print everything')
     parser.add_argument(
+       '-m', '--mark_coding', action='store_true',
+        help='Print codes around matched words in the sentence (requires --print_text)')
+    parser.add_argument(
        '-n', '--code_node', action='store_true',
        help='Add coding also to column misc of the specified node (this option implies --coding)')
     parser.add_argument(
        '--merge', default = '', type = str,
        help='Argument is a CSV file. Adds codings from CoNLL-U file to CSV file, with attributes as columns, based on sentence and word IDs.')
+    parser.add_argument(
+       '-t', '--print_text', action='store_true',
+       help='Print only sentence as text, not CoNLL-U graphs')
     args = parser.parse_args()
 
     if args.merge:
@@ -348,3 +412,7 @@ if __name__ == "__main__":
         main(args.query_file, args.conllu_file,args)
     else:
         parser.error("Either 'query_file' must be specified or '--merge' must be used.")
+
+    if args.mark_coding and not args.print_text:
+        sys.stderr.write("WARNING: --mark_coding also sets --print_text.\n")
+        args.print_text = True

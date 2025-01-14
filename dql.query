@@ -12,13 +12,6 @@
 % 1. MODAL VERBS
 %--------------------------------------------------------
 
-% ======= infinitive
-% coding attribute=code_modal value=inf node=MOD addlemma=V
-pattern {
-    MOD [lemma=/(pouvoir|vouloir|devoir|falloir|savoir)/];
-    V [upos=/AUX|VERB/, VerbForm="Inf"];
-    MOD -[re"xcomp"]-> V;
-}
 
 % ======= complement clause
 % coding attribute=code_modal value=clause node=MOD addlemma=V

@@ -89,7 +89,7 @@ def conllu_to_sentence_with_coding(conllu_string):
             # Apply coding rule if the word ID matches
             if word_id in coding_map:
                 rule = coding_map[word_id]
-                word_form = f"<{rule}>{word_form}</{rule}>"
+                word_form = f"<h rule=\"{rule}\">{word_form}</h>"
             words.append(word_form)
     # Join the word forms into a sentence
     sentence = " ".join(words)

@@ -129,6 +129,12 @@ When you build your query file, you may want to debug the individual query block
 The discussion of Grew's issues is another useful resource, on [GitHub](https://github.com/grew-nlp/grew/issues/).
 Some expression may require a recent version of Grew. Perl-style regular expressions work with Grew 1.16 and grewpy backend 0.5.4.
 
+As of version >0.2 *--print_text* outputs the sentences without their graphs, with optional markup of the matches.
+
+```{shell}
+dql.py --coding_only --print_text --mark_coding my.query mycorpus.conllu
+```
+
 
 ## Merge CoNLL-U codings with CSV
 

@@ -1,0 +1,86 @@
+%--------------------------------------------------------
+% Rules for graphs created with UDPipe (Default French)
+%
+% % AS April 25
+%--------------------------------------------------------
+
+%--------------------------------------------------------
+% 1. OBJECT CLITICS
+%--------------------------------------------------------
+
+% ======= direct object
+% coding attribute=clitic value=obj node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[lL].*$/, PronType="Prs"];
+    V -[obj]-> PRO;
+}
+
+% ======= indirect object
+% coding attribute=clitic value=iobj3 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[lL].*$/, PronType="Prs"];
+    V -[iobj]-> PRO;
+}
+
+% ======= indirect object
+% coding attribute=clitic value=iobj12 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[mtvnMTVN].*$/, PronType="Prs"];
+    V -[iobj]-> PRO;
+}
+
+% ======= y
+% coding attribute=clitic value=loc node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[yY]$/, PronType="Prs"];
+    V -[expl:comp|obl:mod/]-> PRO;
+}
+
+%--------------------------------------------------------
+% 2. REFLEXIVE CLITICS
+%--------------------------------------------------------
+
+% ======= reflexive  (udpipe:French usually coded as  expl:pv  or  obj)
+% coding attribute=refl value=3 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[sS].*$/, Reflex="Yes"];
+    V -[re".*"]-> PRO;
+}
+
+% ======= reflexive
+% coding attribute=refl value=12 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[mtvnMTVN].*$/, Reflex="Yes"];
+    V -[re".*"]-> PRO;
+}
+
+%--------------------------------------------------------
+% 3. POTENTIAL DATIVE ARGUMENTS (à-PPs)
+%--------------------------------------------------------
+
+% ======= à PP
+% coding attribute=a_pp value=arg node=P addlemma=N
+pattern {
+    V [upos=/AUX|VERB/];
+    P [form=/^(à|au|aux|À|Au|Aux)/];
+    N [upos=/N|PROPN/];
+    V -[obl:arg]-> N;
+    N -[case]-> P;
+}
+
+% ======= à PP
+% coding attribute=a_pp value=mod node=P addlemma=N
+pattern {
+    V [upos=/AUX|VERB/];
+    P [form=/^(à|au|aux)/];
+    N [upos=/N|PROPN/];
+    V -[obl:mod]-> N;
+    N -[case]-> P;
+}
+

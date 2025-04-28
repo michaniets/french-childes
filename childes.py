@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "0.1"
+__version__ = "1.9"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
 __status__ = "8.11.24"
 __license__ = "GPL"
@@ -71,8 +71,10 @@ def main(args):
     if re.search(rePID, s):
       if re.search (r'@Comment:.*dummy file', s):
         pass #continue
+      
       m = re.search(rePID, s)
       pid = m.group(1)
+      sNr = 0 # reset utterance numbering, so that files can be processed in any order without changing utt_id
       childData = {}  # empty childData bio dictionary
       # check for more than one Target_Child (French: only in Palasis)
       childNr = re.findall(r'@ID:\s+.*\|.*?\|[A-Z]+\|.*?\|.*Target_Child\|', s)
@@ -195,6 +197,7 @@ def main(args):
 
   # add tagger output
   if args.parameters != '':
+    sys.stderr.write('Adding tagger output for each utterance...\n')
     addTagging(args.out_file + '.csv', args.out_file + '.tagged.csv', outHeader, itemWords, itemPOS, itemLemmas, itemTagged)
     # write output
     sys.stderr.write(f"\nOUTPUT: {args.out_file}.tagged.csv\n")

@@ -65,7 +65,13 @@ Example:
 
 ## Use UDPipe (or any other dependency parser)
 
-UDPipe my fail when uploaded files are too large. Split them, e.g. in chunks of 10000 graphs:
+UDPipe my fail
+
+1. when CoNLL-U input is malformated. 
+
+> bash check-conllu.sh parseme.conllu 
+
+2. when uploaded files are too large. Split them, e.g. in chunks of 10000 graphs
 
 > conll-util.py -S 10000 parseme.conllu
 
@@ -138,7 +144,7 @@ dql.py --coding_only --print_text --mark_coding my.query mycorpus.conllu
 
 ## Merge CoNLL-U codings with CSV
 
-Example: The following command takes the CoNLL-U file as in put and merges it with the CSV referenced by _--merge_. The output will be written to childes-all.cha.tagged.coded.csv
+Example: The following command takes the CoNLL-U file as input and merges it with the CSV referenced by _--merge_. The output will be written to childes-all.cha.tagged.coded.csv
 
 ```{shell}
 dql.py --merge childes-all.cha.tagged.csv childes-all.coded.conllu

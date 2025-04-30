@@ -1,9 +1,9 @@
 #!/usr/local/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "0.8"
+__version__ = "0.9"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "14.1.25"
+__status__ = "29.04.25"
 __license__ = "GPL"
 
 import sys
@@ -330,20 +330,28 @@ def merge_with_csv(conllu_file, csv_file):
                     sys.stderr.write(f"   WARNING ({sent_id}): Missing value for attribute '{attr}'. Skipping entry.\n")
                     continue
                 # get node value from coding string, e.g. attribute = value(2>3_verb)
-                reNode = re.compile(r'.*?\((\d+)')
+                reNode = re.compile(r'.*?\((\d+)>(\d+)')
                 m = re.search(reNode, val)
                 if m:
                     node_id = m.group(1)
+                    head_id = m.group(2)
                 else:
                     sys.stderr.write(f"   No node info found in coding {entry}. Adding coding to node 1 instead.\n")
                 if node_id == "0":
                     sys.stderr.write(f"   WARNING ({sent_id}): Can't write to node '0'. Adding coding to node 1 instead. VAL = {val}\n")
                     node_id = 1
                 #  code_dict stores lists of tuples (value, node_id)
+        
                 if attr.strip() in coding_dict:
-                    coding_dict[attr.strip()].append((val.strip(), node_id))
+                    if args.code_head:
+                        coding_dict[attr.strip()].append((val.strip(), head_id))
+                    else:
+                        coding_dict[attr.strip()].append((val.strip(), node_id))
                 else:
-                    coding_dict[attr.strip()] = [(val.strip(), node_id)]
+                    if args.code_head:
+                        coding_dict[attr.strip()] = [(val.strip(), head_id)]
+                    else:
+                        coding_dict[attr.strip()] = [(val.strip(), node_id)]
 
             # Add any new columns for attributes found in coding_dict
             for attr in coding_dict.keys():
@@ -393,6 +401,9 @@ if __name__ == "__main__":
     parser.add_argument(
        '-n', '--code_node', action='store_true',
        help='Add coding also to column misc of the specified node (this option implies --coding)')
+    parser.add_argument(
+       '--code_head', action='store_true',
+       help='Add coding only to the head node of the coding, assuming the format "value(node>head)" (default: add to node)')
     parser.add_argument(
        '--merge', default = '', type = str,
        help='Argument is a CSV file. Adds codings from CoNLL-U file to CSV file, with attributes as columns, based on sentence and word IDs.')

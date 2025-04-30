@@ -47,7 +47,7 @@ check_success "Remove temporary files"
 python3.11 ${MYPATH}/dql.py ${MYPATH}/dql.query ${FILE}.conllu --coding_only > ${FILE}.coded.conllu
 check_success "Run Grew queries for coding"
 
-# merge codings with csv
+# merge codings with csv - add option --code_head to add coding to the head (default is 'node')
 python3.11 ${MYPATH}/dql.py --merge ${FILE}.cha.tagged.csv ${FILE}.coded.conllu 
 check_success "Merge codings with CSV"
 

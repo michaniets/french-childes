@@ -147,8 +147,13 @@ dql.py --coding_only --print_text --mark_coding my.query mycorpus.conllu
 Example: The following command takes the CoNLL-U file as input and merges it with the CSV referenced by _--merge_. The output will be written to childes-all.cha.tagged.coded.csv
 
 ```{shell}
-dql.py --merge childes-all.cha.tagged.csv childes-all.coded.conllu
+dql.py --merge childes-all.cha.tagged.csv childes-all.coded.conllu [--code_head]
 ```
+
+The default is merging the coding with the row of the **node** token.
+
+- If your coding produced 'clitic:obj(3>5_lemma)', the script will add value 'obj' to the column 'clitic' in the row matching the ID of node '3'.
+- If you want to add that coding to the head '5', use '--code_head'
 
 Note that if more than one coding is present for a given attribute in the CoNLL-U meta data (e.g. 'modal_graph' above), _merge_ will copy only the last value to the CSV file (e.g. 'noRule...').
 

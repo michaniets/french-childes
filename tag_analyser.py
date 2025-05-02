@@ -3,7 +3,7 @@
 __author__ = "Achim Stein"
 __version__ = "1.0"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "25.10.24"
+__status__ = "02.05.25"
 __license__ = "GPL"
 
 '''
@@ -39,9 +39,9 @@ class TagAnalyser:
             if lemma == matchedLemma:
                 self.annotations['annot_dat'] = 'aPP'
         # --- Annotate object clitics
-        reDatCl = re.compile(rf'(lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{lemma})')
-        reAccCl = re.compile(rf'(le|la|les)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{lemma})')
-        reAccDatCl = re.compile(rf'(le|la|les)_PRO:clo[^ ]+ (lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{lemma})')
+        reDatCl = re.compile(rf'(lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{re.escape(lemma)})')
+        reAccCl = re.compile(rf'(le|la|les)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{re.escape(lemma)})')
+        reAccDatCl = re.compile(rf'(le|la|les)_PRO:clo[^ ]+ (lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{re.escape(lemma)})')
         if re.search(reDatCl, tagged):
             self.annotations['annot_clit'] = 'dat'
         if re.search(reAccCl, tagged):
@@ -50,11 +50,11 @@ class TagAnalyser:
             self.annotations['annot_clit'] = 'accdat'
         # --- Annotate modal verbs (verb+bare infinitives)
         reOnlyModals = re.compile('(devoir|falloir|pouvoir|savoir|vouloir)')
-        reModObj = re.compile(rf'[^ _]+_[^=]+=(?P<lemma>{lemma}) [^_]+_(DET:.*?|PRO:rel|PRO:dem)=')
-        reModCl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)')
-        reModVerb = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)* [^_]+_(VER|AUX):infi=(?P<verb>\S+)')
-        reModCompl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{lemma})( [^_]+_ADV=\S+)* [^_]+_(KON|PRO:int)')
-        reClMod = re.compile(rf'([^ _]+_PRO:clo=\S+) [^_]+_.*?=(?P<lemma>{lemma})( pas_ADV=pas)?.*? [^_]+_VER:infi=(?P<verb>\S+)')
+        reModObj = re.compile(rf'[^ _]+_[^=]+=(?P<lemma>{re.escape(lemma)}) [^_]+_(DET:.*?|PRO:rel|PRO:dem)=')
+        reModCl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{re.escape(lemma)})( [^_]+_ADV=\S+)*( [^_]+_PRO:clo=\S+).*? [^_]+_VER:infi=(?P<verb>\S+)')
+        reModVerb = re.compile(rf'[^ _]+_.*?=(?P<lemma>{re.escape(lemma)})( [^_]+_ADV=\S+)* [^_]+_(VER|AUX):infi=(?P<verb>\S+)')
+        reModCompl = re.compile(rf'[^ _]+_.*?=(?P<lemma>{re.escape(lemma)})( [^_]+_ADV=\S+)* [^_]+_(KON|PRO:int)')
+        reClMod = re.compile(rf'([^ _]+_PRO:clo=\S+) [^_]+_.*?=(?P<lemma>{re.escape(lemma)})( pas_ADV=pas)?.*? [^_]+_VER:infi=(?P<verb>\S+)')
         if re.search(reOnlyModals, lemma):
             prefix = "modal"  
         else:
@@ -73,7 +73,7 @@ class TagAnalyser:
             self.annotations['annot_mod'] = prefix + '-noRule'
         # --- Annotate verb particles
         reParticle = re.compile('(dessus|dessous|dehors|avant|derrière|en-.*)')
-        reVPart = re.compile(rf'[^ _]+_VER:.*?=(?P<lemma>{lemma}) (?P<part>{reParticle.pattern}_ADV=\S+)')
+        reVPart = re.compile(rf'[^ _]+_VER:.*?=(?P<lemma>{re.escape(lemma)}) (?P<part>{reParticle.pattern}_ADV=\S+)')
         if re.search(reVPart, tagged):
             self.annotations['annot_particle'] = 'verb-part_' + re.search(reVPart, tagged).group('part')
         

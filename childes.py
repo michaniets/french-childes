@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "1.9"
+__version__ = "2.0"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "8.11.24"
+__status__ = "02.05.25"
 __license__ = "GPL"
 
 import sys
@@ -252,7 +252,7 @@ def addTagging(inputFile, outputFile, outHeader, itemWords, itemPOS, itemLemmas,
       for l, row in enumerate(data):
         if l % 100 == 0:  # progress every 100 rows
           progress = (l / total_rows) * 100
-          sys.stderr.write(f'\r  Merging with tagger output: {progress:.2f}% complete')
+          sys.stderr.write(f'\r  Merging with tagger output: {progress:.1f}% complete')
           sys.stderr.flush()  # Ensure it gets printed immediately
 
         reMatch = re.compile('(.*)_w(\d+)') # get utterance ID (=key) and word number...
@@ -335,9 +335,10 @@ def analyseTagging(tagged, lemma):
     # -------------------------------------------------------
     # --- Annotate object clitics
     # -------------------------------------------------------
-    reDatCl = re.compile(rf'(lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{lemma})')
-    reAccCl = re.compile(rf'(le|la|les)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{lemma})')
-    reAccDatCl = re.compile(rf'(le|la|les)_PRO:clo[^ ]+ (lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{lemma})')
+    # use escape lemma for regex to avoid errors caused by special characters
+    reDatCl = re.compile(rf'(lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{re.escape(lemma)})')
+    reAccCl = re.compile(rf'(le|la|les)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{re.escape(lemma)})')
+    reAccDatCl = re.compile(rf'(le|la|les)_PRO:clo[^ ]+ (lui|leur)_PRO:clo[^ ]+ [^_]+_(VER|AUX).*?=(?P<lemma>{re.escape(lemma)})')
     if re.search(reDatCl, tagged):
         annotations['annot_clit'] = 'dat'
     if re.search(reAccCl, tagged):

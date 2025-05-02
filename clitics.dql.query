@@ -8,24 +8,32 @@
 % 1. OBJECT CLITICS
 %--------------------------------------------------------
 
-% ======= direct object
-% coding attribute=clitic value=obj node=PRO addlemma=V
+% ======= direct object person 3
+% coding attribute=clitic_acc value=obj3 node=PRO addlemma=V
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^[lL].*$/, PronType="Prs"];
     V -[obj]-> PRO;
 }
 
-% ======= indirect object
-% coding attribute=clitic value=iobj3 node=PRO addlemma=V
+% ======= direct object person 1-2
+% coding attribute=clitic_acc value=obj12 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[mtvnMTVN].*$/, PronType="Prs"];
+    V -[obj]-> PRO;
+}
+
+% ======= indirect object person 3
+% coding attribute=clitic_dat value=iobj3 node=PRO addlemma=V
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^[lL].*$/, PronType="Prs"];
     V -[iobj]-> PRO;
 }
 
-% ======= indirect object
-% coding attribute=clitic value=iobj12 node=PRO addlemma=V
+% ======= indirect object person 1-2
+% coding attribute=clitic_dat value=iobj12 node=PRO addlemma=V
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^[mtvnMTVN].*$/, PronType="Prs"];
@@ -33,7 +41,7 @@ pattern {
 }
 
 % ======= y
-% coding attribute=clitic value=loc node=PRO addlemma=V
+% coding attribute=clitic_adv value=loc node=PRO addlemma=V
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^[yY]$/, PronType="Prs"];
@@ -42,9 +50,10 @@ pattern {
 
 %--------------------------------------------------------
 % 2. REFLEXIVE CLITICS
+%    usually parses reflexives as  expl:pv  or  obj
 %--------------------------------------------------------
 
-% ======= reflexive  (udpipe:French usually coded as  expl:pv  or  obj)
+% ======= reflexive person 3
 % coding attribute=refl value=3 node=PRO addlemma=V
 pattern {
     V [upos=/AUX|VERB/];
@@ -52,7 +61,7 @@ pattern {
     V -[re".*"]-> PRO;
 }
 
-% ======= reflexive
+% ======= reflexive person 1-2
 % coding attribute=refl value=12 node=PRO addlemma=V
 pattern {
     V [upos=/AUX|VERB/];
@@ -62,6 +71,7 @@ pattern {
 
 %--------------------------------------------------------
 % 3. POTENTIAL DATIVE ARGUMENTS (à-PPs)
+%    à-PPs are parsed as arguments (obl:arg) or modifiers (obl:mod)
 %--------------------------------------------------------
 
 % ======= à PP

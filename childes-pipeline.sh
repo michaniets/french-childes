@@ -37,7 +37,10 @@ do
     python3 -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['result'])" > udpiped-$i
 done
 
-cat udpiped-parseme_* > ${FILE}.conllu
+## simple concat
+# cat udpiped-parseme_* > ${FILE}.conllu
+## concat respecting numerical order
+ls udpiped-parseme_*.conllu | sort -t_ -k2,2n | xargs cat > ${FILE}.conllu
 check_success "Join parsed files"
 
 rm parseme_* udpiped-parseme_*

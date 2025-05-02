@@ -125,7 +125,7 @@ More than one Grew query can be concatenated in the query file.  Each query star
 The *.query files contain examples of Grew queries with coding instructions. If no *.query file is included, look at the example below. It produces two codings. If the patterns match the same graph, codings are appended, e.g. *modal:other(7>9_bouger); modal:savoir(3>7_vouloir)*
 
 Note that if more than one coding matches for a given attribute, codings are **appended**.
-For example we get two codings for the attribute 'modal_graph' from two matching rules:
+For example we get two codings for the attribute 'code_modal' from two matching rules:
 
 ```{conll}
 # coding = code_modal:xcomp(9>10_faire); code_modal:noRule(9>0); ...
@@ -155,8 +155,7 @@ The default is merging the coding with the row of the **node** token.
 - If your coding produced 'clitic:obj(3>5_lemma)', the script will add value 'obj' to the column 'clitic' in the row matching the ID of node '3'.
 - If you want to add that coding to the head '5', use '--code_head'
 
-Note that if more than one coding is present for a given attribute in the CoNLL-U meta data (e.g. 'modal_graph' above), _merge_ will copy only the last value to the CSV file (e.g. 'noRule...').
-
+**Important:** that if more than one coding is present for a given attribute in the CoNLL-U meta data (e.g. 'code_modal' above), _merge_ will copy only the last value to the CSV file (e.g. 'noRule...').  Good practice is to use separate attributes if you expect competing values within the same sentence.  For example, instead of attribute 'clitics' with values 'acc', 'dat' (which can co-occur in the same sentence), code for separate attributes 'acc_clitic', 'dat_clitic' etc.
 
 ## Sample query file
 

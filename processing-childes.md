@@ -141,7 +141,7 @@ utt_id	utt_nr	w_nr	speaker	child_project	child_other	age	age_days	time_code	word
 `-p <parameters>` launches the TreeTagger annotation.
 - The script will create a temporary file ('tagthis.tmp')
 - The tagger will analyse it and store the result in 'tagged.tmp'.
-- The script will merge the result into the csv 
+- The script will merge the result into the csv table, overwriting/filling columns pos and lemma.
 
 - **Using TreeTagger for tagging**:
   ```bash

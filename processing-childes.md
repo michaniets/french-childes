@@ -171,6 +171,7 @@ If `--add_annotation` is specified, custom rules defined in the `tag_analyser.py
 ## Dependency Parsing with UDPipe
 
 ### Option 1: Append CoNLL-U columns during processing
+
 ```bash
 python childes.py --conllu --ud_pipe french -p perceo-spoken-french-utf.par childes-all.cha
 ```
@@ -178,16 +179,21 @@ python childes.py --conllu --ud_pipe french -p perceo-spoken-french-utf.par chil
 This option is slow (calls the API for every utterance), and should only be used for small files.
 
 ### Option 2: Generate CoNLL-U for external parsing
+
 ```bash
 python childes.py --conllu -p perceo-spoken-french-utf.par childes-all.cha
 ```
+
 Then parse `parseme.conllu` externally using UDPipe or another dependency parser:
+
 ```bash
 curl -F data=@parseme.conllu  -F model=french -F tagger= -F parser= -F input=conllu https://lindat.mff.cuni.cz/services/udpipe/api/process | python -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['result'])" > udpiped.conllu
 ```
 
 ### Handling Large Files
+
 If UDPipe fails due to file size:
+
 ```bash
 conll-util.py -S 10000 parseme.conllu
 bash call-udpipe.sh
@@ -198,11 +204,13 @@ rm parseme_* udpiped-parseme_*
 ## Merging Parsed Data
 
 ### Add CoNLL-U to CSV table:
+
 ```bash
 python3 merge-csv-conllu.py childes-all.cha.tagged.csv udpiped.conllu out.conllu
 ```
 
 ### Enrich CoNLL-U with CSV columns:
+
 ```bash
 python3 merge-csv-conllu.py --enrich_conllu speaker,age_days childes-all.cha.tagged.csv udpiped.conllu out.conllu
 ```
@@ -210,6 +218,7 @@ python3 merge-csv-conllu.py --enrich_conllu speaker,age_days childes-all.cha.tag
 ## Dependency Query Language (dql.py)
 
 Use the `dql.py` script to apply Grew-style dependency queries to a CoNLL-U corpus:
+
 ```bash
 dql.py <query file> <conllu file> [--coding_only] [> output.conllu]
 ```
@@ -217,10 +226,13 @@ dql.py <query file> <conllu file> [--coding_only] [> output.conllu]
 Use `--print_text` to output only text with optional highlights. Codings are inserted in the metadata of each CoNLL-U sentence.
 
 ### Merging codings into CSV
+
 ```bash
 dql.py --merge childes-all.cha.tagged.csv childes-all.coded.conllu
 ```
+
 To assign the coding to the head node:
+
 ```bash
 dql.py --merge childes-all.cha.tagged.csv childes-all.coded.conllu --code_head
 ```

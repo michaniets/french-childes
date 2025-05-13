@@ -3,9 +3,9 @@
 # CHILDES pipeline: conversion, annotation, coding
 
 FILE=$1
+#[[ "$FILE" != *.cha ]] && FILE="${FILE}.cha"  # add suffix .cha  if not already present
 
 MYPATH="$HOME/git/french-childes"
-SHELLCMD="bash"
 
 if [ ! -f ${FILE}.cha ]
 then

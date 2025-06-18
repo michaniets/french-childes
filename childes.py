@@ -647,7 +647,8 @@ def treeTagger(str):
       tagged2conllu(tagged)  # write tabular format for CoNLL
     tagged = re.sub(r'\t([A-Za-z:]+)\t', r'_\1=', tagged)   # create annotation format: word_pos=lemma ...
     tagged = re.sub(r'\n', ' ', tagged)                     # put everything on one line
-    tagged = correct_tagger_output(tagged)                    # correct errors
+    if args.language == 'french':
+      tagged = correct_tagger_output(tagged)                    # correct errors
     for sentence in tagged.split("<s_"): #taggedItems: split the concatenated items
         if sentence == "":   # first element is empty: ignore
             continue
@@ -819,6 +820,9 @@ Add annotation based on the tagged string:
    parser.add_argument(
        '--hops', default = "", type = str,
        help='run hops parser with this model (NOT YET IMPLEMENTED: use --conllu and UDPipe instead)')
+   parser.add_argument(
+       '-l', '--language', default = "french", type = str,
+       help='apply language-specific functions (default: french)')
    parser.add_argument(
        '-m', '--match_tagging', default = "", type = str,
        help='match the tagger output against this regex')

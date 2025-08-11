@@ -364,6 +364,7 @@ def merge_with_csv(conllu_file, csv_file):
                 for val, node_id in values:  # Iterate through all (val, node_id) pairs for this attribute
                     # Combine sentence ID and node ID to form the row ID
                     if sent_id is None:
+                        # Not sure why this can be.  Maybe with quotation marks (form=" pos=&quot;)?
                         sys.stderr.write(f"WARNING: sent_id is None for node_id {node_id}. Skipping.\n")
                         this_id = "0000" + f"_w{node_id}"
                     else:

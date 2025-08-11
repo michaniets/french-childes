@@ -363,7 +363,11 @@ def merge_with_csv(conllu_file, csv_file):
             for attr, values in coding_dict.items():  # 'values' is now a list of tuples (val, node_id)
                 for val, node_id in values:  # Iterate through all (val, node_id) pairs for this attribute
                     # Combine sentence ID and node ID to form the row ID
-                    this_id = sent_id + f"_w{node_id}"
+                    if sent_id is None:
+                        sys.stderr.write(f"WARNING: sent_id is None for node_id {node_id}. Skipping.\n")
+                        this_id = "0000" + f"_w{node_id}"
+                    else:
+                        this_id = sent_id + f"_w{node_id}"
                     if this_id in row_dict:
                         row = row_dict[this_id]
                         if attr in row:

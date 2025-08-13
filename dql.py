@@ -3,7 +3,7 @@
 __author__ = "Achim Stein"
 __version__ = "0.9"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "29.04.25"
+__status__ = "11.08.25"
 __license__ = "GPL"
 
 import sys
@@ -192,6 +192,10 @@ def add_coding(graph, sent_id, sent_id2match, coding):
        e.g.: {'sent_id': 'out.conllu_06242', 'matching': {'nodes': {'V': '3', 'MOD': '2'}, 'edges': {}}}
     Graphs contain the meta information (graph.meta) including sent_id (graph.meta['sent_id'])
     """
+    # if graph already has a coding, don't add further codings
+    if args.first_rule and 'coding' in graph.meta:
+        return graph
+
     # if sent_id has been stored with a match, modify the graph
     if sent_id in sent_id2match:
         match_list = sent_id2match[sent_id]  # select the match for this graph
@@ -200,8 +204,14 @@ def add_coding(graph, sent_id, sent_id2match, coding):
             node_id = match['matching']['nodes'][coding['node']]  # the ID of the node specified in coding node=...
             if coding['add']:
                 add_node = match['matching']['nodes'][coding['add']]
-                lemma = graph[add_node].get('lemma', 'unknown')  # Safely get 'lemma', default to 'unknown'
-                coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{lemma})"
+                if add_node in graph:   #  if add_node exists in the graph, get the lemma
+                    lemma = graph[add_node].get('lemma', 'unknown')  # Safely get 'lemma', default to 'unknown'
+                    coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{lemma})"
+                else:
+                    # If add_node is not found, log a warning and create a coding string without the lemma.
+                    sys.stderr.write(f"WARNING: Node ID '{add_node}' in sent_id '{sent_id}' was not found. Coding will work, but lemma will not be added.\n")
+                    lemma = 'unknown_node'
+                    coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node}_{lemma})"
             else:
                 add_node = 0
                 coding_string = f"{coding['att']}:{coding['val']}({node_id}>{add_node})"
@@ -364,7 +374,7 @@ def merge_with_csv(conllu_file, csv_file):
                 for val, node_id in values:  # Iterate through all (val, node_id) pairs for this attribute
                     # Combine sentence ID and node ID to form the row ID
                     if sent_id is None:
-                        # Not sure why this can be.  Maybe with quotation marks (form=" pos=&quot;)?
+                        # happens, but not sure why. Maybe with quotation marks (form=" pos=&quot;)?
                         sys.stderr.write(f"WARNING: sent_id is None for node_id {node_id}. Skipping.\n")
                         this_id = "0000" + f"_w{node_id}"
                     else:
@@ -400,6 +410,9 @@ if __name__ == "__main__":
     parser.add_argument(
        '-c', '--coding_only', action='store_true',
        help='Print only coded graphs (query matches). Default: print everything')
+    parser.add_argument(
+        '-f', '--first_rule', action='store_true',
+        help='f the first rule for an attribute matches, discard following rules')
     parser.add_argument(
        '-m', '--mark_coding', action='store_true',
         help='Print codes around matched words in the sentence (requires --print_text)')

@@ -3,7 +3,7 @@
 __author__ = "Achim Stein"
 __version__ = "0.9"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "11.08.25"
+__status__ = "13.08.25"
 __license__ = "GPL"
 
 import sys

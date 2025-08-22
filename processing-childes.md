@@ -244,5 +244,3 @@ dql.py --merge childes-all.cha.tagged.csv childes-all.coded.conllu --code_head
 
 ## Conclusion
 This script provides a versatile and extensible way to extract and annotate French CHILDES data. While some implementations remain rough (e.g., manual annotation rules), the tool is fully functional and provides a robust foundation for corpus-based morphosyntactic research.
-
-Let me know if you want this saved to a file or converted to PDF.

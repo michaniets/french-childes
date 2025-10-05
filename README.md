@@ -14,6 +14,22 @@ The script was built to facilitate studies of vocabulary progression.
 
 Tested for some of the French CHILDES files (e.g. Paris).
 
+### Changes
+
+- Version 3.0: more object-oriented structure
+
+  - Class-based: processing logic managed within a ChatProcessor class. This eliminated a number of global variables.
+
+  - Non-destructive Data Handling: The script no longer silently discards information from the original CHAT files. The utterance cleaning process now extracts special markers (e.g., [//], (.)) before preparing the string for the tagger. Two new columns have been added to the CSV output:
+
+  - new column 'utterance_raw': Contains the unmodified utterance from the chat file.
+
+  - annotations: A semicolon-separated list of any special markers found in the utterance.
+
+  - safe temporary file management: hardcoded files (like _tagthis.tmp_) have been replaced with Python's tempfile library.
+
+- Version 2.0 published as a release
+
 ### How to use
 
 1. Concatenate *.cha files of one project

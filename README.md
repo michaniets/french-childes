@@ -13,9 +13,10 @@ The script was built to facilitate the quantitative exploration of the data, suc
   - TreeTagger parameters are freely available for many languages.
 - Without -p option: Morphological annotation from '%mor' lines will be used, other annotation lines will be ignored.
 
-Tested for some of the French CHILDES files (e.g. Paris).
+Tested for some of the French CHILDES files (e.g. Paris) as well as Italian and German.
+Special tokenisation and tagger correction rules are applied for French.  Further language-specific rules can be added if needed: the scripts reacts to the language specified in the @ID line of the chat file (see functions tokenise() and correct_tagger_output()).
 
-### Changes
+### History
 
 - Version 4.0: complete revision of the structure, building on intermediate version 3.0
 
@@ -50,20 +51,20 @@ Tested for some of the French CHILDES files (e.g. Paris).
 
 Minimal: using a sample of concatenated French CHILDES projects
 
-> python3 childes.py french-sample.cha --html_dir chifr --server_url "https://141.58.164.21/chifr" --pos_utterance 'VER|AUX' --language french
+> python3 childes.py french-sample.cha --html_dir chifr --server_url "https://141.58.164.21/chifr" --pos_utterance 'VER|AUX'
 
 Tagged with parameters for spoken French (from the PERCEO project, see [Helmut Schmid's TreeTagger website](https://www.cis.uni-muenchen.de/~schmid/tools/TreeTagger/)).
 `--pos_utterance <regex>` prints the utterance _only_ in matching rows with verbs.
 
-> python3 childes.py french-sample.cha --pos_utterance 'VER|AUX' --language french -p perceo-spoken-french-utf.par
+> python3 childes.py french-sample.cha --pos_utterance 'VER|AUX' -p perceo-spoken-french-utf.par
 
 Same, with option to preserve the string with the tagged utterance:
 
-> python3 childes.py french-sample.cha --pos_utterance 'VER|AUX' --language french -p perceo-spoken-french-utf.par --utt_tagged
+> python3 childes.py french-sample.cha --pos_utterance 'VER|AUX' -p perceo-spoken-french-utf.par --utt_tagged
 
 Tagging and dependency parsing with UDPipe. `--api_model french` will use UDPipe's default French model. Any specific model name can be given (see UDPipe documentation).
 
-> python3 childes.py french-sample.cha --pos_utterance 'VER|AUX' --language french -p perceo-spoken-french-utf.par --api_model french
+> python3 childes.py french-sample.cha --pos_utterance 'VER|AUX' -p perceo-spoken-french-utf.par --api_model french
 
 As of version 3.0, the script handles temporary file internally.  Option `--write_conllu` will output a CoNLL-U version of the file.
 

@@ -223,19 +223,24 @@ class ChatProcessor:
             self.html_exporter = HtmlExporter(args.html_dir, file_basename, chunk_size=args.chunk_html)
 
     def tokenise(self, s):
-        """Tokenises a string, with language-specific rules."""
-        if self.args.language == "french":
-            reBeginString = re.compile(r'([dcjlmnstDCJLNMST]\'|[Qq]u\'|[Jj]usqu\'|[Ll]orsqu\')') 
+        """
+        Tokenises a string, with language-specific rules.
+        Normally, in CHAT format punctuation should be separated by spaces already. (BeginChar/EndChar)
+        German clitics can't be handled: habs, gehts, etc.
+        """
+        if re.search(r'fra|french', self.language):
             reBeginChar = re.compile(r'([\|\{\(\/\´\`"»«°<])') 
             reEndChar = re.compile(r'([\]\|\}\/\`\"\),\;\:\!\?\.\%»«>])') 
+            reBeginString = re.compile(r'([dcjlmnstDCJLNMST]\'|[Qq]u\'|[Jj]usqu\'|[Ll]orsqu\')') 
             reEndString = re.compile(r'(-t-elles?|-t-ils?|-t-on|-ce|-elles?|-ils?|-je|-la|-les?|-leur|-lui|-mêmes?|-m\'|-moi|-nous|-on|-toi|-tu|-t\'|-vous|-en|-y|-ci|-là)') 
-            
             s = re.sub(reBeginString, r'\1 ', s)
             s = re.sub(reBeginChar, r'\1 ', s)
             s = re.sub(reEndChar, r' \1', s)
             s = re.sub(reEndString, r' \1', s)
             s = re.sub(r'\s+', ' ', s)
         # Add other languages here with 'elif self.args.language == "other_language":'
+        elif re.search(r'deu|german', self.language):
+            pass
         else:
             # Default simple tokenization if no language is matched
             s = re.sub(r'([,;?.!])', r' \1', s)
@@ -244,7 +249,7 @@ class ChatProcessor:
 
     def correct_tagger_output(self, tagged):
         """Corrects known tagger errors for a specific language."""
-        if self.args.language == "french":
+        if re.search(r'fra|french', self.language):
             tagged = re.sub(r'([,\?])_NAM=<unknown>', r'\1_PON=,', tagged)
             tagged, count = re.subn('Marie_VER:pres=marier', 'Marie_NAM=Marie', tagged)
             tagged, count = re.subn(r'( allez[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER:impe=NEWLEM:aller', tagged)
@@ -260,6 +265,10 @@ class ChatProcessor:
             tagged, count = re.subn(r'( vu[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:voir', tagged)
             tagged, count = re.subn(r'( ![^_ ]*)_([^= ]+)=<unknown>', r' !_PON=!', tagged)
             tagged, count = re.subn('NEWLEM:', '', tagged)
+        elif re.search(r'deu|german', self.language):
+            pass
+        else:
+            pass
         return tagged
 
     def _count_utterances(self, filepath):
@@ -361,11 +370,21 @@ class ChatProcessor:
             self.pid = m.group(1)
             self.pid = re.sub(r'^0+', '', self.pid)
         
-        if (m := re.search(r'@ID:.*?\|(.*?)\|[A-Z]+\|([0-9;.]+)\|.*Target_Child', header_block)):
-            project, age_str = m.groups()
+        """
+        match @ID line, e.g.:  @ID:	fra|Paris|CHI|1;04.13|female|||Target_Child|||
+        French has child names in particpants line, German not (or not always?):
+          @Participants:	CHI Anaé Target_Child, MOT Marie Mother, BRO Ael Brother, BR1 Arthur Brother
+          @Participants:	MOT Mother, CHI Target_Child
+        """
+        if (m := re.search(r'@ID:\s+(.*?)\|(.*?)\|[A-Z]+\|([0-9;.]+)\|.*Target_Child', header_block)):
+            self.language, project, age_str = m.groups()
             self.age, self.age_days = parseAge(age_str)
-            if (m_p := re.search(r'@Participants:.*CHI\s(.*?)\sTarget_Child', header_block)):
-                child_name = m_p.group(1).split()[0]
+            if (m_p := re.search(r'@Participants:.*CHI\s(.*?\s)?Target_Child', header_block)):
+                child_name = m_p.group(1)#.split()[0]
+                if not child_name:
+                    child_name = "NN"
+                else:
+                    child_name = child_name.split()[0]
                 self.child = f"{child_name}_{project[:3]}"
                 self.childData['CHI'] = (self.child, self.age, self.age_days)
     
@@ -594,7 +613,6 @@ if __name__ == "__main__":
     parser.add_argument('--pos_utterance', type=str, help='Regex to match POS tags. The full utterance text will only be printed on matching rows.')
     parser.add_argument('--utt_clean', action='store_true', help='Populate the utt_clean column.')
     parser.add_argument('--utt_tagged', action='store_true', help='Populate the utt_tagged column.')
-    parser.add_argument('-l', '--language', default="french", type=str, help='Language-specific functions')
     
     args = parser.parse_args()
     processor = ChatProcessor(args)

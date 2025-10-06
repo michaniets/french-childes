@@ -39,9 +39,9 @@ echo "--- Step 1: Running childes.py for conversion, tagging, and parsing ---"
 python3 "${MYPATH}/childes.py" "${INPUT_FILE}" \
     --parameters "${TAGGER_PAR}" \
     --api_model "${API_MODEL}" \
-    --language "${LANGUAGE}" \
     --html_dir "${HTML_DIR}" \
     --server_url "${SERVER_URL}" \
+    --pos_utterance '(AUX|VER)' \
     --pos_output '(AUX|VER)' \
 #    --utt_clean \
 #    --utt_tagged \

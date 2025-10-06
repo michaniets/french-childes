@@ -146,7 +146,7 @@ def find_matches(corpus, patterns):
     matches_for_patterns = {}
     for nr in patterns.keys():
         sys.stderr.write(f"  Searching corpus query {nr}...")
-        request = Request.parse(patterns[nr])
+        request = Request(patterns[nr])
         match_list = corpus.search(request)  # matches for this pattern
         sys.stderr.write(f" {len(match_list)} matches\n")
         matches_for_patterns[nr] = match_list  # store the list of matches in a dict with patter nr as key

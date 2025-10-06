@@ -37,15 +37,9 @@ echo "--- Step 1: Running childes.py for conversion, tagging, and parsing ---"
 # It converts the CHAT file, runs TreeTagger, calls the UDPipe API,
 # generates HTML, and merges all data into the final CSV and CoNLL-U files.
 python3 "${MYPATH}/childes.py" "${INPUT_FILE}" \
-    --parameters "${TAGGER_PAR}" \
-    --api_model "${API_MODEL}" \
-    --html_dir "${HTML_DIR}" \
-    --server_url "${SERVER_URL}" \
-    --pos_utterance '(AUX|VER)' \
-    --pos_output '(AUX|VER)' \
-#    --utt_clean \
-#    --utt_tagged \
-    --write_conllu
+    --parameters "${TAGGER_PAR}" --api_model "${API_MODEL}" \
+    --write_conllu --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
+    --pos_utterance '(AUX|VER)' --pos_output '(AUX|VER)'
 
 echo ""
 echo "--- Step 2: (Optional) Add linguistic codings with dql.py ---"

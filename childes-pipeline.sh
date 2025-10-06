@@ -14,10 +14,10 @@ set -e
 
 # --- Configuration ---
 # Path to your scripts and models
+# UDPipe model list: https://lindat.mff.cuni.cz/repository/items/41f05304-629f-4313-b9cf-9eeb0a2ca7c6
 MYPATH="."
 TAGGER_PAR="${MYPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
-API_MODEL="french"  # UDPipe model name
-LANGUAGE="french"   # language-specific rules (tokenise, correct tagger output) -- add to childes.py if needed
+API_MODEL="french"  # UDPipe model. For German: german-gsd-ud
 HTML_DIR="chifr"  # subfolder for parsed HTML files (don't precede with './')
 SERVER_URL="https://141.58.164.21/${HTML_DIR}"  # julienas - keep string short to avoid large output files
 

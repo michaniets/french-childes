@@ -1,84 +1,74 @@
 #!/bin/bash
+#
+# childes-pipeline.sh
+# Version 2.0
+# AS Oct 2025
+#
+# pipeline to process a CHAT file. It uses childes.py verion>=4.0 to handle
+# conversion, tagging, parsing, and HTML generation in a single step.
+# The resulting .conllu file can then be used for further analysis.
+#
 
-# CHILDES pipeline: conversion, annotation, coding
+# Stop script on any error
+set -e
 
-FILE=${1%.*} # remove path and suffix, e.g. .cha
-echo "Processing file: ${FILE}"
-
-#MYPATH="$HOME/git/french-childes"
+# --- Configuration ---
+# Path to your scripts and models
 MYPATH="."
+TAGGER_PAR="${MYPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
+API_MODEL="french"  # UDPipe model name
+LANGUAGE="french"   # language-specific rules (tokenise, correct tagger output) -- add to childes.py if needed
+HTML_DIR="chifr"  # subfolder for parsed HTML files (don't precede with './')
+SERVER_URL="https://141.58.164.21/${HTML_DIR}"  # julienas - keep string short to avoid large output files
 
-if [ ! -f ${1} ]
-then
-    echo "Error: file not found: $1"
+# Check for input file
+if [ -z "$1" ]; then
+    echo "Usage: $0 <chat_file.cha>"
     exit 1
 fi
 
-check_success() {
-  if [ $? -ne 0 ]; then
-    echo "Error: Command failed at: $1" >&2
-    exit 1
-  fi
-}
+INPUT_FILE="$1"
+FILE_BASENAME=$(basename "${INPUT_FILE}" .cha)
 
-if command -v tree-tagger >/dev/null 2>&1; then
-    echo :
-else
-    echo "tree-tagger is not available or not executable"
-    exit 1
-fi
+# --- Main Processing ---
 
+echo "--- Step 1: Running childes.py for conversion, tagging, and parsing ---"
+# Version>=4.0 of childes.py replaces the old multi-step process.
+# It converts the CHAT file, runs TreeTagger, calls the UDPipe API,
+# generates HTML, and merges all data into the final CSV and CoNLL-U files.
+python3 "${MYPATH}/childes.py" "${INPUT_FILE}" \
+    --parameters "${TAGGER_PAR}" \
+    --api_model "${API_MODEL}" \
+    --language "${LANGUAGE}" \
+    --html_dir "${HTML_DIR}" \
+    --server_url "${SERVER_URL}" \
+    --pos_output '(AUX|VER)' \
+#    --utt_clean \
+#    --utt_tagged \
+    --write_conllu
 
-# convert Childes CHAT format
-${MYPATH}/childes.py -m VER --add_annotation --tagger_output --pos_utterance VER -p perceo-spoken-french-utf.par --conllu ${FILE}.cha
-check_success "Convert Childes CHAT format"
-
-if [ ! -f parseme.conllu ]
-then
-    echo "Error: parseme.conllu not found.  This may be because your input file was in a different folder. Move it here and re-run the script."
-    exit 1
-fi
-
-# split conllu in chunks
-echo "Splitting CoNLL-U file into chunks..."
-${MYPATH}/conll-util.py -S 10000 parseme.conllu
-check_success "Split CoNLL-U in chunks"
-
-# parse (loop through chunks)
-#${MYPATH}/call-udpipe.sh
-for i in parseme_*.conllu
-do 
-    echo "--------- $i"
-    curl -F data=@$i  -F model=french -F tagger= -F parser= -F input=conllu\
-        https://lindat.mff.cuni.cz/services/udpipe/api/process |\
-    python3 -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['result'])" > udpiped-$i
-done
-
-## simple concat
-# cat udpiped-parseme_* > ${FILE}.conllu
-## concat respecting numerical order
-ls udpiped-parseme_*.conllu | sort -t_ -k2,2n | xargs cat > ${FILE}.conllu
-check_success "Join parsed files"
-
-rm parseme_* udpiped-parseme_*
-check_success "Remove temporary files"
-
-# run Grew queries for coding (requires grewpy backend, see https://grew.fr)
-python3.11 ${MYPATH}/dql.py ${MYPATH}/dql.query ${FILE}.conllu --coding_only > ${FILE}.coded.conllu
-check_success "Run Grew queries for coding"
-
-# merge codings with csv - add option --code_head to add coding to the head (default is 'node')
-python3.11 ${MYPATH}/dql.py --merge ${FILE}.cha.tagged.csv ${FILE}.coded.conllu 
-check_success "Merge codings with CSV"
-
-echo "Pipeline completed successfully!"
-
-# optional: extract relevant columns for easy verification
-# grep -E '\(\d'  ${FILE}.cha.tagged.coded.csv|cut -f 1,15,23- > tmp.csv
+echo ""
+echo "--- Step 2: (Optional) Add linguistic codings with dql.py ---"
+# This step is a placeholder for your existing dql.py workflow.
+# It assumes dql.py takes a CoNLL-U file and a request file,
+# and outputs a new CoNLL-U file with metadata codings.
+# You may need to adjust the arguments. 
+# dql.py requires grewpy to be installed.
+#
+# DQL_REQUESTS="${MYPATH}/requests.tsv"
+# if [ -f "$DQL_REQUESTS" ]; then
+#     echo "Running dql.py to add codings..."
+#     python3 "${MYPATH}/dql.py" "${FILE_BASENAME}.cha.conllu" \
+#         -r "${DQL_REQUESTS}" \
+#         -o "${FILE_BASENAME}.coded.conllu"
+# else
+#     echo "Skipping dql.py (request file not found: ${DQL_REQUESTS})"
+# fi
 
 
-### Optional: extract column header and verb rows
-# run-grew.sh sources/Geneva.cha
-# -- extract verbs from result
-# head -1 sources/Geneva.cha.tagged.coded.csv > Geneva-coded.csv
-# gawk  -F'\t' '$12 ~ /VER/' sources/Geneva.cha.tagged.coded.csv >> Geneva-coded.csv
+echo ""
+echo "--- Pipeline finished successfully ---"
+echo "Main output file: ${FILE_BASENAME}.cha.tagged.csv"
+echo "CoNLL-U output: ${FILE_BASENAME}.cha.conllu"
+echo "HTML output in: ${HTML_DIR}/"
+echo "------------------------------------"

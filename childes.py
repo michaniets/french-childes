@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "3.0"
+__version__ = "4.0"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "05.10.25"
+__status__ = "06.10.25"
 __license__ = "GPL"
 
 import sys
@@ -11,14 +11,10 @@ import argparse, re
 import os
 import subprocess
 import csv
-from tag_analyser import TagAnalyser
-import json
-import warnings
 import tempfile
-
-#-------------------------------------------------------
-# Helper functions
-#-------------------------------------------------------
+import io
+import requests
+from conllu import parse
 
 def parseAge(age_str):
     year = months = days = 0
@@ -49,18 +45,6 @@ def cleanUtt(s):
     s = re.sub(r'\s+', ' ', s)
     return(s)
 
-def tokenise(s):
-    reBeginChar = re.compile('(\[\|\{\(\/\'\´\`"»«°<)')
-    reEndChar = re.compile('(\]\|\}\/\'\`\"\),\;\:\!\?\.\%»«>)')
-    reBeginString = re.compile('([dcjlmnstDCJLNMST]\'|[Qq]u\'|[Jj]usqu\'|[Ll]orsqu\')')
-    reEndString = re.compile('(-t-elles?|-t-ils?|-t-on|-ce|-elles?|-ils?|-je|-la|-les?|-leur|-lui|-mêmes?|-m\'|-moi|-nous|-on|-toi|-tu|-t\'|-vous|-en|-y|-ci|-là)')
-    s = re.sub(reBeginChar, r'\1 ', s)
-    s = re.sub(reBeginString, r'\1 ', s)
-    s = re.sub(reEndChar, r' \1', s)
-    s = re.sub(reEndString, r' \1', s)
-    s = re.sub(r'\s+', ' ', s)
-    return(s)
-
 def process_tagged_data(tagged):
     lines = tagged.strip().split('\n')
     processed_lines = []
@@ -70,25 +54,159 @@ def process_tagged_data(tagged):
             columns[2] = re.sub(r'.*? ', '', columns[2])
         processed_lines.append('\t'.join(columns))
     return '\n'.join(processed_lines)
+    
+class HtmlExporter:
+    """Generates a chunked, styled HTML corpus with dependency trees."""
+    def __init__(self, output_dir, file_basename, chunk_size=1000):
+        self.output_dir = output_dir
+        self.file_basename = output_dir #file_basename
+        self.chunk_size = chunk_size
+        os.makedirs(self.output_dir, exist_ok=True)
+        self.html_head = '''<!DOCTYPE html>
+<html>
+  <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+  <head>
+    <title>CHILDES Parse: %s</title>
+    <style>
+      body { font-family: sans-serif; }
+      .parse p {
+        font-family: monospace;
+        white-space: pre;
+        margin: 0;
+        letter-spacing: 0;
+      }
+      .coding {
+        background: #f0f0f0; color: black; font-family: "Courier New", Courier, monospace;
+        font-size: 12px; padding: 5px; border-left: 3px solid blue; margin-bottom: 1em;
+      }
+      .nav-footer { margin-top: 2em; text-align: center; }
+      .a { color:black; font-weight: bold; }
+      .v { background-color:yellow; }
+      .l { color:magenta; }
+      .r { color:red; }
+      .u { color:DarkGreen; }
+      .x { color:Olive; }
+      .d { color:blue; }
+    </style>
+  </head>
+  <body>
+'''
+        self.html_foot = '</body></html>'
 
-def correct_tagger_output(tagged):
-    # This is the full, original function
-    tagged = re.sub(r'([,\?])_NAM=<unknown>', r'\1_PON=,', tagged)
-    tagged, count = re.subn('Marie_VER:pres=marier', 'Marie_NAM=Marie', tagged)
-    tagged, count = re.subn(r'( allez[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER:impe=NEWLEM:aller', tagged)
-    tagged, count = re.subn(r'( attend[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:attendre', tagged)
-    tagged, count = re.subn(r'( dis[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:dire', tagged)
-    tagged, count = re.subn(r'( enl.v.[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:enlever', tagged)
-    tagged, count = re.subn(r'( fai[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:faire', tagged)
-    tagged, count = re.subn(r'( fini[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:finir', tagged)
-    tagged, count = re.subn(r'( prend[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:prendre', tagged)
-    tagged, count = re.subn(r'( mett[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:mettre', tagged)
-    tagged, count = re.subn(r'( regard[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:regarder', tagged)
-    tagged, count = re.subn(r'( tomb[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:tomber', tagged)
-    tagged, count = re.subn(r'( vu[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:voir', tagged)
-    tagged, count = re.subn(r'( ![^_ ]*)_([^= ]+)=<unknown>', r' !_PON=!', tagged)
-    tagged, count = re.subn('NEWLEM:', '', tagged)
-    return(tagged)
+    def _format_tree_as_html(self, tree_str, tokenlist):
+        deps = {token["id"]: token["head"] for token in tokenlist}
+        lines = sorted(tree_str.strip().split("\n"), key=lambda line: int(re.search(r'\[(\d+)\]', line).group(1)))
+        
+        rebuilt_lines = []
+        for line in lines:
+            match = re.search(r'\[(\d+)\]$', line)
+            if match:
+                wID = int(match.group(1))
+                headID = deps.get(wID, 0)
+                line = line.replace(f"[{wID}]", f"[{wID}:{headID}]")
+            
+            leading_spaces = len(line) - len(line.lstrip(' '))
+            indented_line = '.' * leading_spaces + line.lstrip()
+            rebuilt_lines.append(indented_line)
+
+        html_tree = "\n".join(rebuilt_lines)
+        
+        html_tree = re.sub(
+            r'(\.*)\(deprel:(.*?)\)(.*?)\[(\d+):(\d+)\]',
+            lambda m: f"{int(m.group(4)):02d}{m.group(1)}{m.group(3)} <span class=d>{m.group(2)}</span>&#8594;{m.group(5)}",
+            html_tree,
+            flags=re.MULTILINE
+        )
+        html_tree = re.sub(r'lemma:(.*?) ', r'<span class=l>\1</span> ', html_tree)
+        html_tree = re.sub(r'upos:(VER[A-Z]+) ', r'<span class=v>\1</span> ', html_tree)
+        html_tree = re.sub(r'upos:(.*?) ', r'<span class=u>\1</span> ', html_tree)
+        html_tree = re.sub(r'xpos:(.*?) ', r'<span class=x>\1</span> ', html_tree)
+        html_tree = re.sub(r'form:(.*?) ', r'<b>\1</b> ', html_tree)
+        return html_tree
+
+    def export(self, parsed_conllu_str, original_rows):
+        sentences = parse(parsed_conllu_str)
+        
+        header_info_map = {}
+        for row in original_rows:
+            utt_id_base = re.match(r'(.*)_w\d+', row['utt_id']).group(1)
+            if utt_id_base not in header_info_map:
+                header_info_map[utt_id_base] = {
+                    'child_project': row['child_project'],
+                    'speaker': row['speaker'],
+                    'age': row['age'] if row['age'] else '_',
+                    'utterance': row['utterance']
+                }
+
+        html_links = {}
+        total_chunks = (len(sentences) + self.chunk_size - 1) // self.chunk_size
+        sys.stderr.write(f"Generating HTML files in: {self.output_dir}. Writing file: ")
+        for chunk_id in range(total_chunks):
+            start_index = chunk_id * self.chunk_size
+            end_index = start_index + self.chunk_size
+            chunk_sentences = sentences[start_index:end_index]
+            
+            html_filename = f"{chunk_id}.html" # keep as short as possible
+            html_filepath = os.path.join(self.output_dir, html_filename)
+
+            with open(html_filepath, 'w', encoding='utf8') as f:
+                f.write(self.html_head % self.file_basename)
+
+                for sentence in chunk_sentences:
+                    if 'item_id' not in sentence.metadata: continue
+                    utt_id = sentence.metadata['item_id']
+                    
+                    info = header_info_map.get(utt_id, {})
+                    child_project = info.get('child_project', 'N/A')
+                    child_other = info.get('child_other', 'N/A')
+                    speaker = info.get('speaker', 'N/A')
+                    age = info.get('age', '_')
+                    raw_utterance = info.get('utterance', '[Utterance not found]')
+                    
+                    html_links[utt_id] = {'local': html_filepath, 'file': html_filename}
+                    
+                    for token in sentence:
+                        if token['lemma'] is None:
+                            token['lemma'] = '_'
+                        if token['xpos'] is None:
+                            token['xpos'] = '_'
+
+                    old_stdout = sys.stdout; sys.stdout = captured_output = io.StringIO()
+                    try:
+                        sentence.to_tree().print_tree()
+                    except Exception as e:
+                        sys.stderr.write(f"Could not generate tree for {utt_id}: {e}\n")
+                    sys.stdout = old_stdout; tree_str = captured_output.getvalue()
+                    
+                    if not tree_str: continue
+                    formatted_tree = self._format_tree_as_html(tree_str, sentence)
+
+                    f.write(f'\n<a name="{utt_id}"></a><hr>\n')  # anchor
+                    if speaker == "CHI":
+                        f.write(f"<h3>ID: {utt_id} | {child_project} | <span class=r>{speaker} | {age}</span></h3>\n")
+                    else:
+                        f.write(f"<h3>ID: {utt_id} | {child_project} | {speaker}</h3>\n")
+                    f.write(f'<p class="coding">{raw_utterance}</p>\n')
+                    f.write(f'<div class="parse"><p>{formatted_tree}</p></div>\n')
+
+                nav_footer = '<div class="nav-footer">'
+                if chunk_id > 0:
+                    prev_file = f"{self.file_basename}-{chunk_id - 1}.html"
+                    nav_footer += f'<a href="{prev_file}">&laquo; Previous Page</a>'
+                if chunk_id > 0 and chunk_id < total_chunks - 1:
+                    nav_footer += ' | '
+                if chunk_id < total_chunks - 1:
+                    next_file = f"{self.file_basename}-{chunk_id + 1}.html"
+                    nav_footer += f'<a href="{next_file}">Next Page &raquo;</a>'
+                nav_footer += '</div>'
+                f.write(nav_footer)
+                f.write(self.html_foot)
+            sys.stderr.write(f" {chunk_id}")
+            sys.stderr.flush()
+        sys.stderr.write("\n")
+        sys.stderr.write(f'  Hint: Update HTML files on remote or local server:\n      e.g.: rsync -zav --no-perms {self.output_dir}/ 141.58.164.21:/Library/WebServer/Documents/chifr\n            rsync -zav --no-perms {self.output_dir}/ /Library/WebServer/Documents/chifr\n')
+
+        return html_links
 
 #-------------------------------------------------------
 # Main processing class
@@ -96,172 +214,388 @@ def correct_tagger_output(tagged):
 class ChatProcessor:
     def __init__(self, args):
         self.args = args; self.pid = ''; self.child = ''; self.age = ''; self.age_days = 0; self.sNr = 0
-        self.childData = {}; self.outRows = []; self.analyser = TagAnalyser()
-        self.annot_keys = ['annot_refl', 'annot_dat', 'annot_clit', 'annot_mod', 'annot_particle']
-        self.tagger_input_file = None; self.tagged_temp_file = None
+        self.childData = {}; self.outRows = []
+        self.tagger_input_file = None; self.tagged_temp_file = None; self.conllu_input_file = None
+        self.html_exporter = None
+        if args.html_dir:
+            file_basename = os.path.basename(args.out_file)
+            file_basename = os.path.splitext(file_basename)[0]
+            self.html_exporter = HtmlExporter(args.html_dir, file_basename, chunk_size=args.chunk_html)
+
+    def tokenise(self, s):
+        """Tokenises a string, with language-specific rules."""
+        if self.args.language == "french":
+            reBeginString = re.compile(r'([dcjlmnstDCJLNMST]\'|[Qq]u\'|[Jj]usqu\'|[Ll]orsqu\')') 
+            reBeginChar = re.compile(r'([\|\{\(\/\´\`"»«°<])') 
+            reEndChar = re.compile(r'([\]\|\}\/\`\"\),\;\:\!\?\.\%»«>])') 
+            reEndString = re.compile(r'(-t-elles?|-t-ils?|-t-on|-ce|-elles?|-ils?|-je|-la|-les?|-leur|-lui|-mêmes?|-m\'|-moi|-nous|-on|-toi|-tu|-t\'|-vous|-en|-y|-ci|-là)') 
+            
+            s = re.sub(reBeginString, r'\1 ', s)
+            s = re.sub(reBeginChar, r'\1 ', s)
+            s = re.sub(reEndChar, r' \1', s)
+            s = re.sub(reEndString, r' \1', s)
+            s = re.sub(r'\s+', ' ', s)
+        # Add other languages here with 'elif self.args.language == "other_language":'
+        else:
+            # Default simple tokenization if no language is matched
+            s = re.sub(r'([,;?.!])', r' \1', s)
+            s = re.sub(r'\s+', ' ', s)
+        return s
+
+    def correct_tagger_output(self, tagged):
+        """Corrects known tagger errors for a specific language."""
+        if self.args.language == "french":
+            tagged = re.sub(r'([,\?])_NAM=<unknown>', r'\1_PON=,', tagged)
+            tagged, count = re.subn('Marie_VER:pres=marier', 'Marie_NAM=Marie', tagged)
+            tagged, count = re.subn(r'( allez[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER:impe=NEWLEM:aller', tagged)
+            tagged, count = re.subn(r'( attend[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:attendre', tagged)
+            tagged, count = re.subn(r'( dis[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:dire', tagged)
+            tagged, count = re.subn(r'( enl.v.[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:enlever', tagged)
+            tagged, count = re.subn(r'( fai[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:faire', tagged)
+            tagged, count = re.subn(r'( fini[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:finir', tagged)
+            tagged, count = re.subn(r'( prend[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:prendre', tagged)
+            tagged, count = re.subn(r'( mett[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:mettre', tagged)
+            tagged, count = re.subn(r'( regard[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:regarder', tagged)
+            tagged, count = re.subn(r'( tomb[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:tomber', tagged)
+            tagged, count = re.subn(r'( vu[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:voir', tagged)
+            tagged, count = re.subn(r'( ![^_ ]*)_([^= ]+)=<unknown>', r' !_PON=!', tagged)
+            tagged, count = re.subn('NEWLEM:', '', tagged)
+        return tagged
+
+    def _count_utterances(self, filepath):
+        count = 0
+        try:
+            with open(filepath, 'r', encoding='utf8') as f:
+                for line in f:
+                    if line.startswith('*'):
+                        count += 1
+        except FileNotFoundError:
+            sys.exit(f"Error: Input file not found at '{filepath}'")
+        return count
 
     def run(self):
+        """Main entry point using a streaming parser."""
         try:
             self.tagger_input_file = tempfile.NamedTemporaryFile(mode='w+', encoding='utf8', delete=False, suffix=".txt")
-            with open(self.args.out_file, 'r', encoding="utf8") as f: content = f.read()
-            content = re.sub('@End', '*\n', content)
-            content = re.sub('@Begin.*?\n@Comment:.*?(dummy file|No transcript).*?\n@End\n', '', content, flags=re.DOTALL)
-            for block in content.split('\n*'):
-                if block.strip(): self.process_utterance_block(block)
+            
+            total_utterances = self._count_utterances(self.args.out_file)
+            sys.stderr.write(f"Starting processing {total_utterances} utterances...\n")
+            
+            processed_count = 0
+            header_lines = []
+            utterance_block = []
+
+            with open(self.args.out_file, 'r', encoding='utf8') as f:
+                # Phase 1: Read all header lines until the first utterance
+                for line in f:
+                    if line.startswith('*'):
+                        # First utterance found, header is complete
+                        self.parse_header("".join(header_lines))
+                        utterance_block.append(line) # Start the first utterance block
+                        break 
+                    elif line.startswith('@'):
+                        header_lines.append(line)
+                
+                # Phase 2: Process the rest of the file for utterance blocks
+                for line in f:
+                    if line.startswith('*'):
+                        # A new utterance begins, so process the completed one.
+                        if utterance_block:
+                            self.process_utterance_block("".join(utterance_block))
+                            processed_count += 1
+                            percent = (processed_count / total_utterances) * 100 if total_utterances > 0 else 0
+                            sys.stderr.write(f"\rProcessing utterances: {processed_count}/{total_utterances} ({percent:.1f}%)")
+                            sys.stderr.flush()
+                        
+                        utterance_block = [line]
+                    elif line.startswith('@'):
+                        # An @-tier (like @End, @G) terminates the previous utterance. (@G is rarely used for situational info)
+                        if utterance_block:
+                            self.process_utterance_block("".join(utterance_block))
+                            processed_count += 1
+                            sys.stderr.write(f"\rProcessing utterances: {processed_count}/{total_utterances} ({(processed_count/total_utterances)*100:.1f}%)")
+                            sys.stderr.flush()
+                        utterance_block = [] # Discard the @-tier itself.
+                    else: # Dependent tier
+                        if utterance_block:
+                            utterance_block.append(line)
+            
+            # Process the very last utterance block in the file
+            if utterance_block:
+                self.process_utterance_block("".join(utterance_block))
+                processed_count += 1
+
+            sys.stderr.write(f"\rProcessing utterances: {processed_count}/{total_utterances} (100.0%)\n")
+            sys.stderr.write("Initial parsing complete.\n")
             self.finalize_output()
+
         finally:
             if self.tagger_input_file: self.tagger_input_file.close(); os.unlink(self.tagger_input_file.name)
             if self.tagged_temp_file: self.tagged_temp_file.close(); os.unlink(self.tagged_temp_file.name)
+            if self.conllu_input_file and os.path.exists(self.conllu_input_file): os.unlink(self.conllu_input_file)
 
     def process_utterance_block(self, block):
-        if '@PID:' in block: self.parse_header(block); return
-        if not self.pid: return
-        self.sNr += 1; uttID = f"{self.pid}_u{self.sNr}"
-        block = re.sub(r'[‹›]', lambda m: {'‹':'<', '›':'>'}[m.group()], block)
         block = re.sub(r'\n\s+', ' ', block, flags=re.DOTALL)
         timeCode = (m.group(1) if (m := re.search(r'\x15(\d+_\d+)\x15', block)) else '')
-        block = re.sub(r'\x15.*?\x15', '', block)
-        mor = (m.group(1) if (m := re.search(r'%mor:\s+(.*)', block)) else '')
-        if not (m := re.search(r'^([A-Z]+):\s+(.*)', block.strip(), flags=re.MULTILINE)): return
+        block_no_time = re.sub(r'\x15.*?\x15', '', block)
+        
+        if not (m := re.search(r'^\*([A-Z]+):\s+(.*)', block_no_time.strip())):
+            return
+        
         speaker, utt = m.groups()
+        self.sNr += 1
+        uttID = f"{self.pid}_u{self.sNr}"
+        
         splitUtt = cleanUtt(utt)
-        if self.args.parameters:
-            self.tagger_input_file.write(f"<s_{uttID}> {tokenise(splitUtt)}\n")
-            self.generate_rows_from_tagger(splitUtt, utt, speaker, uttID, timeCode)
-        else: self.generate_rows_from_chat(splitUtt, mor, utt, speaker, uttID, timeCode)
+        if self.args.parameters is not None:
+            self.tagger_input_file.write(f"<s_{uttID}> {self.tokenise(splitUtt)}\n")
+        
+        self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
 
-    def parse_header(self, block):
-        if not (m := re.search(r'@PID:.*/.*?0*(\d+)', block)): return
-        self.pid = m.group(1); self.sNr = 0; self.childData = {}
-        if (m := re.search(r'@ID:.*\|(.*?)\|[A-Z]+\|([0-9;.]+)\|.*Target_Child', block)):
+    def parse_header(self, header_block):
+        self.pid = ''
+        self.sNr = 0
+        self.childData = {}
+
+        if m := re.search(r'@PID:.*?-(\d+)', header_block):
+            self.pid = m.group(1)
+            self.pid = re.sub(r'^0+', '', self.pid)
+        
+        if (m := re.search(r'@ID:.*?\|(.*?)\|[A-Z]+\|([0-9;.]+)\|.*Target_Child', header_block)):
             project, age_str = m.groups()
             self.age, self.age_days = parseAge(age_str)
-            if (m := re.search(r'@Participants:.*CHI\s(.*?)\sTarget_Child', block)):
-                child_name = m.group(1).split()[0]
+            if (m_p := re.search(r'@Participants:.*CHI\s(.*?)\sTarget_Child', header_block)):
+                child_name = m_p.group(1).split()[0]
                 self.child = f"{child_name}_{project[:3]}"
                 self.childData['CHI'] = (self.child, self.age, self.age_days)
     
     def generate_rows_from_tagger(self, splitUtt, raw_utt, speaker, uttID, timeCode):
-        words = tokenise(splitUtt).split(' ')
+        clean_val = splitUtt if self.args.utt_clean else ''
+        words = self.tokenise(splitUtt).split(' ')
         for wNr, w in enumerate(words, 1):
             if not w: continue
             age, age_days, child_other = self.get_speaker_age(speaker)
-            self.outRows.append({'utt_id': f"{uttID}_w{wNr}", 'utt_nr': self.sNr, 'w_nr': wNr, 'speaker': speaker, 'child_project': self.child, 'child_other': child_other, 'age': age, 'age_days': age_days, 'time_code': timeCode, 'word': w, 'lemma': '', 'pos': '', 'features': '', 'annotations': '', 'utterance': raw_utt, 'utt_clean': splitUtt if self.args.tagger_input else '', 'utt_tagged': ''})
-
-    def generate_rows_from_chat(self, splitUtt, mor, raw_utt, speaker, uttID, timeCode): pass
+            self.outRows.append({'utt_id': f"{uttID}_w{wNr}", 'utt_nr': self.sNr, 'w_nr': wNr, 'speaker': speaker, 'child_project': self.child, 'child_other': child_other, 'age': age, 'age_days': age_days, 'time_code': timeCode, 'word': w, 'utterance': raw_utt, 'utt_clean': clean_val})
 
     def get_speaker_age(self, speaker):
         if speaker in self.childData: return self.childData[speaker][1], self.childData[speaker][2], "C"
         return '', self.childData.get('CHI', ('', '', 0))[2], "X"
     
-    def finalize_output(self):
+    def finalize_output(self, *args, **kwargs):
+        if self.args.parameters is None:
+            final_csv_path = self.args.out_file + '.csv'
+            header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'utterance', 'utt_clean']
+            with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
+                writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore', 
+                                        quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='|')
+                writer.writeheader()
+                for row in self.outRows:
+                    writer.writerow(row)
+            sys.stderr.write(f"\nOUTPUT: {final_csv_path}\n")
+            return
+
         self.tagger_input_file.seek(0)
         taggerInput = self.tagger_input_file.read()
-        itemWords, itemPOS, itemLemmas, itemTagged = {}, {}, {}, {}
-        if self.args.parameters and taggerInput:
-            itemWords, itemPOS, itemLemmas, itemTagged = self.run_treetagger(taggerInput)
-        header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'features', 'annotations', 'utterance', 'utt_clean', 'utt_tagged']
-        if self.args.add_annotation: header.extend(self.annot_keys)
-        intermediate_csv = self.args.out_file + '.csv'
-        with open(intermediate_csv, 'w', newline='', encoding='utf8') as f:
-            writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore')
-            writer.writeheader(); writer.writerows(self.outRows)
-        if self.args.parameters:
-            final_csv = self.args.out_file + '.tagged.csv'
-            self.add_tagging_to_csv(intermediate_csv, final_csv, header, itemWords, itemPOS, itemLemmas, itemTagged)
-            sys.stderr.write(f"\nOUTPUT: {final_csv}\n")
-        else: sys.stderr.write(f"OUTPUT: {intermediate_csv}\n")
+        
+        itemPOS, itemLemmas, itemTagged = {}, {}, {}
+        if taggerInput:
+            _, itemPOS, itemLemmas, itemTagged = self.run_treetagger(taggerInput)
+        
+        html_links, conllu_data = {}, {}
+        if self.args.api_model and self.conllu_input_file:
+            parsed_conllu_str = self.run_udpipe_api(self.conllu_input_file, self.args.api_model, chunk_size=self.args.chunk_parse)
+            if parsed_conllu_str:
+                conllu_data = self._parse_conllu_output(parsed_conllu_str)
+                if self.html_exporter:
+                    html_links = self.html_exporter.export(parsed_conllu_str, self.outRows)
+                if self.args.write_conllu:
+                    conllu_output_path = self.args.out_file + '.conllu'
+                    with open(conllu_output_path, 'w', encoding='utf8') as f_conllu:
+                        f_conllu.write(parsed_conllu_str)
+                    sys.stderr.write(f"Generated standalone CoNLL-U file: {conllu_output_path}\n")
+
+        """
+        write the complete CSV output file incuding CoNLL-U columns
+        """
+        sys.stderr.write("Writing final CSV output file incuding CoNLL-U columns...")
+        final_csv_path = self.args.out_file + '.parsed.csv'
+        header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'dep_parse_html_server', 'dep_parse_html_local']
+        header.extend([f'conll_{i}' for i in range(1, 11)])
+
+        with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
+            writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore',
+                                    quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='\x1f')
+            writer.writeheader()
+            for row in self.outRows:
+                uID, wID_str = re.match(r'(.*)_w(\d+)', row['utt_id']).groups()
+                wID = int(wID_str)
+                try:
+                    row['pos'] = itemPOS.get(uID, [''] * wID)[wID - 1]
+                    row['lemma'] = itemLemmas.get(uID, [''] * wID)[wID - 1]
+                    row['utt_tagged'] = itemTagged.get(uID, '') if self.args.utt_tagged else ''
+                except (KeyError, IndexError): pass
+
+                conll_row = conllu_data.get(row['utt_id'], [''] * 10)
+                for i, col_val in enumerate(conll_row):
+                    row[f'conll_{i+1}'] = col_val
+                
+                if self.args.pos_utterance:
+                    if not re.search(self.args.pos_utterance, row.get('pos', '')):
+                        row['utterance'] = row['utt_clean'] = row['utt_tagged'] = ''
+
+                link_info = html_links.get(uID)
+                if link_info:
+                    rel_local_path = os.path.relpath(link_info['local'])
+                    local_url = f"http://localhost/{rel_local_path}#{uID}"
+                    row['dep_parse_html_local'] = f'=HYPERLINK("{local_url}"; "LOC")'
+                    if self.args.server_url:
+                        server_url = f"{self.args.server_url.rstrip('/')}/{link_info['file']}#{uID}"
+                        row['dep_parse_html_server'] = f'=HYPERLINK("{server_url}"; "WWW")'
+                writer.writerow(row)
+        sys.stderr.write(f"\nOUTPUT: {final_csv_path}\n")
+
+        """
+        write the complete CSV output file as a reduced working version
+        """
+        sys.stderr.write(f"Writing final CSV output file as a reduced working version (without CoNLL-U, limited to POS={self.args.pos_output})...")
+        final_csv_path = self.args.out_file + '.work.csv'
+        header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'dep_parse_html_server', 'dep_parse_html_local']
+
+        with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
+            writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore',
+                                    quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='\x1f')
+            writer.writeheader()
+            for row in self.outRows:
+                uID, wID_str = re.match(r'(.*)_w(\d+)', row['utt_id']).groups()
+                wID = int(wID_str)
+                try:
+                    row['pos'] = itemPOS.get(uID, [''] * wID)[wID - 1]
+                    row['lemma'] = itemLemmas.get(uID, [''] * wID)[wID - 1]
+                    row['utt_tagged'] = itemTagged.get(uID, '') if self.args.utt_tagged else ''
+                except (KeyError, IndexError): pass
+
+                if self.args.pos_utterance:
+                    if not re.search(self.args.pos_utterance, row.get('pos', '')):
+                        row['utterance'] = row['utt_clean'] = row['utt_tagged'] = ''
+
+                link_info = html_links.get(uID)
+                if link_info:
+                    rel_local_path = os.path.relpath(link_info['local'])
+                    local_url = f"http://localhost/{rel_local_path}#{uID}"
+                    row['dep_parse_html_local'] = f'=HYPERLINK("{local_url}"; "LOC")'
+                    if self.args.server_url:
+                        server_url = f"{self.args.server_url.rstrip('/')}/{link_info['file']}#{uID}"
+                        row['dep_parse_html_server'] = f'=HYPERLINK("{server_url}"; "WWW")'
+                
+                # print only rows with specified POS tag
+                if re.search(re.compile(self.args.pos_output), row.get('pos', '')):
+                    writer.writerow(row)
+        sys.stderr.write(f"\nOUTPUT: {final_csv_path}\n")
+
+    def _parse_conllu_output(self, conllu_str):
+        conllu_data = {}
+        current_item_id = None
+        for line in conllu_str.splitlines():
+            if line.startswith('#'):
+                if match := re.match(r"#\s*item_id\s*=\s*(.*)", line):
+                    current_item_id = match.group(1).strip()
+                continue
+            if current_item_id and line:
+                cols = line.split('\t')
+                if len(cols) >= 2:
+                    unique_id = f"{current_item_id}_w{cols[0]}"
+                    conllu_data[unique_id] = cols
+        return conllu_data
 
     def run_treetagger(self, tagger_input):
         tagger_bin, param_file = './tree-tagger', self.args.parameters
         if not all(map(os.path.exists, [tagger_bin, param_file])): sys.exit("Tagger binary or param file not found.")
         self.tagged_temp_file = tempfile.NamedTemporaryFile(mode='w+', encoding='utf8', delete=False, suffix=".txt")
         self.tagged_temp_file.write(re.sub(' +', '\n', tagger_input)); self.tagged_temp_file.flush()
-        p1 = subprocess.Popen(["cat", self.tagged_temp_file.name], stdout=subprocess.PIPE)
-        tagged = subprocess.check_output([tagger_bin, param_file, '-token', '-lemma', '-sgml'], stdin=p1.stdout).decode('utf8')
+        with open(self.tagged_temp_file.name, 'r') as f_in:
+            tagged = subprocess.check_output([tagger_bin, param_file, '-token', '-lemma', '-sgml'], stdin=f_in).decode('utf8')
         tagged = process_tagged_data(tagged)
-        
-        # --- LOGIC RESTORED ---
-        if self.args.conllu:
-            self.tagged2conllu(tagged)
-        
-        tagged = re.sub(r'\t([A-Za-z:]+)\t', r'_\1=', tagged)
-        tagged = re.sub(r'\n', ' ', tagged)
-        if self.args.language == 'french':
-            tagged = correct_tagger_output(tagged)
-        
+        if self.args.api_model:
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', delete=False, suffix=".conllu.in") as temp_f:
+                self.conllu_input_file = temp_f.name
+            self.tagged2conllu(tagged, self.conllu_input_file)
         words, pos, lemmas, tagged_sents = {}, {}, {}, {}
-        for sent in tagged.split("<s_"):
-            if not (m := re.match(r'([^>]+)> (.*)', sent)): continue
-            key, content = m.groups()
-            tagged_sents[key] = content.strip()
-            lemmas[key] = ' '.join(re.findall(r'=(.*?)(?: |$)', content))
-            pos[key] = ' '.join(re.findall(r'_(.*?)=', content))
-            words[key] = ' '.join(re.findall(r' (.*?)_', ' ' + content))
+        sentences = re.split(r'(<s_([^>]+)>)', tagged)
+        for i in range(1, len(sentences), 3):
+            key = sentences[i+1]
+            content_multiline = sentences[i+2].strip()
+            lines = [line.split('\t') for line in content_multiline.split('\n') if line and len(line.split('\t')) == 3]
+            words[key] = [parts[0] for parts in lines]
+            pos[key] = [parts[1] for parts in lines]
+            lemmas[key] = [parts[2] for parts in lines]
+            content_oneline = re.sub(r'\t([A-Za-z:]+)\t', r'_\1=', content_multiline)
+            content_oneline = re.sub(r'\n', ' ', content_oneline)
+            content_oneline = self.correct_tagger_output(content_oneline)
+            tagged_sents[key] = content_oneline.strip()
         return words, pos, lemmas, tagged_sents
 
-    def tagged2conllu(self, str_in):
-            conllu_out = 'parseme.conllu'
-            sys.stderr.write(f"Creating output file '{conllu_out}' for dependency parsing...\n")
-            # convert 3-column tagger output to 10-column conllu format
-            str_in = re.sub(r'(.*)\t(.*)\t(.*)', r'\1\t\3\t_\t\2\t_\t_\t_\t_\t_', str_in)
-            str_in = re.sub('<s_([^>]+)>', r'# item_id = \1', str_in)
-            
-            with open(conllu_out, 'w', encoding='utf8') as parsetmp:
-                out, wNr = '', 0
-                # Split by the sentence marker, keeping the marker
-                sentences = re.split('(# item_id = [^\n]+)', str_in)
-                for i in range(1, len(sentences), 2):
-                    header = sentences[i]
-                    body = sentences[i+1]
-                    
-                    sentence_block = header
-                    wNr = 0
-                    for line in body.strip().split('\n'):
-                        if line.strip():
-                            wNr += 1
-                            sentence_block += f"\n{wNr}\t{line}"
+    def tagged2conllu(self, str_in, conllu_out_path):
+        sys.stderr.write(f"Creating temporary CoNLL-U file with lemmas: '{conllu_out_path}'...\n")
+        with open(conllu_out_path, 'w', encoding='utf8') as f:
+            sentences = re.split(r'(<s_([^>]+)>)', str_in)
+            for i in range(1, len(sentences), 3):
+                sent_id = sentences[i+1]
+                body = sentences[i+2].strip()
+                f.write(f"# item_id = {sent_id}\n")
+                tokens = [line.split('\t') for line in body.split('\n') if line]
+                for idx, token_parts in enumerate(tokens):
+                    if len(token_parts) != 3: continue
+                    word, tt_pos, tt_lemma = token_parts
+                    if tt_lemma == '<unknown>': tt_lemma = '_'
+                    line = f"{idx+1}\t{word}\t{tt_lemma}\t_\t{tt_pos}\t_\t_\t_\t_\t_\n"
+                    f.write(line)
+                f.write("\n")
 
-                    # Write the complete sentence block followed by a blank line
-                    parsetmp.write(sentence_block + '\n\n')
-                    
-    def add_tagging_to_csv(self, infile, outfile, header, words, pos_tags, lemmas, tagged_sents):
-        with open(infile, 'r', encoding='utf8') as f_in, open(outfile, 'w', newline='', encoding='utf8') as f_out:
-            reader = list(csv.reader(f_in, delimiter='\t')); writer = csv.writer(f_out, delimiter='\t')
-            writer.writerow(header)
-            p_idx, l_idx, u_idx, t_idx = map(header.index, ['pos', 'lemma', 'utterance', 'utt_tagged'])
-            for row in reader[1:]:
-                if not (m := re.match(r'(.*)_w(\d+)', row[0])): continue
-                uID, wID_str = m.groups(); wID = int(wID_str)
-                try:
-                    current_pos = pos_tags.get(uID, '').split(' ')[wID - 1] if uID in pos_tags else ''
-                    row[p_idx] = current_pos
-                    row[l_idx] = lemmas.get(uID, '').split(' ')[wID - 1] if uID in lemmas else ''
-                    match = (re.search(self.args.pos_utterance, current_pos) if self.args.pos_utterance else True)
-                    if not match: row[u_idx] = ''
-                    if self.args.tagger_output and match: row[t_idx] = tagged_sents.get(uID, '')
-                    if self.args.add_annotation and match and self.args.match_tagging and re.search(self.args.match_tagging, current_pos):
-                        ann = self.analyser.analyse(tagged_sents.get(uID, ''), row[l_idx])
-                        for k, v in ann.items():
-                            if k in header: row[header.index(k)] = v
-                except IndexError: pass
-                writer.writerow(row)
+    def run_udpipe_api(self, input_file, model, chunk_size):
+        API_URL = "https://lindat.mff.cuni.cz/services/udpipe/api/process"
+        sys.stderr.write(f"Calling Lindat API with UDPipe model '{model}'...\n")
+        with open(input_file, 'r', encoding='utf8') as f:
+            full_content = f.read()
+        sentences = full_content.strip().split('\n\n')
+        total_chunks = (len(sentences) + chunk_size - 1) // chunk_size
+        parsed_results = []
+        for i in range(0, len(sentences), chunk_size):
+            chunk = sentences[i:i + chunk_size]
+            chunk_content = "\n\n".join(chunk)
+            current_chunk_num = i//chunk_size + 1
+            progress_msg = f"\r  Sending chunk {current_chunk_num}/{total_chunks} ({len(chunk)} utterances) to API..."
+            sys.stderr.write(progress_msg)
+            sys.stderr.flush()
+            params = {'model': model, 'input': 'conllu', 'tagger': '', 'parser': ''}
+            response = requests.post(API_URL, data=params, files={'data': chunk_content})
+            if response.status_code == 200:
+                result = response.json().get('result')
+                if result:
+                    parsed_results.append(result)
+                else:
+                    sys.stderr.write(f"\nWarning: API call for chunk {current_chunk_num} succeeded but returned no result.\n")
+            else:
+                sys.stderr.write(f"\nError: API call for chunk {current_chunk_num} failed with status {response.status_code}: {response.text}\n")
+                return None
+        sys.stderr.write("\nAPI processing complete.\n")
+        return "".join(parsed_results) if parsed_results else None
 
 if __name__ == "__main__":
-   parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-   parser.add_argument('out_file', type=str,  help='output file')
-   parser.add_argument('-F', '--first_utterance', action='store_true', help='print utterance only for first token')
-   parser.add_argument('-a', '--add_annotation', action='store_true', help='add annotation based on rules')
-   parser.add_argument('-c', '--conllu', action='store_true', help='create CoNLL-U output')
-   parser.add_argument('--hops', default = "", type = str, help='run hops parser')
-   parser.add_argument('-l', '--language', default = "french", type = str, help='language-specific functions')
-   parser.add_argument('-m', '--match_tagging', default = "", type = str, help='match tagger output')
-   parser.add_argument('-p', '--parameters', default = "", type = str, help='TreeTagger parameter file')
-   parser.add_argument('--pos_utterance', default = "", type = str, help='print utterance if pos matches')
-   parser.add_argument('--tagger_input', action='store_true', help='print utterance for tagger')
-   parser.add_argument('--tagger_output', action='store_true', help='print tagged utterance')
-   parser.add_argument('-u', '--ud_pipe', default = "", type = str, help='run UDPipe parser')
-   
-   args = parser.parse_args()
-   processor = ChatProcessor(args)
-   processor.run()
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('out_file', type=str,  help='The input CHAT file (e.g., french-sample.cha)')
+    parser.add_argument('-p', '--parameters', type=str, help='(Optional) TreeTagger parameter file. If provided, enables full annotation.')
+    parser.add_argument('--api_model', type=str, help='(Optional) Name of the UDPipe model for the Lindat API (e.g., french). Requires --parameters.')
+    parser.add_argument('--html_dir', type=str, help='(Optional) Directory to save HTML dependency parse files (keep the name short!). Requires --api_model.')
+    parser.add_argument('--server_url', type=str, help='(Optional) Base URL for server links in the final CSV.')
+    parser.add_argument('--write_conllu', action='store_true', help='(Optional) Write the final parsed CoNLL-U data to a standalone file. Requires --api_model.')
+    parser.add_argument('--chunk_parse', type=int, default=10000, help='Number of utterances per API parsing chunk. Default: 10000.')
+    parser.add_argument('--chunk_html', type=int, default=5000, help='Number of utterances per HTML output file. Default: 10000.')
+    parser.add_argument('--pos_output', default=".*", type=str, help='Regex to match POS tags. The reduced table ("work") will only contain matching rows.')
+    parser.add_argument('--pos_utterance', type=str, help='Regex to match POS tags. The full utterance text will only be printed on matching rows.')
+    parser.add_argument('--utt_clean', action='store_true', help='Populate the utt_clean column.')
+    parser.add_argument('--utt_tagged', action='store_true', help='Populate the utt_tagged column.')
+    parser.add_argument('-l', '--language', default="french", type=str, help='Language-specific functions')
+    
+    args = parser.parse_args()
+    processor = ChatProcessor(args)
+    processor.run()

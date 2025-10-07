@@ -1,6 +1,10 @@
 # Processing French CHILDES data
 
-This script was created in project H2 of the DFG research unit [SILPAC](https://silpac.uni-mannheim.de) (FOR 5157)
+These scripts were created in project H2 of the DFG research unit [SILPAC](https://silpac.uni-mannheim.de) (FOR 5157).
+
+`childes.py` converts CHILDES CHAT files in a pipeline **CHAT -> Tagger -> Parser -> CSV/CoNLL-U**
+
+`dql.py` performs multiple GREW queries on CoNLL-U files and allow to merge the resulting codings (attribute-value pairs) into the CSV file.
 
 ## childes.py
 
@@ -17,12 +21,12 @@ Tested for some of the French CHILDES files (e.g. Paris) as well as Italian and 
 Special tokenisation and tagger correction rules are applied for French.  Further language-specific rules can be added if needed: the scripts reacts to the language specified in the @ID line of the chat file (see functions tokenise() and correct_tagger_output()).
 
 ### History
-
 - Version 4.0: complete revision of the structure, building on intermediate version 3.0
 
   - UDPipe API call integrated in childes.py with debug function for parser errors
   - --html_dir: html export of parsed corpus, with URL columns in CSV file
   - more efficient CHAT file streaming (line-by-line parser)
+  - session-based parsing allows for processing concatenated projects
   - input file can be gzipped (*.gz)
   - output two CSV versions:
     - full: including CoNLL-U annotation
@@ -47,9 +51,11 @@ Special tokenisation and tagger correction rules are applied for French.  Furthe
 
 ### How to use
 
-1. Concatenate *.cha files of one project
-2. Run script on concatenated file.
-3. Use -p <parameters> for TreeTagger analysis
+Adapt the wrapper shell script to your needs, run with 
+
+> childes-pipeline.sh <chatfile>
+
+or run manually based on the examples below.
 
 ### Examples:
 

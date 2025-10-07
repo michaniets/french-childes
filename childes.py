@@ -212,7 +212,6 @@ class HtmlExporter:
             sys.stderr.write(f" {chunk_id}")
             sys.stderr.flush()
         sys.stderr.write("\n")
-        sys.stderr.write(f'  Hint: Update HTML files on remote or local server:\n      e.g.: rsync -zav --no-perms {self.output_dir}/ 141.58.164.21:/Library/WebServer/Documents/chifr\n            rsync -zav --no-perms {self.output_dir}/ /Library/WebServer/Documents/chifr\n')
 
         return html_links
 
@@ -238,7 +237,7 @@ class ChatProcessor:
         """
         if re.search(r'fra|french', self.language):
             reBeginChar = re.compile(r'([\|\{\(\/\´\`"»«°<])') 
-            reEndChar = re.compile(r'([\]\|\}\/\`\"\),\;\:\!\?\.\%»«>])') 
+            reEndChar = re.compile(r'([\]\|\}\/\`\"\),\;\:\!\?\.\%»«>])(?=\s|$)')   # also if followed by end of line
             reBeginString = re.compile(r'([dcjlmnstDCJLNMST]\'|[Qq]u\'|[Jj]usqu\'|[Ll]orsqu\')') 
             reEndString = re.compile(r'(-t-elles?|-t-ils?|-t-on|-ce|-elles?|-ils?|-je|-la|-les?|-leur|-lui|-mêmes?|-m\'|-moi|-nous|-on|-toi|-tu|-t\'|-vous|-en|-y|-ci|-là)') 
             s = re.sub(reBeginString, r'\1 ', s)
@@ -251,7 +250,7 @@ class ChatProcessor:
             pass
         else:
             # Default simple tokenization if no language is matched
-            s = re.sub(r'([,;?.!])', r' \1', s)
+            s = re.sub(r'([,;?.!])(?=\s|$)', r' \1', s)
             s = re.sub(r'\s+', ' ', s)
         return s
 
@@ -294,7 +293,7 @@ class ChatProcessor:
         try:
             self.tagger_input_file = tempfile.NamedTemporaryFile(mode='w+', encoding='utf8', delete=False, suffix=".txt")
             
-            # Determine the appropriate file opening method
+            # Check for gzipped files
             if self.args.out_file.endswith('.gz'):
                 try:
                     f = gzip.open(self.args.out_file, 'rt', encoding='utf8')
@@ -302,11 +301,8 @@ class ChatProcessor:
                 except OSError as e:
                     print(f"Error opening gzipped file: {e}")
                     raise
-
-                sys.stderr.write(f"\n   DEBUG   Detected gzip compressed input file.\n{f}\n")
             else:
                 f = open(self.args.out_file, 'r', encoding='utf8')
-                sys.stderr.write(f"\n   DEBUG   Detected uncompressed input file.\n{f}\n")
 
             total_utterances = self._count_utterances(f)
             sys.stderr.write(f"Starting processing {total_utterances} utterances...\n")
@@ -370,7 +366,7 @@ class ChatProcessor:
     def process_utterance_block(self, block):
         block = re.sub(r'\n\s+', ' ', block, flags=re.DOTALL)
         timeCode = (m.group(1) if (m := re.search(r'\x15(\d+_\d+)\x15', block)) else '')
-        block_no_time = re.sub(r'\x15.*?\x15', '', block)
+        block_no_time = re.sub(r'\s*\x15.*?\x15', '', block) # remove including spaces
         
         if not (m := re.search(r'^\*([A-Z]+):\s+(.*)', block_no_time.strip())):
             return
@@ -591,7 +587,8 @@ class ChatProcessor:
                 for idx, token_parts in enumerate(tokens):
                     if len(token_parts) != 3: continue
                     word, tt_pos, tt_lemma = token_parts
-                    if tt_lemma == '<unknown>': tt_lemma = '_'
+                    if tt_lemma == '<unknown>' or tt_lemma == '': tt_lemma = '_'
+                    if tt_pos == '': tt_pos = '_'
                     line = f"{idx+1}\t{word}\t{tt_lemma}\t_\t{tt_pos}\t_\t_\t_\t_\t_\n"
                     f.write(line)
                 f.write("\n")
@@ -608,7 +605,8 @@ class ChatProcessor:
             chunk = sentences[i:i + chunk_size]
             chunk_content = "\n\n".join(chunk)
             current_chunk_num = i//chunk_size + 1
-            progress_msg = f"\r  Sending chunk {current_chunk_num}/{total_chunks} ({len(chunk)} utterances) to API..."
+            eta = round(len(chunk) / 330)
+            progress_msg = f"\r  Sending chunk {current_chunk_num}/{total_chunks} ({len(chunk)} utterances) to API. ETA for this chunk ~{eta}s..."
             sys.stderr.write(progress_msg)
             sys.stderr.flush()
             params = {'model': model, 'input': 'conllu', 'tagger': '', 'parser': ''}
@@ -621,9 +619,58 @@ class ChatProcessor:
                     sys.stderr.write(f"\nWarning: API call for chunk {current_chunk_num} succeeded but returned no result.\n")
             else:
                 sys.stderr.write(f"\nError: API call for chunk {current_chunk_num} failed with status {response.status_code}: {response.text}\n")
+                self._debug_udpipe_chunk(chunk_content, model, small_chunk_size=10, out_path='error_chunk.conllu')
                 return None
         sys.stderr.write("\nAPI processing complete.\n")
         return "".join(parsed_results) if parsed_results else None
+
+    def _debug_udpipe_chunk(self, chunk_content, model, small_chunk_size=10, out_path='error_chunk.conllu'):
+        """
+        Split a failing CoNLL-U chunk into smaller chunks (default: 10 sentences),
+        send each to the UDPipe API; on error write content and exit
+        """
+        API_URL = "https://lindat.mff.cuni.cz/services/udpipe/api/process"
+        sentences = [s for s in chunk_content.strip().split('\n\n') if s.strip()]
+
+        total_small = (len(sentences) + small_chunk_size - 1) // small_chunk_size
+        sys.stderr.write(f"\nDEBUG: Entering fine-grained UDPipe check ({total_small} mini-chunks of {small_chunk_size} sentences)...\n")
+
+        for j in range(0, len(sentences), small_chunk_size):
+            mini = sentences[j:j + small_chunk_size]
+            mini_content = "\n\n".join(mini)
+            mini_idx = j // small_chunk_size + 1
+            sys.stderr.write(f"\r  -> Testing mini-chunk {mini_idx}/{total_small} ({len(mini)} sentences)...")
+            sys.stderr.flush()
+
+            try:
+                params = {'model': model, 'input': 'conllu', 'tagger': '', 'parser': ''}
+                resp = requests.post(API_URL, data=params, files={'data': mini_content})
+            except Exception as e:
+                # Network/transport error: save and exit
+                with open(out_path, 'w', encoding='utf8') as ef:
+                    ef.write(mini_content)
+                sys.exit(f"\nFATAL: UDPipe request raised an exception on a mini-chunk: {e}\n"
+                        f"       Offending content saved to '{out_path}'. Please inspect/fix and re-run.")
+
+            # Same error logic as the main call:
+            bad_status = resp.status_code != 200
+            no_result = False
+            if not bad_status:
+                # Be defensive in JSON parsing
+                try:
+                    no_result = resp.json().get('result') in (None, '')
+                except Exception as e:
+                    no_result = True
+
+            if bad_status or no_result:
+                with open(out_path, 'w', encoding='utf8') as ef:
+                    ef.write(mini_content)
+                detail = f"status {resp.status_code}: {resp.text[:500]}..." if bad_status else "200 but empty/invalid result"
+                sys.exit(f"\nFATAL: UDPipe failed on a mini-chunk ({len(mini)} sentences): {detail}\n"
+                        f"       Offending content saved to '{out_path}'.")
+        # If we get here, all mini-chunks succeeded, so the failure is intermittent or due to size/timeout.
+        sys.exit("\nFATAL: All mini-chunks succeeded in isolation. The larger chunk likely hits a size/timeout limit.\n"
+                "       Consider reducing --chunk_parse or implementing exponential backoff/retry.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)

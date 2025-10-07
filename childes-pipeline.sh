@@ -16,11 +16,12 @@ set -e
 # Path to your scripts and models
 # UDPipe model list: https://lindat.mff.cuni.cz/repository/items/41f05304-629f-4313-b9cf-9eeb0a2ca7c6
 DATAPATH="."
+SERVER_IP="999.99.999.99"  # replace with your server IP address or domain name
 PYPATH="$HOME/git/french-childes"  # adjust to your path
 TAGGER_PAR="${DATAPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
 API_MODEL="french"  # UDPipe model. For German: german-gsd-ud
-HTML_DIR="html_parses"  # subfolder for parsed HTML files (don't precede with './')
-SERVER_URL="https://141.58.164.21/${HTML_DIR}"  # julienas - keep string short to avoid large output files
+HTML_DIR="html"  # subfolder for parsed HTML files (don't precede with './')
+SERVER_URL="https://${SERVER_IP}/${HTML_DIR}"  # julienas - keep string short to avoid large output files
 
 # Check for input file
 if [ -z "$1" ]; then
@@ -70,8 +71,8 @@ if [ -f "${FILE_BASENAME}.coded.conllu" ]; then
 fi
 if [ -d "${HTML_DIR}" ]; then
   echo "---"
-  echo "HTML files in: ${HTML_DIR}/    Delete or upload them with:"
-  echo "   rsync -zav --no-perms ${HTML_DIR}/ ${SERVER_URL}:/Library/WebServer/Documents/${HTML_DIR}"
-  echo "   ssh -x ${SERVER_URL} \"chmod 644 /Library/WebServer/Documents/${HTML_DIR}/*.html\""
+  echo "HTML files in: ${HTML_DIR}/    Delete or upload them with (adapt to your server):"
+  echo "   rsync -zav --no-perms ${HTML_DIR}/ ${SERVER_IP}:/Library/WebServer/Documents/${HTML_DIR}"
+  echo "   ssh -x ${SERVER_IP} \"chmod 644 /Library/WebServer/Documents/${HTML_DIR}/*.html\""
   echo ""
 fi

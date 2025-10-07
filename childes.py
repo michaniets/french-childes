@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "4.1"
+__version__ = "4.0"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
 __status__ = "07.10.25"
 __license__ = "GPL"
@@ -440,7 +440,7 @@ class ChatProcessor:
         """
         sys.stderr.write("Writing final CSV output file incuding CoNLL-U columns...")
         final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.parsed.csv'
-        header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'dep_parse_html_server', 'dep_parse_html_local']
+        header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'URLwww', 'URLlok']
         header.extend([f'conll_{i}' for i in range(1, 11)])
 
         with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
@@ -468,10 +468,10 @@ class ChatProcessor:
                 if link_info:
                     rel_local_path = os.path.relpath(link_info['local'])
                     local_url = f"http://localhost/{rel_local_path}#{uID}"
-                    row['dep_parse_html_local'] = f'=HYPERLINK("{local_url}"; "LOC")'
+                    row['URLlok'] = f'=HYPERLINK("{local_url}"; "LOC")'
                     if self.args.server_url:
                         server_url = f"{self.args.server_url.rstrip('/')}/{link_info['file']}#{uID}"
-                        row['dep_parse_html_server'] = f'=HYPERLINK("{server_url}"; "WWW")'
+                        row['URLwww'] = f'=HYPERLINK("{server_url}"; "WWW")'
                 writer.writerow(row)
         sys.stderr.write(f"\n  OUTPUT: {final_csv_path}\n")
 
@@ -480,7 +480,7 @@ class ChatProcessor:
         """
         sys.stderr.write(f"Writing final CSV output file as a reduced working version (without CoNLL-U, limited to POS={self.args.pos_output})...")
         final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.work.csv'
-        header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'dep_parse_html_server', 'dep_parse_html_local']
+        header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'URLwww', 'URLlok']
 
         with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
             writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore',
@@ -503,10 +503,10 @@ class ChatProcessor:
                 if link_info:
                     rel_local_path = os.path.relpath(link_info['local'])
                     local_url = f"http://localhost/{rel_local_path}#{uID}"
-                    row['dep_parse_html_local'] = f'=HYPERLINK("{local_url}"; "LOC")'
+                    row['URLlok'] = f'=HYPERLINK("{local_url}"; "LOC")'
                     if self.args.server_url:
                         server_url = f"{self.args.server_url.rstrip('/')}/{link_info['file']}#{uID}"
-                        row['dep_parse_html_server'] = f'=HYPERLINK("{server_url}"; "WWW")'
+                        row['URLwww'] = f'=HYPERLINK("{server_url}"; "WWW")'
                 
                 # print only rows with specified POS tag
                 if re.search(re.compile(self.args.pos_output), row.get('pos', '')):

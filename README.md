@@ -51,9 +51,9 @@ Special tokenisation and tagger correction rules are applied for French.  Furthe
 
 ### How to use
 
-Adapt the wrapper shell script to your needs, run with 
+Adapt the wrapper shell script to your needs and run with 
 
-> childes-pipeline.sh <chatfile>
+> childes-pipeline.sh <chatfile[.gz]>
 
 or run manually based on the examples below.
 

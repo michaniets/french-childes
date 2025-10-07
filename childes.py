@@ -148,8 +148,9 @@ class HtmlExporter:
 
         html_links = {}
         total_chunks = (len(sentences) + self.chunk_size - 1) // self.chunk_size
-        sys.stderr.write(f"Generating HTML files in: {self.output_dir}. Writing file: ")
         for chunk_id in range(total_chunks):
+            sys.stderr.write(f"\rWriting HTML files to {self.output_dir} for chunk {chunk_id}/{total_chunks}")
+            sys.stderr.flush()
             start_index = chunk_id * self.chunk_size
             end_index = start_index + self.chunk_size
             chunk_sentences = sentences[start_index:end_index]
@@ -209,8 +210,6 @@ class HtmlExporter:
                 nav_footer += '</div>'
                 f.write(nav_footer)
                 f.write(self.html_foot)
-            sys.stderr.write(f" {chunk_id}")
-            sys.stderr.flush()
         sys.stderr.write("\n")
 
         return html_links
@@ -309,7 +308,7 @@ class ChatProcessor:
                  session_blocks_list = [full_content]
 
             for i, session_content in enumerate(session_blocks_list):
-                sys.stderr.write(f"\rProcessing session {i+1}/{total_sessions}...")
+                sys.stderr.write(f"\rProcessing session {i}/{total_sessions}...")
                 sys.stderr.flush()
                 # Find the header part of the current session
                 header_match = re.match(r'((?:@[^\n]*\n)*)', session_content)
@@ -400,6 +399,7 @@ class ChatProcessor:
         return '', self.childData.get('CHI', ('', '', 0))[2], "X"
     
     def finalize_output(self, *args, **kwargs):
+        """Final processing: run tagger, parser, write output files"""
         if not self.outRows:
             sys.stderr.write("\nNo data rows were generated. Exiting.\n")
             return
@@ -436,9 +436,10 @@ class ChatProcessor:
                     sys.stderr.write(f"Generated standalone CoNLL-U file: {conllu_output_path}\n")
 
         """
-        write the complete CSV output file incuding CoNLL-U columns
+        (This is a bit redundant: we write two versions of the CSV file, one with CoNLL-U columns, one without)
+        1. write the complete CSV output file including CoNLL-U columns
         """
-        sys.stderr.write("Writing final CSV output file incuding CoNLL-U columns...")
+        sys.stderr.write("Writing final CSV output file including CoNLL-U columns...")
         final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.parsed.csv'
         header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'URLwww', 'URLlok']
         header.extend([f'conll_{i}' for i in range(1, 11)])
@@ -476,10 +477,10 @@ class ChatProcessor:
         sys.stderr.write(f"\n  OUTPUT: {final_csv_path}\n")
 
         """
-        write the complete CSV output file as a reduced working version
+        2. write the complete CSV output file as a reduced version (light)
         """
         sys.stderr.write(f"Writing final CSV output file as a reduced working version (without CoNLL-U, limited to POS={self.args.pos_output})...")
-        final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.work.csv'
+        final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.light.csv'
         header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'URLwww', 'URLlok']
 
         with open(final_csv_path, 'w', newline='', encoding='utf8') as f:

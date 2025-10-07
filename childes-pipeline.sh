@@ -66,6 +66,8 @@ echo ""
 echo "--- Pipeline finished successfully ---"
 echo "Full output file: ${FILE_BASENAME}.cha.parsed.csv"
 echo "Work output file: ${FILE_BASENAME}.cha.work.csv"
+echo "Concatenate CSV files if needed:"
+echo '  head -n 1 "$(ls *.light.csv | head -n 1)" > all.csv; tail -n +2 -q *.light.csv >> all.csv'
 if [ -f "${FILE_BASENAME}.coded.conllu" ]; then
     echo "CoNLL-U output: ${FILE_BASENAME}.cha.conllu"
 fi

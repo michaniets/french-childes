@@ -549,6 +549,7 @@ class ChatProcessor:
         return conllu_data
 
     def run_treetagger(self, tagger_input):
+        sys.stderr.write("Calling TreeTagger...\n")
         tagger_bin, param_file = './tree-tagger', self.args.parameters
         if not all(map(os.path.exists, [tagger_bin, param_file])): sys.exit("Tagger binary or param file not found.")
         self.tagged_temp_file = tempfile.NamedTemporaryFile(mode='w+', encoding='utf8', delete=False, suffix=".txt")
@@ -587,6 +588,7 @@ class ChatProcessor:
                 for idx, token_parts in enumerate(tokens):
                     if len(token_parts) != 3: continue
                     word, tt_pos, tt_lemma = token_parts
+                    # for robustness, replace empty or <unknown> lemmas/pos with '_'
                     if tt_lemma == '<unknown>' or tt_lemma == '': tt_lemma = '_'
                     if tt_pos == '': tt_pos = '_'
                     line = f"{idx+1}\t{word}\t{tt_lemma}\t_\t{tt_pos}\t_\t_\t_\t_\t_\n"

@@ -20,8 +20,8 @@ Special tokenisation and tagger correction rules are applied for French.  Furthe
 
 - Version 4.0: complete revision of the structure, building on intermediate version 3.0
 
-  - UDPipe API call integrated in childes.py
-  - --html_dir: html export of parsed corpus, with links in table
+  - UDPipe API call integrated in childes.py with debug function for parser errors
+  - --html_dir: html export of parsed corpus, with URL columns in CSV file
   - more efficient CHAT file streaming (line-by-line parser)
   - input file can be gzipped (*.gz)
   - output two CSV versions:

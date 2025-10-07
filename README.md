@@ -23,9 +23,10 @@ Special tokenisation and tagger correction rules are applied for French.  Furthe
   - UDPipe API call integrated in childes.py
   - --html_dir: html export of parsed corpus, with links in table
   - more efficient CHAT file streaming (line-by-line parser)
-  - output of two CSV versions:
+  - input file can be gzipped (*.gz)
+  - output two CSV versions:
     - full: including CoNLL-U annotation
-    - work: withou CoNLL-U annotation, rows optionally filtered by --pos_output
+    - work: without CoNLL-U annotation, rows optionally filtered by --pos_output
   - updated wrapper script childes-pipeline.sh
   - abandoned:
     - processing of %mor annotation if tagger is not used
@@ -36,8 +37,11 @@ Special tokenisation and tagger correction rules are applied for French.  Furthe
   - Class-based: processing logic managed within a ChatProcessor class. This eliminated a number of global variables.
 
   - Non-destructive Data Handling: The script no longer silently discards information from the original CHAT files. The utterance cleaning process now extracts special markers (e.g., [//], (.)) before preparing the string for the tagger. Two new columns have been added to the CSV output:
-  - new column 'utterance_raw': Contains the unmodified utterance from the chat file.
+  - column 'utterance' now contains the unmodified utterance from the chat file
+  - new options can add cleaned and tagged versions of utterance
   - safe temporary file management: hardcoded files (like _tagthis.tmp_) have been replaced with Python's tempfile library.
+  - option --write_conllu must be used to export the parsed CoNLL-U file
+
 
 - Version 2.0 published as a release
 

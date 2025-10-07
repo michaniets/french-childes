@@ -66,7 +66,8 @@ class HtmlExporter:
     """Generates a chunked, styled HTML corpus with dependency trees."""
     def __init__(self, output_dir, file_basename, chunk_size=1000):
         self.output_dir = output_dir
-        self.file_basename = output_dir #file_basename
+        self.file_basename = file_basename
+        self.project = ''  # rather than file_basename, for html filenames
         self.chunk_size = chunk_size
         os.makedirs(self.output_dir, exist_ok=True)
         self.html_head = '''<!DOCTYPE html>
@@ -198,12 +199,12 @@ class HtmlExporter:
 
                 nav_footer = '<div class="nav-footer">'
                 if chunk_id > 0:
-                    prev_file = f"{self.file_basename}-{chunk_id - 1}.html"
+                    prev_file = f"{self.project[:3]}{chunk_id - 1}.html"
                     nav_footer += f'<a href="{prev_file}">&laquo; Previous Page</a>'
                 if chunk_id > 0 and chunk_id < total_chunks - 1:
                     nav_footer += ' | '
                 if chunk_id < total_chunks - 1:
-                    next_file = f"{self.file_basename}-{chunk_id + 1}.html"
+                    next_file = f"{self.project[:3]}{chunk_id + 1}.html"
                     nav_footer += f'<a href="{next_file}">Next Page &raquo;</a>'
                 nav_footer += '</div>'
                 f.write(nav_footer)
@@ -278,15 +279,14 @@ class ChatProcessor:
             pass
         return tagged
 
-    def _count_utterances(self, filepath):
+    def _count_utterances(self, file_object):
+        file_object.seek(0)  # Reset the file pointer to the beginning if needed
         count = 0
-        try:
-            with open(filepath, 'r', encoding='utf8') as f:
-                for line in f:
-                    if line.startswith('*'):
-                        count += 1
-        except FileNotFoundError:
-            sys.exit(f"Error: Input file not found at '{filepath}'")
+        for line in file_object:
+            # Logic to count utterances
+            if line.startswith('*'):
+                count += 1  # Example logic; adjust as needed
+        file_object.seek(0)  # Reset pointer for further processing
         return count
 
     def run(self):
@@ -294,20 +294,37 @@ class ChatProcessor:
         try:
             self.tagger_input_file = tempfile.NamedTemporaryFile(mode='w+', encoding='utf8', delete=False, suffix=".txt")
             
-            total_utterances = self._count_utterances(self.args.out_file)
+            # Determine the appropriate file opening method
+            if self.args.out_file.endswith('.gz'):
+                try:
+                    f = gzip.open(self.args.out_file, 'rt', encoding='utf8')
+                    self.args.out_file = re.sub(r'\.gz$', '', self.args.out_file)  # remove .gz
+                except OSError as e:
+                    print(f"Error opening gzipped file: {e}")
+                    raise
+
+                sys.stderr.write(f"\n   DEBUG   Detected gzip compressed input file.\n{f}\n")
+            else:
+                f = open(self.args.out_file, 'r', encoding='utf8')
+                sys.stderr.write(f"\n   DEBUG   Detected uncompressed input file.\n{f}\n")
+
+            total_utterances = self._count_utterances(f)
             sys.stderr.write(f"Starting processing {total_utterances} utterances...\n")
             
             processed_count = 0
             header_lines = []
             utterance_block = []
 
-            with open(self.args.out_file, 'r', encoding='utf8') as f:
-                # Phase 1: Read all header lines until the first utterance
+            # Phase 1: Read all header lines until the first utterance
+            header_lines = []
+            utterance_block = []
+
+            with f:
                 for line in f:
                     if line.startswith('*'):
                         # First utterance found, header is complete
                         self.parse_header("".join(header_lines))
-                        utterance_block.append(line) # Start the first utterance block
+                        utterance_block.append(line)  # Start the first utterance block
                         break 
                     elif line.startswith('@'):
                         header_lines.append(line)
@@ -386,9 +403,8 @@ class ChatProcessor:
         if (m := re.search(r'@ID:\s+(.*?)\|(.*?)\|[A-Z]+\|([0-9;.]+)\|.*Target_Child', header_block)):
             self.language, self.project, age_str = m.groups()
             self.age, self.age_days = parseAge(age_str)
-            if self.html_exporter:
-                # export project name for html filenames
-                self.html_exporter.project = self.project
+            if self.html_exporter:                
+                self.html_exporter.project = self.project   # we use project name in html filenames
             if (m_p := re.search(r'@Participants:.*CHI\s(.*?\s)?Target_Child', header_block)):
                 child_name = m_p.group(1)#.split()[0]
                 if not child_name:

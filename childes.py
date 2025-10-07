@@ -436,7 +436,7 @@ class ChatProcessor:
                 writer.writeheader()
                 for row in self.outRows:
                     writer.writerow(row)
-            sys.stderr.write(f"\nOUTPUT: {final_csv_path}\n")
+            sys.stderr.write(f"\n  OUTPUT: {final_csv_path}\n")
             return
 
         self.tagger_input_file.seek(0)
@@ -497,7 +497,7 @@ class ChatProcessor:
                         server_url = f"{self.args.server_url.rstrip('/')}/{link_info['file']}#{uID}"
                         row['dep_parse_html_server'] = f'=HYPERLINK("{server_url}"; "WWW")'
                 writer.writerow(row)
-        sys.stderr.write(f"\nOUTPUT: {final_csv_path}\n")
+        sys.stderr.write(f"\n  OUTPUT: {final_csv_path}\n")
 
         """
         write the complete CSV output file as a reduced working version
@@ -535,7 +535,7 @@ class ChatProcessor:
                 # print only rows with specified POS tag
                 if re.search(re.compile(self.args.pos_output), row.get('pos', '')):
                     writer.writerow(row)
-        sys.stderr.write(f"\nOUTPUT: {final_csv_path}\n")
+        sys.stderr.write(f"\n  OUTPUT: {final_csv_path}\n")
 
     def _parse_conllu_output(self, conllu_str):
         conllu_data = {}

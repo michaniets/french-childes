@@ -19,7 +19,7 @@ DATAPATH="."
 PYPATH="$HOME/git/french-childes"  # adjust to your path
 TAGGER_PAR="${DATAPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
 API_MODEL="french"  # UDPipe model. For German: german-gsd-ud
-HTML_DIR="chifr"  # subfolder for parsed HTML files (don't precede with './')
+HTML_DIR="chi"  # subfolder for parsed HTML files (don't precede with './')
 SERVER_URL="https://141.58.164.21/${HTML_DIR}"  # julienas - keep string short to avoid large output files
 
 # Check for input file
@@ -63,7 +63,14 @@ echo "--- Step 2: (Optional) Add linguistic codings with dql.py ---"
 
 echo ""
 echo "--- Pipeline finished successfully ---"
-echo "Main output file: ${FILE_BASENAME}.cha.tagged.csv"
-echo "CoNLL-U output: ${FILE_BASENAME}.cha.conllu"
-echo "HTML output in: ${HTML_DIR}/"
-echo "------------------------------------"
+echo "Full output file: ${FILE_BASENAME}.cha.parsed.csv"
+echo "Work output file: ${FILE_BASENAME}.cha.work.csv"
+if [ -f "${FILE_BASENAME}.coded.conllu" ]; then
+    echo "CoNLL-U output: ${FILE_BASENAME}.cha.conllu"
+fi
+if [ -d "${HTML_DIR}" ]; then
+echo "---"
+echo "HTML files in ${HTML_DIR}/.  Delete or upload them:" 
+echo '   rsync -zav --no-perms ${HTML_DIR}/ ${SERVER_URL}:/Library/WebServer/Documents/${HTML_DIR}'
+echo '   ssh -x ${SERVER_URL} "chmod 644 /Library/WebServer/Documents/${HTML_DIR}/*.html"'
+fi

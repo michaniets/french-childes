@@ -629,7 +629,9 @@ class ChatProcessor:
     def _debug_udpipe_chunk(self, chunk_content, model, small_chunk_size=10, out_path='error_chunk.conllu'):
         """
         Split a failing CoNLL-U chunk into smaller chunks (default: 10 sentences),
-        send each to the UDPipe API; on error write content and exit
+        send each to the UDPipe API; on error write content and exit.
+        We check for some of the HTTP status codes returned by UDPipe/Lindat:
+        200=OK, 400=Bad Request (malformed CoNLL-U), 403=Forbidden, 413=Payload Too Large, 429=Too Many Requests, 500=Server Error, 502–504=Gateway/Timeout issues.
         """
         API_URL = "https://lindat.mff.cuni.cz/services/udpipe/api/process"
         sentences = [s for s in chunk_content.strip().split('\n\n') if s.strip()]
@@ -671,8 +673,7 @@ class ChatProcessor:
                 sys.exit(f"\nFATAL: UDPipe failed on a mini-chunk ({len(mini)} sentences): {detail}\n"
                         f"       Offending content saved to '{out_path}'.")
         # If we get here, all mini-chunks succeeded, so the failure is intermittent or due to size/timeout.
-        sys.exit("\nFATAL: All mini-chunks succeeded in isolation. The larger chunk likely hits a size/timeout limit.\n"
-                "       Consider reducing --chunk_parse or implementing exponential backoff/retry.")
+        sys.exit("\nDEBUG RESULT: All mini-chunks succeeded in isolation. Consider reducing --chunk_parse.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)

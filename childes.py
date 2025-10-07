@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "4.0"
+__version__ = "4.1"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
 __status__ = "07.10.25"
 __license__ = "GPL"
@@ -220,9 +220,17 @@ class HtmlExporter:
 #-------------------------------------------------------
 class ChatProcessor:
     def __init__(self, args):
-        self.args = args; self.pid = ''; self.child = ''; self.age = ''; self.age_days = 0; self.sNr = 0
-        self.childData = {}; self.outRows = []
-        self.tagger_input_file = None; self.tagged_temp_file = None; self.conllu_input_file = None
+        self.args = args
+        self.pid = ''
+        self.child = ''
+        self.age = ''
+        self.age_days = 0
+        self.sNr = 0 # This is now a global utterance counter
+        self.childData = {}
+        self.outRows = []
+        self.tagger_input_file = None
+        self.tagged_temp_file = None
+        self.conllu_input_file = None
         self.html_exporter = None
         if args.html_dir:
             file_basename = os.path.basename(args.out_file)
@@ -235,7 +243,7 @@ class ChatProcessor:
         Normally, in CHAT format punctuation should be separated by spaces already. (BeginChar/EndChar)
         German clitics can't be handled: habs, gehts, etc.
         """
-        if re.search(r'fra|french', self.language):
+        if hasattr(self, 'language') and re.search(r'fra|french', self.language):
             reBeginChar = re.compile(r'([\|\{\(\/\´\`"»«°<])') 
             reEndChar = re.compile(r'([\]\|\}\/\`\"\),\;\:\!\?\.\%»«>])(?=\s|$)')   # also if followed by end of line
             reBeginString = re.compile(r'([dcjlmnstDCJLNMST]\'|[Qq]u\'|[Jj]usqu\'|[Ll]orsqu\')') 
@@ -246,7 +254,7 @@ class ChatProcessor:
             s = re.sub(reEndString, r' \1', s)
             s = re.sub(r'\s+', ' ', s)
         # Add other languages here with 'elif self.args.language == "other_language":'
-        elif re.search(r'deu|german', self.language):
+        elif hasattr(self, 'language') and re.search(r'deu|german', self.language):
             pass
         else:
             # Default simple tokenization if no language is matched
@@ -256,7 +264,7 @@ class ChatProcessor:
 
     def correct_tagger_output(self, tagged):
         """Corrects known tagger errors for a specific language."""
-        if re.search(r'fra|french', self.language):
+        if hasattr(self, 'language') and re.search(r'fra|french', self.language):
             tagged = re.sub(r'([,\?])_NAM=<unknown>', r'\1_PON=,', tagged)
             tagged, count = re.subn('Marie_VER:pres=marier', 'Marie_NAM=Marie', tagged)
             tagged, count = re.subn(r'( allez[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER:impe=NEWLEM:aller', tagged)
@@ -272,90 +280,55 @@ class ChatProcessor:
             tagged, count = re.subn(r'( vu[^_ ]*)_([^= ]+)=<unknown>', r' \1_VER=NEWLEM:voir', tagged)
             tagged, count = re.subn(r'( ![^_ ]*)_([^= ]+)=<unknown>', r' !_PON=!', tagged)
             tagged, count = re.subn('NEWLEM:', '', tagged)
-        elif re.search(r'deu|german', self.language):
+        elif hasattr(self, 'language') and re.search(r'deu|german', self.language):
             pass
         else:
             pass
         return tagged
 
-    def _count_utterances(self, file_object):
-        file_object.seek(0)  # Reset the file pointer to the beginning if needed
-        count = 0
-        for line in file_object:
-            # Logic to count utterances
-            if line.startswith('*'):
-                count += 1  # Example logic; adjust as needed
-        file_object.seek(0)  # Reset pointer for further processing
-        return count
-
     def run(self):
-        """Main entry point using a streaming parser."""
+        """Main entry point using a session-aware streaming parser."""
         try:
             self.tagger_input_file = tempfile.NamedTemporaryFile(mode='w+', encoding='utf8', delete=False, suffix=".txt")
             
-            # Check for gzipped files
-            if self.args.out_file.endswith('.gz'):
-                try:
-                    f = gzip.open(self.args.out_file, 'rt', encoding='utf8')
-                    self.args.out_file = re.sub(r'\.gz$', '', self.args.out_file)  # remove .gz
-                except OSError as e:
-                    print(f"Error opening gzipped file: {e}")
-                    raise
-            else:
-                f = open(self.args.out_file, 'r', encoding='utf8')
+            opener = gzip.open if self.args.out_file.endswith('.gz') else open
+            encoding = 'utf8'
 
-            total_utterances = self._count_utterances(f)
-            sys.stderr.write(f"Starting processing {total_utterances} utterances...\n")
+            with opener(self.args.out_file, 'rt', encoding=encoding) as f:
+                full_content = f.read()
+
+            # Split the entire file content into session blocks based on @Begin
+            # The filter(None, ...) removes any empty strings that might result from the split.
+            session_blocks = filter(None, re.split(r'(?=@Begin)', full_content))
+            total_sessions = len(list(re.finditer(r'@Begin', full_content)))
+            if total_sessions == 0: total_sessions = 1 # Case for files without @Begin
+            sys.stderr.write(f"Found {total_sessions} session(s) to process.\n")
             
-            processed_count = 0
-            header_lines = []
-            utterance_block = []
+            session_blocks_list = list(session_blocks)
+            if not session_blocks_list:
+                 session_blocks_list = [full_content]
 
-            # Phase 1: Read all header lines until the first utterance
-            header_lines = []
-            utterance_block = []
-
-            with f:
-                for line in f:
-                    if line.startswith('*'):
-                        # First utterance found, header is complete
-                        self.parse_header("".join(header_lines))
-                        utterance_block.append(line)  # Start the first utterance block
-                        break 
-                    elif line.startswith('@'):
-                        header_lines.append(line)
+            for i, session_content in enumerate(session_blocks_list):
+                sys.stderr.write(f"\rProcessing session {i+1}/{total_sessions}...")
+                sys.stderr.flush()
+                # Find the header part of the current session
+                header_match = re.match(r'((?:@[^\n]*\n)*)', session_content)
+                if not header_match:
+                    continue
                 
-                # Phase 2: Process the rest of the file for utterance blocks
-                for line in f:
-                    if line.startswith('*'):
-                        # A new utterance begins, so process the completed one.
-                        if utterance_block:
-                            self.process_utterance_block("".join(utterance_block))
-                            processed_count += 1
-                            percent = (processed_count / total_utterances) * 100 if total_utterances > 0 else 0
-                            sys.stderr.write(f"\rProcessing utterances: {processed_count}/{total_utterances} ({percent:.1f}%)")
-                            sys.stderr.flush()
-                        
-                        utterance_block = [line]
-                    elif line.startswith('@'):
-                        # An @-tier (like @End, @G) terminates the previous utterance. (@G is rarely used for situational info)
-                        if utterance_block:
-                            self.process_utterance_block("".join(utterance_block))
-                            processed_count += 1
-                            sys.stderr.write(f"\rProcessing utterances: {processed_count}/{total_utterances} ({(processed_count/total_utterances)*100:.1f}%)")
-                            sys.stderr.flush()
-                        utterance_block = [] # Discard the @-tier itself.
-                    else: # Dependent tier
-                        if utterance_block:
-                            utterance_block.append(line)
-            
-            # Process the very last utterance block in the file
-            if utterance_block:
-                self.process_utterance_block("".join(utterance_block))
-                processed_count += 1
+                header_block = header_match.group(1)
+                self.parse_header(header_block)
 
-            sys.stderr.write(f"\rProcessing utterances: {processed_count}/{total_utterances} (100.0%)\n")
-            sys.stderr.write("Initial parsing complete.\n")
+                # The rest of the session content contains the utterances
+                utterance_content = session_content[len(header_block):]
+                
+                # Use a regex to find all utterance blocks (*-tier + dependent %-tiers)
+                utterance_blocks = re.findall(r'(\*[^\n]*(?:\n(?![*@])[^\n]*)*)', utterance_content)
+
+                for block in utterance_blocks:
+                    self.process_utterance_block(block)
+
+            sys.stderr.write("\nInitial parsing complete.\n")
             self.finalize_output()
 
         finally:
@@ -368,7 +341,7 @@ class ChatProcessor:
         timeCode = (m.group(1) if (m := re.search(r'\x15(\d+_\d+)\x15', block)) else '')
         block_no_time = re.sub(r'\s*\x15.*?\x15', '', block) # remove including spaces
         
-        if not (m := re.search(r'^\*([A-Z]+):\s+(.*)', block_no_time.strip())):
+        if not (m := re.search(r'^\*([A-Z0-9]+):\s+(.*)', block_no_time.strip())):
             return
         
         speaker, utt = m.groups()
@@ -382,8 +355,6 @@ class ChatProcessor:
         self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
 
     def parse_header(self, header_block):
-        self.pid = ''
-        self.sNr = 0
         self.childData = {}
 
         if m := re.search(r'@PID:.*?-(\d+)', header_block):
@@ -396,18 +367,23 @@ class ChatProcessor:
           @Participants:	CHI Anaé Target_Child, MOT Marie Mother, BRO Ael Brother, BR1 Arthur Brother
           @Participants:	MOT Mother, CHI Target_Child
         """
-        if (m := re.search(r'@ID:\s+(.*?)\|(.*?)\|[A-Z]+\|([0-9;.]+)\|.*Target_Child', header_block)):
+        if (m := re.search(r'@ID:\s+(.*?)\|(.*?)\|CHI\|([0-9;.]+)\|.*Target_Child', header_block)):
             self.language, self.project, age_str = m.groups()
             self.age, self.age_days = parseAge(age_str)
             if self.html_exporter:                
                 self.html_exporter.project = self.project   # we use project name in html filenames
-            if (m_p := re.search(r'@Participants:.*CHI\s(.*?\s)?Target_Child', header_block)):
-                child_name = m_p.group(1)#.split()[0]
-                if not child_name:
-                    child_name = "NN"
-                else:
-                    child_name = child_name.split()[0]
+            if (m_p := re.search(r'@Participants:.*CHI\s+([^\s,]+)', header_block)):
+                child_name = m_p.group(1)
                 self.child = f"{child_name}_{self.project[:3]}"
+                # normalise some inconsistencies in the original CHAT files
+                self.child = re.sub(r'[éè]', 'e', self.child)  # e.g. Anaé | Anae -> Anae
+                self.child = re.sub(r'Ann_Yor', 'Anne_Yor', self.child)
+                self.child = re.sub(r'(Greg|Gregx|Gregoire)_Cha', 'Gregoire_Cha', self.child)
+                self.child = re.sub(r'Sullyvan', 'Sullivan', self.child)
+                # store child data
+                self.childData['CHI'] = (self.child, self.age, self.age_days)
+            else: # Fallback if name is not next to CHI
+                self.child = f"NN_{self.project[:3]}"
                 self.childData['CHI'] = (self.child, self.age, self.age_days)
     
     def generate_rows_from_tagger(self, splitUtt, raw_utt, speaker, uttID, timeCode):
@@ -420,18 +396,22 @@ class ChatProcessor:
 
     def get_speaker_age(self, speaker):
         if speaker in self.childData: return self.childData[speaker][1], self.childData[speaker][2], "C"
+        # For 'other' speakers, return empty age strings but carry over the target child's age_days for filtering/sorting
         return '', self.childData.get('CHI', ('', '', 0))[2], "X"
     
     def finalize_output(self, *args, **kwargs):
+        if not self.outRows:
+            sys.stderr.write("\nNo data rows were generated. Exiting.\n")
+            return
+
         if self.args.parameters is None:
-            final_csv_path = self.args.out_file + '.csv'
+            final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.csv'
             header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'utterance', 'utt_clean']
             with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
                 writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore', 
                                         quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='|')
                 writer.writeheader()
-                for row in self.outRows:
-                    writer.writerow(row)
+                writer.writerows(self.outRows)
             sys.stderr.write(f"\n  OUTPUT: {final_csv_path}\n")
             return
 
@@ -450,7 +430,7 @@ class ChatProcessor:
                 if self.html_exporter:
                     html_links = self.html_exporter.export(parsed_conllu_str, self.outRows)
                 if self.args.write_conllu:
-                    conllu_output_path = self.args.out_file + '.conllu'
+                    conllu_output_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.conllu'
                     with open(conllu_output_path, 'w', encoding='utf8') as f_conllu:
                         f_conllu.write(parsed_conllu_str)
                     sys.stderr.write(f"Generated standalone CoNLL-U file: {conllu_output_path}\n")
@@ -459,7 +439,7 @@ class ChatProcessor:
         write the complete CSV output file incuding CoNLL-U columns
         """
         sys.stderr.write("Writing final CSV output file incuding CoNLL-U columns...")
-        final_csv_path = self.args.out_file + '.parsed.csv'
+        final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.parsed.csv'
         header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'dep_parse_html_server', 'dep_parse_html_local']
         header.extend([f'conll_{i}' for i in range(1, 11)])
 
@@ -499,7 +479,7 @@ class ChatProcessor:
         write the complete CSV output file as a reduced working version
         """
         sys.stderr.write(f"Writing final CSV output file as a reduced working version (without CoNLL-U, limited to POS={self.args.pos_output})...")
-        final_csv_path = self.args.out_file + '.work.csv'
+        final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.work.csv'
         header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'dep_parse_html_server', 'dep_parse_html_local']
 
         with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
@@ -543,7 +523,7 @@ class ChatProcessor:
                 continue
             if current_item_id and line:
                 cols = line.split('\t')
-                if len(cols) >= 2:
+                if len(cols) >= 2 and cols[0].isdigit():
                     unique_id = f"{current_item_id}_w{cols[0]}"
                     conllu_data[unique_id] = cols
         return conllu_data
@@ -551,7 +531,7 @@ class ChatProcessor:
     def run_treetagger(self, tagger_input):
         sys.stderr.write("Calling TreeTagger...\n")
         tagger_bin, param_file = './tree-tagger', self.args.parameters
-        if not all(map(os.path.exists, [tagger_bin, param_file])): sys.exit("Tagger binary or param file not found.")
+        if not all(map(os.path.exists, [tagger_bin, param_file])): sys.exit(f"Tagger binary or param file not found. Checked: {tagger_bin}, {param_file}")
         self.tagged_temp_file = tempfile.NamedTemporaryFile(mode='w+', encoding='utf8', delete=False, suffix=".txt")
         self.tagged_temp_file.write(re.sub(' +', '\n', tagger_input)); self.tagged_temp_file.flush()
         with open(self.tagged_temp_file.name, 'r') as f_in:
@@ -677,14 +657,14 @@ class ChatProcessor:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('out_file', type=str,  help='The input CHAT file (e.g., french-sample.cha)')
+    parser.add_argument('out_file', type=str,  help='The input CHAT file (e.g., french-sample.cha or a .gz file)')
     parser.add_argument('-p', '--parameters', type=str, help='(Optional) TreeTagger parameter file. If provided, enables full annotation.')
     parser.add_argument('--api_model', type=str, help='(Optional) Name of the UDPipe model for the Lindat API (e.g., french). Requires --parameters.')
     parser.add_argument('--html_dir', type=str, help='(Optional) Directory to save HTML dependency parse files (keep the name short!). Requires --api_model.')
     parser.add_argument('--server_url', type=str, help='(Optional) Base URL for server links in the final CSV.')
     parser.add_argument('--write_conllu', action='store_true', help='(Optional) Write the final parsed CoNLL-U data to a standalone file. Requires --api_model.')
     parser.add_argument('--chunk_parse', type=int, default=10000, help='Number of utterances per API parsing chunk. Default: 10000.')
-    parser.add_argument('--chunk_html', type=int, default=5000, help='Number of utterances per HTML output file. Default: 10000.')
+    parser.add_argument('--chunk_html', type=int, default=5000, help='Number of utterances per HTML output file. Default: 5000.')
     parser.add_argument('--pos_output', default=".*", type=str, help='Regex to match POS tags. The reduced table ("work") will only contain matching rows.')
     parser.add_argument('--pos_utterance', type=str, help='Regex to match POS tags. The full utterance text will only be printed on matching rows.')
     parser.add_argument('--utt_clean', action='store_true', help='Populate the utt_clean column.')

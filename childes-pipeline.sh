@@ -15,8 +15,9 @@ set -e
 # --- Configuration ---
 # Path to your scripts and models
 # UDPipe model list: https://lindat.mff.cuni.cz/repository/items/41f05304-629f-4313-b9cf-9eeb0a2ca7c6
-MYPATH="."
-TAGGER_PAR="${MYPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
+DATAPATH="."
+PYPATH="$HOME/git/french-childes"  # adjust to your path
+TAGGER_PAR="${DATAPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
 API_MODEL="french"  # UDPipe model. For German: german-gsd-ud
 HTML_DIR="chifr"  # subfolder for parsed HTML files (don't precede with './')
 SERVER_URL="https://141.58.164.21/${HTML_DIR}"  # julienas - keep string short to avoid large output files
@@ -36,7 +37,7 @@ echo "--- Step 1: Running childes.py for conversion, tagging, and parsing ---"
 # Version>=4.0 of childes.py replaces the old multi-step process.
 # It converts the CHAT file, runs TreeTagger, calls the UDPipe API,
 # generates HTML, and merges all data into the final CSV and CoNLL-U files.
-python3 "${MYPATH}/childes.py" "${INPUT_FILE}" \
+python3 "${PYPATH}/childes.py" "${INPUT_FILE}" \
     --parameters "${TAGGER_PAR}" --api_model "${API_MODEL}" \
     --write_conllu --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
     --pos_utterance '(AUX|VER)' --pos_output '(AUX|VER)'
@@ -49,10 +50,10 @@ echo "--- Step 2: (Optional) Add linguistic codings with dql.py ---"
 # You may need to adjust the arguments. 
 # dql.py requires grewpy to be installed.
 #
-# DQL_REQUESTS="${MYPATH}/requests.tsv"
+# DQL_REQUESTS="${DATAPATH}/requests.tsv"
 # if [ -f "$DQL_REQUESTS" ]; then
 #     echo "Running dql.py to add codings..."
-#     python3 "${MYPATH}/dql.py" "${FILE_BASENAME}.cha.conllu" \
+#     python3 "${PYPATH}/dql.py" "${FILE_BASENAME}.cha.conllu" \
 #         -r "${DQL_REQUESTS}" \
 #         -o "${FILE_BASENAME}.coded.conllu"
 # else

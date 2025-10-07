@@ -3,7 +3,7 @@
 __author__ = "Achim Stein"
 __version__ = "4.0"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "06.10.25"
+__status__ = "07.10.25"
 __license__ = "GPL"
 
 import sys
@@ -12,10 +12,14 @@ import os
 import subprocess
 import csv
 import tempfile
+import gzip
 import io
 import requests
 from conllu import parse
 
+#-------------------------------------------------------
+# Helper functions
+#-------------------------------------------------------
 def parseAge(age_str):
     year = months = days = 0
     m = re.search(r'(\d+);', age_str)
@@ -55,6 +59,9 @@ def process_tagged_data(tagged):
         processed_lines.append('\t'.join(columns))
     return '\n'.join(processed_lines)
     
+#-------------------------------------------------------
+# HTML export class for UD parsed data
+#-------------------------------------------------------
 class HtmlExporter:
     """Generates a chunked, styled HTML corpus with dependency trees."""
     def __init__(self, output_dir, file_basename, chunk_size=1000):
@@ -146,7 +153,7 @@ class HtmlExporter:
             end_index = start_index + self.chunk_size
             chunk_sentences = sentences[start_index:end_index]
             
-            html_filename = f"{chunk_id}.html" # keep as short as possible
+            html_filename = f"{self.project[:3]}{chunk_id}.html" # keep as short as possible
             html_filepath = os.path.join(self.output_dir, html_filename)
 
             with open(html_filepath, 'w', encoding='utf8') as f:
@@ -158,7 +165,7 @@ class HtmlExporter:
                     
                     info = header_info_map.get(utt_id, {})
                     child_project = info.get('child_project', 'N/A')
-                    child_other = info.get('child_other', 'N/A')
+                    html_filename = f"{self.project[:3]}{chunk_id}.html"
                     speaker = info.get('speaker', 'N/A')
                     age = info.get('age', '_')
                     raw_utterance = info.get('utterance', '[Utterance not found]')
@@ -377,15 +384,18 @@ class ChatProcessor:
           @Participants:	MOT Mother, CHI Target_Child
         """
         if (m := re.search(r'@ID:\s+(.*?)\|(.*?)\|[A-Z]+\|([0-9;.]+)\|.*Target_Child', header_block)):
-            self.language, project, age_str = m.groups()
+            self.language, self.project, age_str = m.groups()
             self.age, self.age_days = parseAge(age_str)
+            if self.html_exporter:
+                # export project name for html filenames
+                self.html_exporter.project = self.project
             if (m_p := re.search(r'@Participants:.*CHI\s(.*?\s)?Target_Child', header_block)):
                 child_name = m_p.group(1)#.split()[0]
                 if not child_name:
                     child_name = "NN"
                 else:
                     child_name = child_name.split()[0]
-                self.child = f"{child_name}_{project[:3]}"
+                self.child = f"{child_name}_{self.project[:3]}"
                 self.childData['CHI'] = (self.child, self.age, self.age_days)
     
     def generate_rows_from_tagger(self, splitUtt, raw_utt, speaker, uttID, timeCode):

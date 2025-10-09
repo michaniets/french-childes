@@ -41,7 +41,7 @@ echo "--- Step 1: Running childes.py for conversion, tagging, and parsing ---"
 python3 "${PYPATH}/childes.py" "${INPUT_FILE}" \
     --parameters "${TAGGER_PAR}" --api_model "${API_MODEL}" \
     --write_conllu --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
-    --pos_utterance '(AUX|VER)' --pos_output '(AUX|VER)'
+    --pos_utterance '(AUX|VER|VV)' --pos_output '(AUX|VER|VV)'   ### TAGS NEED TO BE ADJUSTED FOR YOUR LANGUAGE ###
 
 echo ""
 echo "--- Step 2: (Optional) Add linguistic codings with dql.py ---"

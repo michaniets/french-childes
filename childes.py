@@ -3,7 +3,7 @@
 __author__ = "Achim Stein"
 __version__ = "4.0"
 __email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "07.10.25"
+__status__ = "09.10.25"
 __license__ = "GPL"
 
 import sys
@@ -87,6 +87,7 @@ class HtmlExporter:
         background: #f0f0f0; color: black; font-family: "Courier New", Courier, monospace;
         font-size: 12px; padding: 5px; border-left: 3px solid blue; margin-bottom: 1em;
       }
+      .nav-header { margin-bottom: 2em; text-align: center; }
       .nav-footer { margin-top: 2em; text-align: center; }
       .a { color:black; font-weight: bold; }
       .v { background-color:yellow; }
@@ -149,7 +150,7 @@ class HtmlExporter:
         html_links = {}
         total_chunks = (len(sentences) + self.chunk_size - 1) // self.chunk_size
         for chunk_id in range(total_chunks):
-            sys.stderr.write(f"\rWriting HTML files to {self.output_dir} for chunk {chunk_id}/{total_chunks}")
+            sys.stderr.write(f"\rWriting HTML files to {self.output_dir} for chunk {chunk_id+1}/{total_chunks}")
             sys.stderr.flush()
             start_index = chunk_id * self.chunk_size
             end_index = start_index + self.chunk_size
@@ -159,7 +160,22 @@ class HtmlExporter:
             html_filepath = os.path.join(self.output_dir, html_filename)
 
             with open(html_filepath, 'w', encoding='utf8') as f:
+                # HTML header
                 f.write(self.html_head % self.file_basename)
+                # Navigation header
+                nav_header = ''
+                if chunk_id > 0:
+                    prev_file = f"{self.project[:3]}{chunk_id - 1}.html"
+                    nav_header += f'<a href="{prev_file}">&laquo; Previous Page</a>'
+                if chunk_id > 0 and chunk_id < total_chunks - 1:
+                    nav_header += ' | '
+                nav_header += f" <b> CHILDES project {self.project}</b> | "
+                if chunk_id < total_chunks - 1:
+                    next_file = f"{self.project[:3]}{chunk_id + 1}.html"
+                    nav_header += f'<a href="{next_file}">Next Page &raquo;</a>'
+                nav_header = '<div class="nav-header">' + nav_header + '</div>'
+                f.write(nav_header)
+
 
                 for sentence in chunk_sentences:
                     if 'item_id' not in sentence.metadata: continue
@@ -198,16 +214,8 @@ class HtmlExporter:
                     f.write(f'<p class="coding">{raw_utterance}</p>\n')
                     f.write(f'<div class="parse"><p>{formatted_tree}</p></div>\n')
 
-                nav_footer = '<div class="nav-footer">'
-                if chunk_id > 0:
-                    prev_file = f"{self.project[:3]}{chunk_id - 1}.html"
-                    nav_footer += f'<a href="{prev_file}">&laquo; Previous Page</a>'
-                if chunk_id > 0 and chunk_id < total_chunks - 1:
-                    nav_footer += ' | '
-                if chunk_id < total_chunks - 1:
-                    next_file = f"{self.project[:3]}{chunk_id + 1}.html"
-                    nav_footer += f'<a href="{next_file}">Next Page &raquo;</a>'
-                nav_footer += '</div>'
+                # copy header to footer
+                nav_footer = '<div class="nav-footer">' + nav_header + '</div>'
                 f.write(nav_footer)
                 f.write(self.html_foot)
         sys.stderr.write("\n")
@@ -310,8 +318,8 @@ class ChatProcessor:
             for i, session_content in enumerate(session_blocks_list):
                 sys.stderr.write(f"\rProcessing session {i}/{total_sessions}...")
                 sys.stderr.flush()
-                # Find the header part of the current session
-                header_match = re.match(r'((?:@[^\n]*\n)*)', session_content)
+                # Find the header part of the current session (can span multiple lines, e.g. Italian files)
+                header_match = re.match(r'((?:(?:@|\t)[^\n]*\n)*)', session_content)
                 if not header_match:
                     continue
                 
@@ -368,6 +376,7 @@ class ChatProcessor:
         """
         if (m := re.search(r'@ID:\s+(.*?)\|(.*?)\|CHI\|([0-9;.]+)\|.*Target_Child', header_block)):
             self.language, self.project, age_str = m.groups()
+            if age_str == '24;00.02': age_str = '2;00.02'  # fix bug in Italian Calambrone project (stating age 24 for Diana)
             self.age, self.age_days = parseAge(age_str)
             if self.html_exporter:                
                 self.html_exporter.project = self.project   # we use project name in html filenames

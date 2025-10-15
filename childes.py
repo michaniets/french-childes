@@ -1,9 +1,8 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "4.0"
-__email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "09.10.25"
+__version__ = "4.1"
+__status__ = "15.10.25"
 __license__ = "GPL"
 
 import sys
@@ -269,6 +268,31 @@ class ChatProcessor:
             s = re.sub(r'\s+', ' ', s)
         return s
 
+    def tokens2conllu(self):
+        """Creates a basic CoNLL-U file from tokens when TreeTagger is not used."""
+        sys.stderr.write("Creating temporary CoNLL-U file from tokens for parsing...\n")
+        
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', delete=False, suffix=".conllu.in") as temp_f:
+            self.conllu_input_file = temp_f.name
+
+        # Group words by utterance ID to reconstruct sentences
+        utterances = {}
+        for row in self.outRows:
+            utt_id_base = re.match(r'(.*)_w\d+', row['utt_id']).group(1)
+            if utt_id_base not in utterances:
+                utterances[utt_id_base] = []
+            # The word is at index 10 in the row dictionary
+            utterances[utt_id_base].append(row['word'])
+
+        with open(self.conllu_input_file, 'w', encoding='utf8') as f:
+            for utt_id, tokens in utterances.items():
+                f.write(f"# item_id = {utt_id}\n")
+                for idx, token in enumerate(tokens, 1):
+                    # Basic CoNLL-U: ID, FORM, and underscores for the rest
+                    line = f"{idx}\t{token}\t_\t_\t_\t_\t_\t_\t_\t_\n"
+                    f.write(line)
+                f.write("\n")
+
     def correct_tagger_output(self, tagged):
         """Corrects known tagger errors for a specific language."""
         if hasattr(self, 'language') and re.search(r'fra|french', self.language):
@@ -408,106 +432,95 @@ class ChatProcessor:
         return '', self.childData.get('CHI', ('', '', 0))[2], "X"
     
     def finalize_output(self, *args, **kwargs):
-        """Final processing: run tagger, parser, write output files"""
+        """Final processing: run tagger and/or parser, write output files"""
         if not self.outRows:
             sys.stderr.write("\nNo data rows were generated. Exiting.\n")
             return
 
-        if self.args.parameters is None:
+        itemPOS, itemLemmas, itemTagged = {}, {}, {}
+        parsed_conllu_str = None
+        
+        if self.args.parameters:
+            self.tagger_input_file.seek(0)
+            taggerInput = self.tagger_input_file.read()
+            if taggerInput:
+                _, itemPOS, itemLemmas, itemTagged = self.run_treetagger(taggerInput)
+
+        if self.args.api_model:
+            if not self.conllu_input_file or not os.path.exists(self.conllu_input_file):
+                self.tokens2conllu()
+            
+            if self.conllu_input_file and os.path.exists(self.conllu_input_file):
+                parsed_conllu_str = self.run_udpipe_api(self.conllu_input_file, self.args.api_model, chunk_size=self.args.chunk_parse)
+
+        if not self.args.parameters and not self.args.api_model:
             final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.csv'
             header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'utterance', 'utt_clean']
             with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
-                writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore', 
-                                        quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='|')
+                writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='|')
                 writer.writeheader()
                 writer.writerows(self.outRows)
             sys.stderr.write(f"\n  OUTPUT: {final_csv_path}\n")
             return
-
-        self.tagger_input_file.seek(0)
-        taggerInput = self.tagger_input_file.read()
-        
-        itemPOS, itemLemmas, itemTagged = {}, {}, {}
-        if taggerInput:
-            _, itemPOS, itemLemmas, itemTagged = self.run_treetagger(taggerInput)
-        
+            
         html_links, conllu_data = {}, {}
-        if self.args.api_model and self.conllu_input_file:
-            parsed_conllu_str = self.run_udpipe_api(self.conllu_input_file, self.args.api_model, chunk_size=self.args.chunk_parse)
-            if parsed_conllu_str:
-                conllu_data = self._parse_conllu_output(parsed_conllu_str)
-                if self.html_exporter:
-                    html_links = self.html_exporter.export(parsed_conllu_str, self.outRows)
-                if self.args.write_conllu:
-                    conllu_output_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.conllu'
-                    with open(conllu_output_path, 'w', encoding='utf8') as f_conllu:
-                        f_conllu.write(parsed_conllu_str)
-                    sys.stderr.write(f"Generated standalone CoNLL-U file: {conllu_output_path}\n")
+        if parsed_conllu_str:
+            conllu_data = self._parse_conllu_output(parsed_conllu_str)
+            if self.html_exporter:
+                html_links = self.html_exporter.export(parsed_conllu_str, self.outRows)
+            if self.args.write_conllu:
+                conllu_output_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.conllu'
+                with open(conllu_output_path, 'w', encoding='utf8') as f_conllu:
+                    f_conllu.write(parsed_conllu_str)
+                sys.stderr.write(f"Generated standalone CoNLL-U file: {conllu_output_path}\n")
 
-        """
-        (This is a bit redundant: we write two versions of the CSV file, one with CoNLL-U columns, one without)
-        1. write the complete CSV output file including CoNLL-U columns
-        """
-        sys.stderr.write("Writing final CSV output file including CoNLL-U columns...")
-        final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.parsed.csv'
-        header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'URLwww', 'URLlok']
-        header.extend([f'conll_{i}' for i in range(1, 11)])
+        sys.stderr.write("Writing final CSV output file(s)...\n")
+        parsed_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.parsed.csv'
+        light_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.light.csv'
 
-        with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
-            writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore',
-                                    quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='\x1f')
-            writer.writeheader()
+        header_parsed = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'URLwww', 'URLlok']
+        header_parsed.extend([f'conll_{i}' for i in range(1, 11)])
+        header_light = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'URLwww', 'URLlok']
+
+        with open(parsed_csv_path, 'w', newline='', encoding='utf8') as f_parsed, \
+             open(light_csv_path, 'w', newline='', encoding='utf8') as f_light:
+            
+            writer_parsed = csv.DictWriter(f_parsed, delimiter='\t', fieldnames=header_parsed, extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='\x1f')
+            writer_light = csv.DictWriter(f_light, delimiter='\t', fieldnames=header_light, extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='\x1f')
+            writer_parsed.writeheader()
+            writer_light.writeheader()
+
             for row in self.outRows:
                 uID, wID_str = re.match(r'(.*)_w(\d+)', row['utt_id']).groups()
                 wID = int(wID_str)
+                
+                # --- THIS IS THE FIX ---
+                # Safely add tagger info using a try/except block to handle mismatches
                 try:
-                    row['pos'] = itemPOS.get(uID, [''] * wID)[wID - 1]
-                    row['lemma'] = itemLemmas.get(uID, [''] * wID)[wID - 1]
-                    row['utt_tagged'] = itemTagged.get(uID, '') if self.args.utt_tagged else ''
-                except (KeyError, IndexError): pass
+                    if itemPOS:
+                        row['pos'] = itemPOS.get(uID, [])[wID - 1]
+                    if itemLemmas:
+                        row['lemma'] = itemLemmas.get(uID, [])[wID - 1]
+                except IndexError:
+                    # If there's a mismatch, assign placeholders and continue
+                    row['pos'] = '_'
+                    row['lemma'] = '_'
+                    # Optionally, uncomment the next line to be notified of mismatches
+                    # sys.stderr.write(f"\nWarning: Token/tag mismatch in utterance {uID}")
 
-                conll_row = conllu_data.get(row['utt_id'], [''] * 10)
+                if self.args.utt_tagged and itemTagged:
+                    row['utt_tagged'] = itemTagged.get(uID, '')
+
+                conll_row = conllu_data.get(row['utt_id'], [])
                 for i, col_val in enumerate(conll_row):
                     row[f'conll_{i+1}'] = col_val
                 
-                if self.args.pos_utterance:
-                    if not re.search(self.args.pos_utterance, row.get('pos', '')):
-                        row['utterance'] = row['utt_clean'] = row['utt_tagged'] = ''
+                if not self.args.parameters and self.args.api_model and len(conll_row) > 3:
+                    row['pos'] = conll_row[3]
+                    row['lemma'] = conll_row[2]
 
-                link_info = html_links.get(uID)
-                if link_info:
-                    rel_local_path = os.path.relpath(link_info['local'])
-                    local_url = f"http://localhost/{rel_local_path}#{uID}"
-                    row['URLlok'] = f'=HYPERLINK("{local_url}"; "LOC")'
-                    if self.args.server_url:
-                        server_url = f"{self.args.server_url.rstrip('/')}/{link_info['file']}#{uID}"
-                        row['URLwww'] = f'=HYPERLINK("{server_url}"; "WWW")'
-                writer.writerow(row)
-        sys.stderr.write(f"\n  OUTPUT: {final_csv_path}\n")
-
-        """
-        2. write the complete CSV output file as a reduced version (light)
-        """
-        sys.stderr.write(f"Writing final CSV output file as a reduced working version (without CoNLL-U, limited to POS={self.args.pos_output})...")
-        final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.light.csv'
-        header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'URLwww', 'URLlok']
-
-        with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
-            writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore',
-                                    quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='\x1f')
-            writer.writeheader()
-            for row in self.outRows:
-                uID, wID_str = re.match(r'(.*)_w(\d+)', row['utt_id']).groups()
-                wID = int(wID_str)
-                try:
-                    row['pos'] = itemPOS.get(uID, [''] * wID)[wID - 1]
-                    row['lemma'] = itemLemmas.get(uID, [''] * wID)[wID - 1]
-                    row['utt_tagged'] = itemTagged.get(uID, '') if self.args.utt_tagged else ''
-                except (KeyError, IndexError): pass
-
-                if self.args.pos_utterance:
-                    if not re.search(self.args.pos_utterance, row.get('pos', '')):
-                        row['utterance'] = row['utt_clean'] = row['utt_tagged'] = ''
+                if self.args.pos_utterance and not re.search(self.args.pos_utterance, row.get('pos', '')):
+                    row['utterance'] = row['utt_clean'] = row['utt_tagged'] = ''
 
                 link_info = html_links.get(uID)
                 if link_info:
@@ -518,10 +531,13 @@ class ChatProcessor:
                         server_url = f"{self.args.server_url.rstrip('/')}/{link_info['file']}#{uID}"
                         row['URLwww'] = f'=HYPERLINK("{server_url}"; "WWW")'
                 
-                # print only rows with specified POS tag
+                writer_parsed.writerow(row)
+
                 if re.search(re.compile(self.args.pos_output), row.get('pos', '')):
-                    writer.writerow(row)
-        sys.stderr.write(f"\n  OUTPUT: {final_csv_path}\n")
+                    writer_light.writerow(row)
+
+        sys.stderr.write(f"  OUTPUT (full): {parsed_csv_path}\n")
+        sys.stderr.write(f"  OUTPUT (light): {light_csv_path}\n")
 
     def _parse_conllu_output(self, conllu_str):
         conllu_data = {}
@@ -668,8 +684,8 @@ class ChatProcessor:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('out_file', type=str,  help='The input CHAT file (e.g., french-sample.cha or a .gz file)')
-    parser.add_argument('-p', '--parameters', type=str, help='(Optional) TreeTagger parameter file. If provided, enables full annotation.')
-    parser.add_argument('--api_model', type=str, help='(Optional) Name of the UDPipe model for the Lindat API (e.g., french). Requires --parameters.')
+    parser.add_argument('-p', '--parameters', type=str, help='(Optional) TreeTagger parameter file. Requires TreeTagger binary in ./tree-tagger.')
+    parser.add_argument('--api_model', type=str, help='(Optional) Name of the UDPipe model for the Lindat API (e.g., french).')
     parser.add_argument('--html_dir', type=str, help='(Optional) Directory to save HTML dependency parse files (keep the name short!). Requires --api_model.')
     parser.add_argument('--server_url', type=str, help='(Optional) Base URL for server links in the final CSV.')
     parser.add_argument('--write_conllu', action='store_true', help='(Optional) Write the final parsed CoNLL-U data to a standalone file. Requires --api_model.')

@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
-__author__ = "Achim Stein"
+__author__ = "Anonymous"
 __version__ = "4.1"
-__status__ = "15.10.25"
+__status__ = "09.10.25"
 __license__ = "GPL"
 
 import sys
@@ -210,7 +210,8 @@ class HtmlExporter:
                         f.write(f"<h3>ID: {utt_id} | {child_project} | <span class=r>{speaker} | {age}</span></h3>\n")
                     else:
                         f.write(f"<h3>ID: {utt_id} | {child_project} | {speaker}</h3>\n")
-                    f.write(f'<p class="coding">{raw_utterance}</p>\n')
+                    escaped_utt = raw_utterance.replace('<', '&lt').replace('>', '&gt')
+                    f.write(f'<p class="coding">{escaped_utt}</p>\n')
                     f.write(f'<div class="parse"><p>{formatted_tree}</p></div>\n')
 
                 # copy header to footer

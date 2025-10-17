@@ -26,7 +26,7 @@ This script converts CHILDES chat data to a one-word-per-line CSV format. It int
 The recommended method is to adapt the wrapper script `childes-pipeline.sh` to your local paths and run it with the CHAT file as an argument:
 
 ```sh
-./childes-pipeline.sh <chatfile.cha.gz>
+./childes-pipeline.sh <chatfile.cha[.gz]>
 ```
 
 Alternatively, run `childes.py` manually.

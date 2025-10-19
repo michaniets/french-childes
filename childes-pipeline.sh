@@ -72,7 +72,7 @@ echo "--- Step 2: (Optional) Add linguistic codings with dql.py ---"
 DQL_REQUESTS="${DATAPATH}/object-clitics.dql.query"
 if [ -f "$DQL_REQUESTS" ]; then
     echo "Running dql.py to add codings..."
-    python3 "${PYPATH}/dql.py" "${DQL_REQUESTS}" "${FILE_BASENAME}.conllu" > "${FILE_BASENAME}.coded.conllu"
+    python3 "${PYPATH}/dql.py" --first_rule "${DQL_REQUESTS}" "${FILE_BASENAME}.conllu" > "${FILE_BASENAME}.coded.conllu"
     echo "Running dql.py to merge codings into table..."
     python3 "${PYPATH}/dql.py" --code_head --merge "${FILE_BASENAME}.parsed.csv" "${FILE_BASENAME}.coded.conllu"
 else

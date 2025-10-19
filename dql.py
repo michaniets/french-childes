@@ -1,10 +1,9 @@
 #!/usr/local/bin/python3
 # -*- coding: utf-8 -*-
 
-__author__ = "Achim Stein"
-__version__ = "1.0"
-__email__ = "achim.stein@ling.uni-stuttgart.de"
-__status__ = "14.10.2025"
+__author__ = "Anonymous"
+__version__ = "1.1"
+__status__ = "19.10.2025"
 __license__ = "GPL"
 
 import sys
@@ -58,12 +57,16 @@ def read_grew_query(query_file):
 def parse_grew_query(query_text): 
     """
     Each query (Grew pattern) follows a comment line with coding instruction:
-      % coding attribute=modal value=verb node=MOD add=V
+      % coding attribute=modal value=verb node=MOD addlemma=V
     """
     codings = {}
     patterns = {}
     coding_info = ['att', 'val', 'node', 'add']
     coding_nr = 0
+
+    # remove everything from a line starting with "exit" or "quit" including all following text/newlines
+    query_text = re.sub(r'\n(?:exit|quit).*', '', query_text, flags=re.S)
+
     sys.stderr.write("Parsing grew query...\n")
 
     # split by '% coding' markers
@@ -113,56 +116,158 @@ def find_matches_by_sent_id(corpus: Corpus, patterns: Dict[int,str]) -> Dict[int
         result[nr] = by_sid
     return result
 
+def parse_coding_string(coding_str: str) -> set[tuple[str, str]]:
+    """
+    helper for add_coding_to_graph (needed to implement --first_rule properly)
+    Parses a full '# coding = ...' string into a set of (attribute, head_id_str) tuples.
+    Handles 'attr:val(node>head_lemma)' or 'attr:val(node>0)'.
+    Returns head_id as a string ("0" or the node number).
+    """
+    parsed_pairs = set()
+    if not coding_str:
+        return parsed_pairs
+    entries = [e.strip() for e in coding_str.split(';') if e.strip()]
+    for entry in entries:
+        parts = entry.split(':', 1)
+        if len(parts) < 2: continue
+        attr = parts[0]
+        # Regex to find head_id (digits after '>') or the specific sequence '>0)'
+        match = re.search(r'>(\d+)(?:_.*)?\)$', parts[1]) # Match digits after >, optionally followed by _lemma
+        if match:
+             head_id_str = match.group(1)
+             # Distinguish '0' from actual node IDs by keeping as string
+             parsed_pairs.add((attr, head_id_str))
+        elif parts[1].endswith('(>0)'): # Handle the specific case of no head node
+             parsed_pairs.add((attr, "0"))
+
+    return parsed_pairs
+
 def add_coding_to_graph(graph: Graph, match_list: List[dict], coding: Dict[str,str], args):
     """
     Apply coding to this graph for all matches of one pattern.
     Touch ONLY this graph.
+    --first_rule stops further processing for same attribute AND same head node.
+    This prevents adding codings less specific coding rules follow more specific ones.
     """
-    # honor --first_rule: if any coding already present, skip
-    if args.first_rule and 'coding' in graph.meta:
-        return
+    current_rule_attribute = coding.get('att')
+    if not current_rule_attribute:
+        sys.stderr.write(f"  WARNING: Rule definition missing 'attribute'. Skipping rule.\n Coding: {coding}\n")
+        return # Cannot apply rule without an attribute
+
+    # --- Get existing codings ONCE for efficient lookup ---
+    existing_attr_head_pairs = set()
+    if 'coding' in graph.meta:
+        existing_attr_head_pairs = parse_coding_string(graph.meta['coding'])
+
+    # --- Track codings added *during this specific function call* ---
+    # This prevents adding duplicates if the *same rule* matches multiple times
+    # in a way that targets the same attribute/head pair.
+    added_attr_head_pairs_this_call = set()
+    coding_strings_to_add_to_meta = set()
+    # Track nodes updated in MISC during this call to potentially avoid duplicate appends
+    updated_nodes_misc = {} # node_id -> set of strings added
 
     for match in match_list:
-        # which node to code
         code_node_key = coding.get('node')
         if not code_node_key:
+            sys.stderr.write(f"  WARNING: Rule definition missing 'node'. Skipping match.\n Coding: {coding}\n")
             continue
         try:
+            # This is the node *being coded* (e.g., the subject pronoun)
             node_id = match['matching']['nodes'][code_node_key]
         except KeyError:
-            # This match doesn't have the requested node; skip robustly
-            continue
+             # This match doesn't have the requested node key; skip robustly
+            continue # Node key not in this specific match
 
-        # optional extra node (for lemma)
+        # Determine the head node ID (as a string) for this match
         add_key = coding.get('add')
-        add_node = None
+        add_node_id_str = "0" # Default head_id if no 'add' key or 'add' node not found/valid
         lemma = 'unknown'
         if add_key:
-            add_node = match['matching']['nodes'].get(add_key)
-            if add_node and add_node in graph:
-                lemma = graph[add_node].get('lemma', 'unknown')
+            # This is the head node (e.g., the verb)
+            found_add_node_id = match['matching']['nodes'].get(add_key)
+            # Ensure the found node ID actually exists in the graph
+            if found_add_node_id and found_add_node_id in graph:
+                add_node_id_str = str(found_add_node_id) # Use string representation for consistency
+                lemma = graph[found_add_node_id].get('lemma', 'unknown')
+            # else: add_node_id_str remains "0"
 
-        # build coding string
-        att = coding.get('att', 'att')
-        val = coding.get('val', 'val')
-        if add_node:
-            coding_string = f"{att}:{val}({node_id}>{add_node}_{lemma})"
-        else:
-            coding_string = f"{att}:{val}({node_id}>0)"
+        # Define the attribute-head pair for this potential coding
+        current_attr_head_pair = (current_rule_attribute, add_node_id_str)
 
-        # attach to graph meta
+        # --- REFINED CHECK for --first_rule ---
+        skip_this_match = False
+        if args.first_rule:
+             # Check if this attribute/head pair exists from a *previous* rule OR
+             # has already been added by an *earlier match within this current rule processing*
+             if current_attr_head_pair in existing_attr_head_pairs or \
+                current_attr_head_pair in added_attr_head_pairs_this_call:
+                  skip_this_match = True
+                  # Optional: Add a stderr message for debugging
+                  # graph_id = graph.meta.get('sent_id', graph.meta.get('item_id', 'UNKNOWN'))
+                  # sys.stderr.write(f"DEBUG: Skipping match for {current_attr_head_pair} on graph {graph_id} due to --first_rule.\n")
+
+        if not skip_this_match:
+            # --- Build and collect coding string ---
+            att = current_rule_attribute
+            val = coding.get('val', 'val')
+            if not val:
+                 sys.stderr.write(f"  WARNING: Rule definition missing 'value'. Skipping match.\n Coding: {coding}\n")
+                 continue # Cannot apply coding without a value
+
+            # Construct the coding string using the determined node_id and head node ID string
+            if add_node_id_str != "0":
+                coding_string = f"{att}:{val}({node_id}>{add_node_id_str}_{lemma})"
+            else:
+                coding_string = f"{att}:{val}({node_id}>0)"
+
+            # Add to sets for tracking and final output (sets handle internal duplicates)
+            coding_strings_to_add_to_meta.add(coding_string)
+            added_attr_head_pairs_this_call.add(current_attr_head_pair)
+
+            # --- Optionally write into node's MISC ---
+            if args.code_node:
+                try:
+                    # Initialize set for this node if not seen before in this call
+                    if node_id not in updated_nodes_misc:
+                        updated_nodes_misc[node_id] = set()
+
+                    # Check if this specific string was already added to this node's MISC *in this call*
+                    if coding_string not in updated_nodes_misc[node_id]:
+                        existing_misc_coding = graph[node_id].get('coding', '')
+                        # Check if string exists from previous script runs before appending
+                        if coding_string not in existing_misc_coding.split('; '):
+                            if existing_misc_coding:
+                                graph[node_id]['coding'] += f"; {coding_string}"
+                            else:
+                                graph[node_id]['coding'] = coding_string
+                        # Mark this string as added to this node in this call
+                        updated_nodes_misc[node_id].add(coding_string)
+                except Exception as e:
+                    graph_id = graph.meta.get('sent_id', graph.meta.get('item_id', 'UNKNOWN'))
+                    sys.stderr.write(f"  WARNING: Could not write coding to MISC for node {node_id} in graph {graph_id}. Error: {e}\n")
+                    # Pass and continue with other matches/nodes
+                    pass
+
+    # --- Update graph meta ---
+    # Add all unique strings collected from non-skipped matches for this rule
+    if coding_strings_to_add_to_meta:
+        # Sort for consistent output order
+        full_coding_string_addition = "; ".join(sorted(list(coding_strings_to_add_to_meta)))
+
         if 'coding' in graph.meta:
-            graph.meta['coding'] += f"; {coding_string}"
+            # Check if the *entire block* of new codings is already present somehow
+            # (unlikely but prevents adding redundant blocks)
+            # A more robust check might split existing and check subset, but this is simpler
+            if full_coding_string_addition not in graph.meta['coding']:
+                 # Check if graph.meta['coding'] is empty or just whitespace before appending ;
+                 if graph.meta['coding'] and not graph.meta['coding'].isspace():
+                      graph.meta['coding'] += f"; {full_coding_string_addition}"
+                 else: # If existing meta is empty/whitespace, just set it
+                      graph.meta['coding'] = full_coding_string_addition
         else:
-            graph.meta['coding'] = coding_string
-
-        # optionally write into node's MISC
-        if args.code_node:
-            try:
-                graph[node_id]['coding'] = coding_string
-            except Exception:
-                # If node is missing or not writable, keep going
-                pass
+             # If no coding meta exists yet, just set it
+             graph.meta['coding'] = full_coding_string_addition
 
 # --------------------------
 # Output helpers
@@ -415,7 +520,9 @@ def main_cli():
     parser.add_argument('-c','--coding_only', action='store_true',
                         help='Print only coded graphs (query matches). Default: print everything')
     parser.add_argument('-f','--first_rule', action='store_true',
-                        help='If the first rule for an attribute matches, discard following rules')
+                        help='For a given attribute AND head node combination (e.g., subj targeting verb V1), '
+                             'only apply the first matching rule. Subsequent rule matches for the '
+                             'same attribute targeting the same head node on the same graph will be ignored.')
     parser.add_argument('-m','--mark_coding', action='store_true',
                         help='Print codes around matched words in the sentence (requires --print_text)')
     parser.add_argument('-n','--code_node', action='store_true',

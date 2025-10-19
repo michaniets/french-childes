@@ -60,9 +60,9 @@ This script uses the Grew query language to apply syntactic queries to a CoNLL-U
 This mode reads a CoNLL-U file, applies one or more Grew queries, and prints the resulting CoNLL-U graphs with new `coding` metadata added to matching sentences.
 
 ```sh
-python3 dql.py my_queries.query my_corpus.conllu > my_corpus.coded.conllu
+python3 dql.py --first_rule my_queries.query my_corpus.conllu > my_corpus.coded.conllu
 ```
-
+  - `--first_rule`: matches pattern only if THIS attribute has not been coded for THIS verb.  Thus, for a given verb in the structure, only the first subject will be coded. Any further "subjects" will be ignored.  **Important**: The use of this option mimicks the behaviour of _CorpusSearch_ coding. Accordingly, the patterns in the request file need to be ordered by decreasing specificity. The use of `--first_rule` is **recommended** to avoid multiplication of codings.
   - `--coding_only`: Prints only the sentences (graphs) that matched at least one query.
   - `--print_text`: Outputs plain sentences instead of CoNLL-U graphs. Can be combined with `--mark_coding` to wrap matched nodes in `<h>` tags.
 

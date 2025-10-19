@@ -9,7 +9,7 @@
 # The resulting .conllu file can then be used for further analysis.
 #
 
-set -e      # stop on error
+set -e       # stop on error
 
 # --- Configuration ---
 # Path to your scripts and models

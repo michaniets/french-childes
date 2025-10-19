@@ -513,7 +513,8 @@ def merge_with_csv(conllu_file, csv_file, code_head=False):
 def main_cli():
     parser = argparse.ArgumentParser(description=
         '''Query CoNLL-U corpus using Grew query language.
-        This script was designed to process CHILDES data created by childes.py.'''
+        This script was designed to process general CHILDES data (coding function)
+        and to merge the output with tables created by childes.py (merge function).'''
     )
     parser.add_argument("query_file", nargs="?", default=None, help="File with Grew query")
     parser.add_argument("conllu_file", help="CoNLL-U file with parsed data")

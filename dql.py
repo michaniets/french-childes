@@ -500,11 +500,23 @@ def merge_with_csv(conllu_file, csv_file, code_head=False):
                     sys.stderr.write(f"! WARNING: ID not found in CSV: {this_id}\n")
 
     merged_file = re.sub(r'(\.\w+)$', '.coded\\1', csv_file)
-    sys.stderr.write(f"Writing output to {merged_file}\n")
-    with open(merged_file, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=headers, delimiter='\t')
+
+    # DictWriter messes up the =HYPERLINK() formulas by quoting them.
+    # - Step 1 write without quotes, use dummy escapechar (required by csv module)
+    tmp_file = merged_file + ".tmp"
+    sys.stderr.write(f"Writing first output to {tmp_file}\n")
+    with open(tmp_file, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=headers, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\x1e')
         writer.writeheader()
         writer.writerows(row_dict.values())
+    # - Step 2 read temp file and delete escapechar
+    sys.stderr.write(f"Cleaning quotes around =HYPERLINK() formulas\n")
+    with open(tmp_file, mode='r', encoding='utf-8') as infile, open(merged_file, mode='w', encoding='utf-8') as outfile:
+        for line in infile:
+            cleaned_line = re.sub(r"\x1e", "", line)  # unescape double quotes
+            outfile.write(cleaned_line)
+    sys.stderr.write(f"Writing final output to {merged_file}\n")
+    os.unlink(tmp_file)
 
 # --------------------------
 # CLI

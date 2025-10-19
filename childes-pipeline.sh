@@ -44,21 +44,18 @@ python3 "${PYPATH}/childes.py" "${INPUT_FILE}" \
 
 echo ""
 echo "--- Pipeline finished successfully ---"
-echo "Full output file: ${FILE_BASENAME}.cha.parsed.csv"
-echo "Work output file: ${FILE_BASENAME}.cha.work.csv"
-echo "Next steps:"
-echo "- Concatenate CSV files if needed, e.g."
-echo '    head -n 1 "$(ls *.light.csv | head -n 1)" > all.csv; tail -n +2 -q *.light.csv >> all.csv'
 if [ -f "${FILE_BASENAME}.coded.conllu" ]; then
     echo "CoNLL-U output: ${FILE_BASENAME}.cha.conllu"
 fi
+echo "Next steps:"
+echo "- Concatenate CSV files if needed, e.g."
+echo '    head -n 1 "$(ls *.light.csv | head -n 1)" > all.csv; tail -n +2 -q *.light.csv >> all.csv'
 
 if [ -d "${HTML_DIR}" ]; then
   echo "---"
   echo "- HTML files in: ${HTML_DIR}/    Delete or upload them to your server:"
   echo "   rsync -zav --no-perms ${HTML_DIR}/ ${SERVER_IP}:/Library/WebServer/Documents/${HTML_DIR}"
   echo "   ssh -x ${SERVER_IP} \"chmod 644 /Library/WebServer/Documents/${HTML_DIR}/*.html\""
-  echo ""
 fi
 
 # exit     ## exit here if you don't want to run dql.py

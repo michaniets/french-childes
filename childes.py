@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 __author__ = "Anonymous"
-__version__ = "4.1"
-__status__ = "09.10.25"
+__version__ = "4.3"
+__status__ = "19.10.25"
 __license__ = "GPL"
 
 import sys
@@ -334,7 +334,7 @@ class ChatProcessor:
             session_blocks = filter(None, re.split(r'(?=@Begin)', full_content))
             total_sessions = len(list(re.finditer(r'@Begin', full_content)))
             if total_sessions == 0: total_sessions = 1 # Case for files without @Begin
-            sys.stderr.write(f"Found {total_sessions} session(s) to process.\n")
+            sys.stderr.write(f"Found {total_sessions} session(s) to process (@Begin...@End).\n")
             
             session_blocks_list = list(session_blocks)
             if not session_blocks_list:
@@ -475,67 +475,115 @@ class ChatProcessor:
                     f_conllu.write(parsed_conllu_str)
                 sys.stderr.write(f"Generated standalone CoNLL-U file: {conllu_output_path}\n")
 
-        sys.stderr.write("Writing final CSV output file(s)...\n")
+        # Process rows and write initial FULL parsed CSV
+        sys.stderr.write("Processing rows and writing initial parsed CSV...\n")
         parsed_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.parsed.csv'
-        light_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.light.csv'
+        light_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.light.csv' # Define light path here
 
-        header_parsed = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'URLwww', 'URLlok']
+        header_parsed = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLlok', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged']
         header_parsed.extend([f'conll_{i}' for i in range(1, 11)])
-        header_light = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged', 'URLwww', 'URLlok']
+        header_light = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLlok', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged'] # Define light header
 
-        with open(parsed_csv_path, 'w', newline='', encoding='utf8') as f_parsed, \
-             open(light_csv_path, 'w', newline='', encoding='utf8') as f_light:
-            
-            writer_parsed = csv.DictWriter(f_parsed, delimiter='\t', fieldnames=header_parsed, extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='\x1f')
-            writer_light = csv.DictWriter(f_light, delimiter='\t', fieldnames=header_light, extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='\x1f')
+        processed_rows_for_initial_write = [] # Store processed rows temporarily
+
+        for row_orig in self.outRows:
+            row = row_orig.copy()
+            uID, wID_str = re.match(r'(.*)_w(\d+)', row['utt_id']).groups()
+            wID = int(wID_str)
+
+            # Add tagger info safely
+            try:
+                if itemPOS: row['pos'] = itemPOS.get(uID, ['_'] * wID)[wID - 1]
+                if itemLemmas: row['lemma'] = itemLemmas.get(uID, ['_'] * wID)[wID - 1]
+            except IndexError:
+                row['pos'] = '_'
+                row['lemma'] = '_'
+
+            if self.args.utt_tagged and itemTagged: row['utt_tagged'] = itemTagged.get(uID, '')
+
+            # Add CoNLL-U data
+            conll_row = conllu_data.get(row['utt_id'], [])
+            for i, col_val in enumerate(conll_row): row[f'conll_{i+1}'] = col_val
+
+            # Use CoNLL-U pos/lemma if tagger wasn't used
+            if not self.args.parameters and self.args.api_model and len(conll_row) > 3:
+                row['pos'] = conll_row[3] if len(conll_row) > 3 and conll_row[3] else '_'
+                row['lemma'] = conll_row[2] if len(conll_row) > 2 and conll_row[2] else '_'
+
+            # Utterance filtering logic (applied again later for light version)
+            # if self.args.pos_utterance and not re.search(self.args.pos_utterance, row.get('pos', '')):
+            #     row['utterance'] = row['utt_clean'] = row['utt_tagged'] = ''
+
+            # Construct Hyperlink Strings (with doubled quotes inside)
+            local_url_formula = ''
+            server_url_formula = ''
+            link_info = html_links.get(uID)
+            if link_info:
+                rel_local_path = os.path.relpath(link_info['local']).replace(os.path.sep, '/')
+                local_url = f"http://localhost/{rel_local_path}#{uID}"
+                local_url_formula = f'=HYPERLINK("{local_url}"; "LOC")'
+                if self.args.server_url:
+                    server_url = f"{self.args.server_url.rstrip('/')}/{link_info['file']}#{uID}"
+                    server_url_formula = f'=HYPERLINK("{server_url}"; "WWW")'
+
+            row['URLlok'] = local_url_formula
+            row['URLwww'] = server_url_formula
+
+            processed_rows_for_initial_write.append(row)
+
+        # DictWriter messes up the =HYPERLINK() formulas by quoting them.
+        # - Step 1 write without quotes, use dummy escapechar (required by csv module)
+        tmp_file = parsed_csv_path + ".tmp"
+        sys.stderr.write(f"Writing first output to {tmp_file}\n")
+        with open(tmp_file, 'w', newline='', encoding='utf8') as f_parsed:
+            writer_parsed = csv.DictWriter(f_parsed, delimiter='\t', fieldnames=header_parsed,
+                                           extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\x1e')
             writer_parsed.writeheader()
-            writer_light.writeheader()
+            writer_parsed.writerows(processed_rows_for_initial_write)
 
-            for row in self.outRows:
-                uID, wID_str = re.match(r'(.*)_w(\d+)', row['utt_id']).groups()
-                wID = int(wID_str)
-                
-                # --- THIS IS THE FIX ---
-                # Safely add tagger info using a try/except block to handle mismatches
-                try:
-                    if itemPOS:
-                        row['pos'] = itemPOS.get(uID, [])[wID - 1]
-                    if itemLemmas:
-                        row['lemma'] = itemLemmas.get(uID, [])[wID - 1]
-                except IndexError:
-                    # If there's a mismatch, assign placeholders and continue
-                    row['pos'] = '_'
-                    row['lemma'] = '_'
-                    # Optionally, uncomment the next line to be notified of mismatches
-                    # sys.stderr.write(f"\nWarning: Token/tag mismatch in utterance {uID}")
 
-                if self.args.utt_tagged and itemTagged:
-                    row['utt_tagged'] = itemTagged.get(uID, '')
+        """ 
+        (DictWriter unwantedly quotes them and makes URLs uninterpretable in Spreadsheet)
+        In this step, we also apply utterance filtering for light version.
+        This is not elegant, but avoids the csv module.
+        """
+        # - Step 2 read temp file and delete escapechar
+        sys.stderr.write("Reading back initial TSV and writing final files manually...\n")
 
-                conll_row = conllu_data.get(row['utt_id'], [])
-                for i, col_val in enumerate(conll_row):
-                    row[f'conll_{i+1}'] = col_val
-                
-                if not self.args.parameters and self.args.api_model and len(conll_row) > 3:
-                    row['pos'] = conll_row[3]
-                    row['lemma'] = conll_row[2]
+        light_csv_path = parsed_csv_path.replace("parsed", "light")  # *.light.csv
 
-                if self.args.pos_utterance and not re.search(self.args.pos_utterance, row.get('pos', '')):
-                    row['utterance'] = row['utt_clean'] = row['utt_tagged'] = ''
+        def clean_val(x: str) -> str:
+            # Remove the dummy escape char that we inserted with csv module
+            return x.replace("\x1e", "") if isinstance(x, str) else ""
 
-                link_info = html_links.get(uID)
-                if link_info:
-                    rel_local_path = os.path.relpath(link_info['local'])
-                    local_url = f"http://localhost/{rel_local_path}#{uID}"
-                    row['URLlok'] = f'=HYPERLINK("{local_url}"; "LOC")'
-                    if self.args.server_url:
-                        server_url = f"{self.args.server_url.rstrip('/')}/{link_info['file']}#{uID}"
-                        row['URLwww'] = f'=HYPERLINK("{server_url}"; "WWW")'
-                
-                writer_parsed.writerow(row)
+        # filter light version for pos_output constraint
+        def keep_light(row: dict) -> bool:
+            pos_val = row.get('pos', '')
+            if re.search(re.compile(self.args.pos_output), pos_val):
+                return True  # print row
+            else:
+                return False # skip row
 
-                if re.search(re.compile(self.args.pos_output), row.get('pos', '')):
-                    writer_light.writerow(row)
+        with open(tmp_file, mode='r', encoding='utf-8', newline='') as infile, \
+            open(parsed_csv_path, mode='w', encoding='utf-8', newline='') as f_parsed, \
+            open(light_csv_path, mode='w', encoding='utf-8', newline='') as f_light:
+
+            # Parse the temp file as TSV; no quoting, same escapechar you used in Step 1
+            reader = csv.DictReader(infile, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\x1e')
+
+            # Write headers manually (no quoting)
+            f_parsed.write('\t'.join(header_parsed) + '\n')
+            f_light.write('\t'.join(header_light) + '\n')
+
+            for row in reader:
+                # Clean values for the full file
+                full_vals = [clean_val(row.get(col, "")) for col in header_parsed]
+                f_parsed.write('\t'.join(full_vals) + '\n')
+
+                # Build + optionally filter light rows
+                if keep_light(row):
+                    light_vals = [clean_val(row.get(col, "")) for col in header_light]
+                    f_light.write('\t'.join(light_vals) + '\n')
 
         sys.stderr.write(f"  OUTPUT (full): {parsed_csv_path}\n")
         sys.stderr.write(f"  OUTPUT (light): {light_csv_path}\n")
@@ -692,7 +740,7 @@ if __name__ == "__main__":
     parser.add_argument('--write_conllu', action='store_true', help='(Optional) Write the final parsed CoNLL-U data to a standalone file. Requires --api_model.')
     parser.add_argument('--chunk_parse', type=int, default=10000, help='Number of utterances per API parsing chunk. Default: 10000.')
     parser.add_argument('--chunk_html', type=int, default=5000, help='Number of utterances per HTML output file. Default: 5000.')
-    parser.add_argument('--pos_output', default=".*", type=str, help='Regex to match POS tags. The reduced table ("work") will only contain matching rows.')
+    parser.add_argument('--pos_output', default=".*", type=str, help='Regex to match POS tags. The reduced "light" table will only contain matching rows.')
     parser.add_argument('--pos_utterance', type=str, help='Regex to match POS tags. The full utterance text will only be printed on matching rows.')
     parser.add_argument('--utt_clean', action='store_true', help='Populate the utt_clean column.')
     parser.add_argument('--utt_tagged', action='store_true', help='Populate the utt_tagged column.')

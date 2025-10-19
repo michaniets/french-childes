@@ -78,7 +78,8 @@ This command reads `childes-all.coded.conllu`, extracts the codings, and writes 
 
   - For a coding string like `clitic:obj(3>5_lemma)`, the script adds the value `obj(3>5_lemma)` to a column named `clitic`.
   - By default, the coding is added to the row corresponding to the **node** token (token `3` in the example).
-  - `--code_head`: Use this flag to add the coding to the row of the **head** token instead (token `5` in the example).
+  - `--code_head`: Use this flag to add the coding to the row of the **head** token instead (token `5` in the example). For example, when coding verb valencies, this will group the annotations in the row of the verbal head.
+
 
 **Important:** If multiple rules in a query file match and write to the same attribute (e.g., `clitic`), their codings will be appended in the CoNLL-U metadata (e.g., `coding = clitic:acc(...); clitic:dat(...)`). When merging, only the **last** value will be written to the CSV column. To avoid this, use distinct attributes for potentially co-occurring phenomena (e.g., `acc_clitic` and `dat_clitic`).
 

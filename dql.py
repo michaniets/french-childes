@@ -518,6 +518,141 @@ def merge_with_csv(conllu_file, csv_file, code_head=False):
     sys.stderr.write(f"Writing final output to {merged_file}\n")
     os.unlink(tmp_file)
 
+def merge_with_csv(conllu_file, csv_file, code_head=False):
+    # --- Read CoNLL-U data first (unchanged) ---
+    corpus = Corpus(conllu_file)
+    draft_corpus = CorpusDraft(corpus) # Use CorpusDraft directly
+    sys.stderr.write(f"- Reading the corpus to map item_id -> coding...")
+    id_meta = {}
+    coded = 0
+    newly_encountered_attributes = set() # Track potential new headers from codings
+
+    for sent_id, graph in draft_corpus.items():
+        coding = graph.meta.get('coding', '')
+        item_id = graph.meta.get('item_id')
+        if item_id is None: continue
+        id_meta[item_id] = coding
+        if coding:
+            coded += 1
+            # Pre-scan coding attributes to find potential new headers
+            for entry in [e.strip() for e in coding.split(';') if e.strip()]:
+                attr = entry.split(':', 1)[0].strip()
+                if attr: newly_encountered_attributes.add(attr)
+
+    sys.stderr.write(f"{len(draft_corpus)} graphs, {coded} codings\n")
+
+    # --- Read CSV safely ---
+    sys.stderr.write(f"Reading table {csv_file}...\n")
+    rows = []
+    original_headers = []
+
+    if os.path.exists(csv_file):
+        with open(csv_file, mode='r', newline='', encoding='utf-8') as file:
+            try:
+                # Use standard csv.reader to get headers without None issue
+                header_reader = csv.reader(file, delimiter='\t')
+                original_headers = next(header_reader)
+                # Filter out empty strings which might cause None keys later
+                original_headers = [h for h in original_headers if h]
+                file.seek(0) # Rewind to read with DictReader using corrected headers
+                reader = csv.DictReader(file, fieldnames=original_headers, delimiter='\t')
+                next(reader) # Skip the (potentially problematic) header row
+                rows = list(reader)
+            except StopIteration:
+                 sys.stderr.write(f"WARNING: Input CSV file {csv_file} is empty or has no header.\n")
+            except Exception as e:
+                 sys.stderr.write(f"ERROR: Could not read CSV {csv_file}. Error: {e}\n")
+                 return
+
+    # Check if 'utt_id' is present
+    if 'utt_id' not in original_headers:
+         sys.stderr.write(f"ERROR: 'utt_id' column not found in CSV file {csv_file} header. Cannot merge.\n")
+         return
+
+    # --- Map CSV rows (unchanged logic, but safer input) ---
+    sys.stderr.write(f"- Mapping CSV IDs to rows...\n")
+    row_dict = {}
+    for row in rows:
+        utt_id = row.get('utt_id')
+        if utt_id is not None:
+            row_dict[utt_id] = row
+        else:
+            sys.stderr.write(f"WARNING: Row missing 'utt_id': {row}\n")
+
+    # --- Determine final headers ---
+    final_headers = list(original_headers) # Start with headers from CSV
+    for attr in sorted(list(newly_encountered_attributes)):
+        if attr not in final_headers:
+            sys.stderr.write(f"  Adding attribute as new column header: {attr}\n")
+            final_headers.append(attr)
+
+    # --- Apply codings to row_dict (largely unchanged logic) ---
+    for sent_id, coding in id_meta.items():
+        if coding == '': continue
+        coding_entries = [e.strip() for e in coding.split(';') if e.strip()]
+
+        for entry in coding_entries:
+            parts = re.split(r':', entry, maxsplit=1)
+            attr = parts[0].strip()
+            if not attr:
+                sys.stderr.write(f"   WARNING ({sent_id}): Encountered coding with empty attribute name in entry '{entry}'. Skipping.\n")
+                continue
+
+            val = parts[1].strip() if len(parts) > 1 else None
+            if not val:
+                sys.stderr.write(f"   WARNING ({sent_id}): Missing value for attribute '{attr}'. Skipping entry.\n")
+                continue
+
+            # Simplified node/head parsing (assuming structure like attr:val(node>head_lemma))
+            m = re.search(r'\((\d+)>(\d+)(?:_.*)?\)$', val) # Digits after '(', digits after '>'
+            node_id_str = "1" # Default if parsing fails
+            head_id_str = "0" # Default (matches >0 case)
+            if m:
+                node_id_str = m.group(1)
+                head_id_str = m.group(2)
+            else:
+                 # Check specifically for >0 case if the main regex failed
+                 m0 = re.search(r'\((\d+)>0\)$', val)
+                 if m0:
+                     node_id_str = m0.group(1)
+                     head_id_str = "0" # Already default, but explicit
+                 else:
+                     sys.stderr.write(f"   WARNING ({sent_id}): Could not parse node/head IDs in coding '{entry}'. Applying to node 1.\n")
+
+
+            target_node_id_str = head_id_str if code_head else node_id_str
+            # Construct the full utt_id (e.g., sent_id_w1)
+            this_id = f"{sent_id}_w{target_node_id_str}" if sent_id else f"UNKNOWN_w{target_node_id_str}"
+
+            if this_id in row_dict:
+                row = row_dict[this_id]
+                current_val = row.get(attr, '') # Safely get current value
+                if current_val:
+                    row[attr] = f"{current_val};{val}"
+                else:
+                    row[attr] = val
+            elif sent_id: # Only warn if sent_id was valid
+                    sys.stderr.write(f"! WARNING: ID not found in CSV: {this_id}\n")
+
+    # --- Writing Logic ---
+    merged_file = re.sub(r'(\.\w+)$', r'.coded\1', csv_file)
+    tmp_file = merged_file + ".tmp"
+    sys.stderr.write(f"Writing first output to {tmp_file}\n")
+
+    with open(tmp_file, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.DictWriter(file, fieldnames=final_headers, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\x1e', extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(row_dict.values())
+
+    # --- Clean Hyperlink Quotes (unchanged) ---
+    sys.stderr.write(f"Cleaning quotes around =HYPERLINK() formulas\n")
+    with open(tmp_file, mode='r', encoding='utf-8') as infile, open(merged_file, mode='w', encoding='utf-8') as outfile:
+        for line in infile:
+            cleaned_line = re.sub(r"\x1e", "", line)
+            outfile.write(cleaned_line)
+    sys.stderr.write(f"Writing final output to {merged_file}\n")
+    os.unlink(tmp_file)
+    
 # --------------------------
 # CLI
 # --------------------------

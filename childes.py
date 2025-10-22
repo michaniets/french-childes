@@ -2,7 +2,7 @@
 
 __author__ = "Anonymous"
 __version__ = "4.3"
-__status__ = "19.10.25"
+__status__ = "21.10.25"
 __license__ = "GPL"
 
 import sys
@@ -480,9 +480,9 @@ class ChatProcessor:
         parsed_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.parsed.csv'
         light_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.light.csv' # Define light path here
 
-        header_parsed = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLlok', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged']
+        header_parsed = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged']
         header_parsed.extend([f'conll_{i}' for i in range(1, 11)])
-        header_light = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLlok', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged'] # Define light header
+        header_light = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged'] # Define light header
 
         processed_rows_for_initial_write = [] # Store processed rows temporarily
 
@@ -511,8 +511,8 @@ class ChatProcessor:
                 row['lemma'] = conll_row[2] if len(conll_row) > 2 and conll_row[2] else '_'
 
             # Utterance filtering logic (applied again later for light version)
-            # if self.args.pos_utterance and not re.search(self.args.pos_utterance, row.get('pos', '')):
-            #     row['utterance'] = row['utt_clean'] = row['utt_tagged'] = ''
+            if self.args.pos_utterance and not re.search(self.args.pos_utterance, row.get('pos', '')):
+                 row['utterance'] = row['utt_clean'] = row['utt_tagged'] = ''
 
             # Construct Hyperlink Strings (with doubled quotes inside)
             local_url_formula = ''
@@ -526,7 +526,7 @@ class ChatProcessor:
                     server_url = f"{self.args.server_url.rstrip('/')}/{link_info['file']}#{uID}"
                     server_url_formula = f'=HYPERLINK("{server_url}"; "WWW")'
 
-            row['URLlok'] = local_url_formula
+            row['URLloc'] = local_url_formula
             row['URLwww'] = server_url_formula
 
             processed_rows_for_initial_write.append(row)
@@ -540,7 +540,6 @@ class ChatProcessor:
                                            extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\x1e')
             writer_parsed.writeheader()
             writer_parsed.writerows(processed_rows_for_initial_write)
-
 
         """ 
         (DictWriter unwantedly quotes them and makes URLs uninterpretable in Spreadsheet)
@@ -587,6 +586,7 @@ class ChatProcessor:
 
         sys.stderr.write(f"  OUTPUT (full): {parsed_csv_path}\n")
         sys.stderr.write(f"  OUTPUT (light): {light_csv_path}\n")
+        os.unlink(tmp_file)  # delete temp file after writing
 
     def _parse_conllu_output(self, conllu_str):
         conllu_data = {}

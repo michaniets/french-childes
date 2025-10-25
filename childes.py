@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-__author__ = "Anonymous"
+__author__ = "Achim Stein"
 __version__ = "4.3"
 __status__ = "21.10.25"
 __license__ = "GPL"

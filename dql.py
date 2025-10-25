@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 __author__ = "Anonymous"
-__version__ = "1.1"
+__version__ = "1.2"
 __status__ = "19.10.2025"
 __license__ = "GPL"
 
@@ -102,18 +102,41 @@ def find_matches_by_sent_id(corpus: Corpus, patterns: Dict[int,str]) -> Dict[int
     """
     For each pattern number, map sent_id -> list of matches.
     To speed things up touch only graphs that matched.
+    version >1.2 with error handling for invalid Grew patterns.
     """
     result = {}
     for nr, pat in patterns.items():
+        # --- DEBUGGING ADDED ---
+        #sys.stderr.write(f"\n--- Processing pattern #{nr} ---\n")
+        #sys.stderr.write(f"--- Pattern content start ---\n{pat}\n--- Pattern content end ---\n")
+        # --- END DEBUGGING ---
+
         sys.stderr.write(f"  Searching corpus query {nr}...")
-        req = Request(pat)
-        mlist = corpus.search(req)
-        sys.stderr.write(f" {len(mlist)} matches\n")
-        by_sid = {}
-        for m in mlist:
-            sid = m['sent_id']
-            by_sid.setdefault(sid, []).append(m)
-        result[nr] = by_sid
+        try:
+            # This is where the error occurs if 'pat' has invalid syntax
+            req = Request(pat)
+            mlist = corpus.search(req)
+            sys.stderr.write(f" {len(mlist)} matches\n")
+            by_sid = {}
+            for m in mlist:
+                sid = m['sent_id']
+                by_sid.setdefault(sid, []).append(m)
+            result[nr] = by_sid
+        # --- CATCH THE SPECIFIC ERROR ---
+        except TypeError as e:
+            if "'NoneType' object is not iterable" in str(e):
+                sys.stderr.write(f"\n\nFATAL ERROR: Invalid Grew syntax detected in pattern #{nr} above.\n")
+                sys.stderr.write("The `grewpy` library failed to parse this pattern.\n")
+                sys.stderr.write("Please check the Grew syntax carefully, especially brackets, feature names, and edge labels.\n")
+                sys.stderr.write(f"(Original Error: {e})\n")
+            else:
+                # Re-raise unexpected TypeErrors
+                sys.stderr.write(f"\n\nUNEXPECTED TypeError processing pattern #{nr}:\n{pat}\nError: {e}\n")
+            sys.exit(1) # Stop execution after identifying the bad pattern
+        except Exception as e: # Catch other potential errors during Request creation or search
+             sys.stderr.write(f"\n\nERROR processing pattern #{nr}:\n{pat}\nError: {e}\n")
+             sys.exit(1) # Stop execution
+
     return result
 
 def parse_coding_string(coding_str: str) -> set[tuple[str, str]]:

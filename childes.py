@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "4.3"
-__status__ = "21.10.25"
+__version__ = "4.4"
+__status__ = "09.11.25"
 __license__ = "GPL"
 
 import sys
@@ -31,22 +31,29 @@ def parseAge(age_str):
     return age_str, age_days
 
 def cleanUtt(s):
-    s = re.sub(r' 0([\S+])', r' \1', s)
-    s = re.sub(r'0faire ', 'faire ', s)
-    s = re.sub(r'<[^>]+> \[//?\] ', '', s)
-    s = re.sub(r'\[\!\] ?', ' ', s)
-    s = re.sub(r' ?\(\.\) ', ' , ', s)
-    s = re.sub(r'<([^>]+)>\s+\[%[^\]]+\]', r'\1', s)
-    s = re.sub(r'<(0|www|xxx|yyy)[^>]+> ?', '', s)
-    s = re.sub(r'\+[<,]? ?', '', s)
-    s = re.sub(r'(0|www|xxx|yyy)\s', '', s)
-    s = re.sub(r'\[.*?\] ?', '', s)
-    s = re.sub(r'\(([A-Za-z]+)\)', r'\1', s)
-    s = re.sub(r' \+/+', ' ', s)
-    s = re.sub(r'[_=]', ' ', s)
-    s = re.sub(r'[<>]', '', s)
-    s = re.sub(r'\s+', ' ', s)
-    return(s)
+    """
+    Cleans standard CHAT markup from utterances to prepare them for NLP tools.
+    """
+    s = re.sub(r' 0([\S+])', r' \1', s)           # 0word -> word
+    s = re.sub(r'0faire ', 'faire ', s)           # Specific fix for 0faire
+    s = re.sub(r'<[^>]+> \[//?\] ', '', s)        # Remove retracings <...> [//]
+    s = re.sub(r'\[\!\] ?', ' ', s)               # Remove stressing [!]
+    s = re.sub(r' ?\(\.\) ', ' , ', s)            # Pauses (.) -> ,
+    s = re.sub(r'<([^>]+)>\s+\[%[^\]]+\]', r'\1', s) # Keep text before comment <text> [% comment]
+    s = re.sub(r'<(0|www|xxx|yyy)[^>]+> ?', '', s)   # Remove unintelligible marked with <>
+    s = re.sub(r'\+[<,]? ?', '', s)               # Remove +< and +,
+    s = re.sub(r'(0|www|xxx|yyy)\s', '', s)          # Remove unintelligible words
+    s = re.sub(r'\[.*?\] ?', '', s)               # Remove all other bracketed content [...]
+    s = re.sub(r'\(([A-Za-z]+)\)', r'\1', s)      # Keep text inside parentheses (word) -> word
+    s = re.sub(r' \+/+', ' ', s)                  # Remove +/
+    s = re.sub(r'[_=]', ' ', s)                   # Replace _ and = with space
+    # added v4.4
+    s = re.sub(r'@[a-z:0-9]+', '', s)             # Remove special CHAT suffixes like @c, @s:eng
+    s = re.sub(r'&[\S]+', '', s)                  # Remove phonological fragments like &mm
+    # final cleanups
+    s = re.sub(r'[<>]', '', s)                    # Remove remaining angle brackets
+    s = re.sub(r'\s+', ' ', s)                    # Normalize spaces
+    return(s.strip())
 
 def process_tagged_data(tagged):
     lines = tagged.strip().split('\n')

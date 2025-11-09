@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 __author__ = "Anonymous"
-__version__ = "1.2"
-__status__ = "19.10.2025"
+__version__ = "1.3"
+__status__ = "09.11.2025"
 __license__ = "GPL"
 
 import sys
@@ -98,9 +98,10 @@ def parse_grew_query(query_text):
 # Matching (optimized)
 # --------------------------
 
-def find_matches_by_sent_id(corpus: Corpus, patterns: Dict[int,str]) -> Dict[int, Dict[str, List[dict]]]:
+#def find_matches_by_sent_id(corpus: Corpus, patterns: Dict[int,str]) -> Dict[int, Dict[str, List[dict]], codings: Dict[int, dict]) -> Dict[int, Dict[str, List[dict]]}:
+def find_matches_by_sent_id(corpus: Corpus, patterns: Dict[int,str], codings: Dict[int, dict]) -> Dict[int, Dict[str, List[dict]]]:
     """
-    For each pattern number, map sent_id -> list of matches.
+    For each pattern number, map sent_id -> list of matches. (codings is just for stderr output)
     To speed things up touch only graphs that matched.
     version >1.2 with error handling for invalid Grew patterns.
     """
@@ -111,7 +112,9 @@ def find_matches_by_sent_id(corpus: Corpus, patterns: Dict[int,str]) -> Dict[int
         #sys.stderr.write(f"--- Pattern content start ---\n{pat}\n--- Pattern content end ---\n")
         # --- END DEBUGGING ---
 
-        sys.stderr.write(f"  Searching corpus query {nr}...")
+        c = codings.get(nr, {})    #  info string for stderr
+        info_str = f" ({c.get('att', '?')}={c.get('val', '?')})" if c else ""
+        sys.stderr.write(f"  Searching corpus query {nr}{info_str}...")
         try:
             # This is where the error occurs if 'pat' has invalid syntax
             req = Request(pat)
@@ -351,14 +354,15 @@ def process_one_corpus_file(conllu_path: str, query_text: str, args) -> int:
 
     corpus = Corpus(conllu_path)
     codings, patterns = parse_grew_query(query_text)
-    matched = find_matches_by_sent_id(corpus, patterns)
+    matched = find_matches_by_sent_id(corpus, patterns, codings)   # codings added only for stderr output
 
     draft = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
 
     printed = 0
     # For each pattern, modify only the graphs that matched it
+    sys.stderr.write(f"Modifying matching graphs...\n")
     for nr, sentid2matches in matched.items():
-        sys.stderr.write(f"Modifying matching graphs for query {nr}...\n  Coding: {codings.get(nr)}\n")
+        #sys.stderr.write(f"Modifying matching graphs for query {nr}...\n  Coding: {codings.get(nr)}\n")
         for sent_id, mlist in sentid2matches.items():
             try:
                 graph = draft[sent_id]  # direct access by sent_id, avoids full scan

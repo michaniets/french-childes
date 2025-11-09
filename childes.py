@@ -32,13 +32,14 @@ def parseAge(age_str):
 
 def cleanUtt(s):
     """
-    Cleans standard CHAT markup from utterances to prepare them for NLP tools.
+    cleans standard CHAT markup from utterances to prepare them for NLP tools
+    revised v4.4
     """
     s = re.sub(r' 0([\S+])', r' \1', s)           # 0word -> word
     s = re.sub(r'0faire ', 'faire ', s)           # Specific fix for 0faire
     s = re.sub(r'<[^>]+> \[//?\] ', '', s)        # Remove retracings <...> [//]
     s = re.sub(r'\[\!\] ?', ' ', s)               # Remove stressing [!]
-    s = re.sub(r' ?\(\.\) ', ' , ', s)            # Pauses (.) -> ,
+    s = re.sub(r' ?\(\.+\) ', ' ', s)            # Pauses (.) (..) -> remove
     s = re.sub(r'<([^>]+)>\s+\[%[^\]]+\]', r'\1', s) # Keep text before comment <text> [% comment]
     s = re.sub(r'<(0|www|xxx|yyy)[^>]+> ?', '', s)   # Remove unintelligible marked with <>
     s = re.sub(r'\+[<,]? ?', '', s)               # Remove +< and +,

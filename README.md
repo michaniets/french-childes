@@ -115,7 +115,74 @@ pattern {
 
 ## Workflow for processing Childes files
 
-Adapt the script `childes-pipeline.sh` automates the main steps of the workflow.
+Adapt the script `childes-pipeline.sh` to your needs.
 It contains the commands for the steps depicted below.
 
 ![Childes processing workflow](https://github.com/user-attachments/assets/ee7950a7-f503-44f0-9211-7ab5af7f1a3f)
+
+## Alternative parsing
+
+_childes.py_ calls the UDPipe API.  This is recommended, because the API uses UDPipe2, with considerably accuracy compared to UDPipe1.
+
+If you want to use UDPipe1 or any other parser locally, feel free to add the necessary function to _chides.py_.
+
+### Local use of UDPipe
+
+1. Install Python bindings
+> pip3 install ufal.udpipe
+
+2. Go to the [UDPipe Models Repository](https://lindat.mff.cuni.cz/repository/items/41f05304-629f-4313-b9cf-9eeb0a2ca7c6). Download any model, e.g. the generic French model: french-gsd-ud-2.5-191206.udpipe (25MB)
+
+3. Save the following code, e.g. as eval_udpipe1.py 
+
+```{Python}
+import sys
+from ufal.udpipe import Model, Pipeline, ProcessingError
+
+def parse_local(input_conllu, output_conllu, model_path):
+    # 1. Load the model
+    print(f"Loading model: {model_path}...")
+    model = Model.load(model_path)
+    if not model:
+        sys.stderr.write(f"Cannot load model from file '{model_path}'\n")
+        sys.exit(1)
+    print("Model loaded successfully.")
+
+    # 2. Setup pipeline
+    # input="conllu" (assumes already tokenized), output="conllu"
+    # We specifically want tagging and parsing.
+    pipeline = Pipeline(model, "conllu", Pipeline.DEFAULT, Pipeline.DEFAULT, "conllu")
+
+    # 3. Read input
+    with open(input_conllu, 'r', encoding='utf-8') as f:
+        text = f.read()
+
+    # 4. Process
+    print(f"Processing {input_conllu}...")
+    error = ProcessingError()
+    processed = pipeline.process(text, error)
+
+    if error.occurred():
+        sys.stderr.write("An error occurred when running UDPipe: ")
+        sys.stderr.write(error.message)
+        sys.stderr.write("\n")
+        sys.exit(1)
+
+    # 5. Write output
+    with open(output_conllu, 'w', encoding='utf-8') as f:
+        f.write(processed)
+    print(f"Output saved to {output_conllu}")
+
+if __name__ == '__main__':
+    if len(sys.argv) != 4:
+        print("Usage: python3 eval_udpipe1.py <input.conllu> <output.conllu> <model_file>")
+        sys.exit(1)
+    
+    parse_local(sys.argv[1], sys.argv[2], sys.argv[3])
+```
+
+4. Run the script on your non-annotated CoNLL-U file
+
+(It should also work with pre-annotated CoNLL-U; previous annotation will probably be overwritten)
+
+> python3 eval_udpipe1.py sample_input.conllu sample_output_local.conllu french-gsd-ud-2.5-191206.udpipe

@@ -269,6 +269,11 @@ class ChatProcessor:
             s = re.sub(reEndString, r' \1', s)
             s = re.sub(r'\s+', ' ', s)
         # Add other languages here with 'elif self.args.language == "other_language":'
+        elif hasattr(self, 'language') and re.search(r'eng|english', self.language):
+            s = re.sub(r'n\'t', r" n't", s)  # haven't -> have n't
+            s = re.sub(r"I'm", r"I 'm", s)  # it's -> it 's, I've -> I 've
+            s = re.sub(r'(\S)\'(s|ve|ll|d|re)', r"\1 '\2", s)  # it's -> it 's, I've -> I 've etc.
+            pass
         elif hasattr(self, 'language') and re.search(r'deu|german', self.language):
             pass
         else:

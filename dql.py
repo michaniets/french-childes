@@ -3,7 +3,7 @@
 
 __author__ = "Anonymous"
 __version__ = "1.3"
-__status__ = "09.11.2025"
+__status__ = "15.11.2025"
 __license__ = "GPL"
 
 import sys
@@ -672,7 +672,7 @@ def merge_with_csv(conllu_file, csv_file, code_head=False):
         writer.writerows(row_dict.values())
 
     # --- Clean Hyperlink Quotes (unchanged) ---
-    sys.stderr.write(f"Cleaning quotes around =HYPERLINK() formulas\n")
+    sys.stderr.write(f"  Cleaning quotes around =HYPERLINK() formulas\n")
     with open(tmp_file, mode='r', encoding='utf-8') as infile, open(merged_file, mode='w', encoding='utf-8') as outfile:
         for line in infile:
             cleaned_line = re.sub(r"\x1e", "", line)

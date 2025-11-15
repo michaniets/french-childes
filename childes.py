@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "4.4"
-__status__ = "09.11.25"
+__version__ = "4.5"
+__status__ = "15.11.25"
 __license__ = "GPL"
 
 import sys

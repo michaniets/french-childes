@@ -11,7 +11,7 @@
 # Added options -1 / -2 to run steps independently.
 #
 # MEMO: for batch processing the 11 selected French CHILDES files use:
-#   for file in Champaud Geneva Leveille Lyon MTLN Palasis Paris Pauline VionColas Yamaguchi York; do echo "----------> $file"; childes-pipeline.sh ${file}.chha.gz; done
+#   for file in Champaud Geneva Leveille Lyon MTLN Palasis Paris Pauline VionColas Yamaguchi York; do echo "----------> $file"; childes-pipeline.sh ${file}.cha.gz; done
 # OR:
 #   for file in *.cha.gz; do echo "----------> $file"; childes-pipeline.sh ${file}; done
 
@@ -21,12 +21,12 @@
 DATAPATH="."
 SERVER_IP="julienas.philosophie.uni-stuttgart.de"  # replace with your server IP address or domain name
 PYPATH="$HOME/git/french-childes"  # adjust to your path
-TAGGER_PAR="${DATAPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
-API_MODEL="french"  # UDPipe model. / French: french-gsd-ud-2.5-191206 / German: german-gsd-ud / Italian: italian-isdt-ud-2.5
-HTML_DIR="ch_fr"  # subfolder for parsed HTML files (don't precede with './')
+TAGGER_PAR="${DATAPATH}/english.par"   # TreeTagger parameter file
+API_MODEL="english-ewt-ud-2.5"  # UDPipe model. / French: french-gsd-ud-2.5-191206 / German: german-gsd-ud / Italian: italian-isdt-ud-2.5 / US English: english-ewt-ud-2.5
+HTML_DIR="ch_en"  # subfolder for parsed HTML files (don't precede with './')
 SERVER_URL="https://${SERVER_IP}/${HTML_DIR}"  # julienas - keep string short to avoid large output files
-# for Step 2: dql.py request file for linguistic codings
-DQL_REQUESTS="childes-french.query"  
+# For Step 2: Grew query file for adding codings
+DQL_REQUESTS="childes-english.query"
 
 
 set -e       # stop on error
@@ -103,7 +103,7 @@ if [ "$RUN_STEP_1" = true ]; then
     # converts CHAT to table and calls the UDPipe API
     # optionally: runs TreeTagger, generates HTML, generates CoNLL-U
     python3 "${PYPATH}/childes.py" "${INPUT_FILE}" \
-        --pos_utterance '^(AUX|VER|VV)' --pos_output '(AUX|VER|VV)' \
+        --pos_utterance '^(AUX|VER|VV|VH|VB|MD)' --pos_output '(AUX|VER|VV|VH|VB|MD)' \
         --write_conllu --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
         --api_model "${API_MODEL}" --parameters "${TAGGER_PAR}"   # (un)comment --parameters to (not) use TreeTagger
 
@@ -181,7 +181,7 @@ if [ "$RUN_STEP_2" = true ]; then
             # light version: keep only header, verb rows and selected columns, strip coding node details (!! adapt this to your pos tags)
             echo "Creating light coded version..."
             cat "${FILE_BASENAME}.parsed.coded.csv" |\
-                gawk -F'\t' '($1~/utt_id/ || $12~/^(VER|VV)/ || $21~/VERB/)' |\
+                gawk -F'\t' '($1~/utt_id/ || $12~/^(VER|V|MD)/ || $21~/VERB/)' |\
                 cut -d $'\t' -f1-4,6-10,12-15,20,28- |\
                 perl -npe 's/\(\d+>\d+_.*?\)//g'> "${FILE_BASENAME}.light.coded.csv"            
             echo "Light version of the table: ${FILE_BASENAME}.light.coded.csv"

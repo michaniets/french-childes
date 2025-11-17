@@ -11,7 +11,7 @@
 # Added options -1 / -2 to run steps independently.
 #
 # MEMO: for batch processing the 11 selected French CHILDES files use:
-#   for file in Champaud Geneva Leveille Lyon MTLN Palasis Paris Pauline VionColas Yamaguchi York; do echo "----------> $file"; childes-pipeline.sh ${file}.chha.gz; done
+#   for file in Champaud Geneva Leveille Lyon MTLN Palasis Paris Pauline VionColas Yamaguchi York; do echo "----------> $file"; childes-pipeline.sh ${file}.cha.gz; done
 # OR:
 #   for file in *.cha.gz; do echo "----------> $file"; childes-pipeline.sh ${file}; done
 
@@ -21,12 +21,10 @@
 DATAPATH="."
 SERVER_IP="julienas.philosophie.uni-stuttgart.de"  # replace with your server IP address or domain name
 PYPATH="$HOME/git/french-childes"  # adjust to your path
-TAGGER_PAR="${DATAPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
-API_MODEL="french"  # UDPipe model. / French: french-gsd-ud-2.5-191206 / German: german-gsd-ud / Italian: italian-isdt-ud-2.5
-HTML_DIR="ch_fr"  # subfolder for parsed HTML files (don't precede with './')
+TAGGER_PAR="${DATAPATH}/stts-german.par"   # TreeTagger parameter file
+API_MODEL="german-gsd-ud"  # UDPipe model. / French: french-gsd-ud-2.5-191206 / German: german-gsd-ud / Italian: italian-isdt-ud-2.5
+HTML_DIR="ch_de"  # subfolder for parsed HTML files (don't precede with './')
 SERVER_URL="https://${SERVER_IP}/${HTML_DIR}"  # julienas - keep string short to avoid large output files
-# for Step 2: dql.py request file for linguistic codings
-DQL_REQUESTS="childes-french.query"  
 
 
 set -e       # stop on error
@@ -136,6 +134,7 @@ if [ "$RUN_STEP_2" = true ]; then
     # You may need to adjust the arguments.
     # dql.py requires grewpy, see https://grew.fr/usage/python/
     #
+    DQL_REQUESTS="childes-german.query"
     
     # Define expected input files for step 2
     CONLLU_INPUT="${FILE_BASENAME}.conllu"

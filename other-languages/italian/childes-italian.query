@@ -1,0 +1,100 @@
+%--------------------------------------------------------
+% Rules for graphs created with UDPipe (Default Italian)
+%
+% % AS May 25
+%--------------------------------------------------------
+
+%--------------------------------------------------------
+% 1. OBJECT CLITICS
+%--------------------------------------------------------
+
+% ======= direct object person 3
+% coding attribute=clitic_acc value=obj3 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[lL].*$/, PronType="Prs"];
+    V -[obj]-> PRO;
+}
+
+% ======= direct object person 1-2
+% coding attribute=clitic_acc value=obj12 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[mtvnMTVN].*$/, PronType="Prs"];
+    V -[obj]-> PRO;
+}
+
+% ======= indirect object person 3
+% coding attribute=clitic_dat value=iobj3 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[lgLG].*$/, PronType="Prs"];
+    V -[iobj]-> PRO;
+}
+
+% ======= indirect object person 1-2
+% coding attribute=clitic_dat value=iobj12 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[mtvcMTVC].*$/, PronType="Prs"];
+    V -[iobj]-> PRO;
+}
+
+% ======= ci
+% coding attribute=clitic_adv value=loc node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[cC][i']/, PronType="Prs"];
+    V -[expl|expl:comp|obl:mod/]-> PRO;
+}
+
+%--------------------------------------------------------
+% 2. REFLEXIVE CLITICS
+%    usually parses reflexives as  expl:pv  or  obj
+%--------------------------------------------------------
+
+% ======= reflexive person 3
+% coding attribute=refl value=3 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [Clitic="Yes", Person="3", PronType="Prs"];
+    V -[re".*"]-> PRO;
+}
+
+% ======= reflexive person 1-2
+% coding attribute=refl value=12 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [Clitic="Yes", Person=/[12]/, PronType="Prs"];
+    V -[re".*"]-> PRO;
+}
+
+%--------------------------------------------------------
+% 3. POTENTIAL DATIVE ARGUMENTS (a-PPs)
+%    a-PPs are parsed as arguments (obl:arg) or modifiers (obl:mod)
+%--------------------------------------------------------
+
+% ======= a PP
+% coding attribute=a_pp value=mod node=P addlemma=N
+pattern {
+    V [upos=/AUX|VERB/];
+    P [form=/^(a|alla|alle|agli|al|all')/];
+    N [upos=/NOUN|PROPN/];
+    V -[obl|obl:mod]-> N;
+    N -[case]-> P;
+}
+
+%--------------------------------------------------------
+% 4. VERB PARTICLES
+%--------------------------------------------------------
+
+% ======= giù etc.
+% coding attribute=part value=adv node=P addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    P [ ];
+    V -[advmod]-> P;
+    V << P;
+}
+
+%

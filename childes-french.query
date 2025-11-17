@@ -1,0 +1,389 @@
+%--------------------------------------------------------
+% Rules for graphs created with UDPipe (Default French)
+% AS 9.11.25
+%
+% Rules are ranked by specificity (query stops at first match per attribute)
+% ==> run dql.py with flag --first_rule  (or use childes-pipeline.sh)
+% 
+% Rationale:
+% - attributes for functions: obj, iobj, oblique, modifier, refl
+% - for each function
+%   - rules specify positive values (e.g., clit3, nominal, etc.)
+%   - the last rule is a default rule with value "other"
+%--------------------------------------------------------
+
+
+%--------------------------------------------------------
+% subj: SUBJECT
+%   1=nsubj (so that nsubj:pass is also matched)
+%--------------------------------------------------------
+
+% ======= impersonal subject 
+% coding attribute=subj value=clit_imp node=PRO addlemma=V
+pattern {
+    V -[expl:subj]-> PRO;
+    V [upos=/AUX|VERB/];
+%    PRO [form=/^0il/i];
+}
+
+% ======= subject clitic
+% coding attribute=subj value=clit node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [];
+    V -[1=nsubj]-> PRO;
+}
+
+% ======= subject noun
+% coding attribute=subj value=noun node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN/];
+    V -[1=nsubj]-> N;
+}
+
+% ======= subject pronoun (not clitic): relative, demonstrative (ce, on, etc.)
+% coding attribute=subj value=pro node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos="PRON"];
+    V -[1=nsubj]-> N;
+}
+
+%--------------------------------------------------------
+% subj: SUBJECT OF COPULA
+%   (UD: the predicate is root and verb depends via 'cop')
+%--------------------------------------------------------
+
+% ======= copula subject pronoun (c'est X qui...)
+% coding attribute=subj value=pron_cop node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [upos=/PRON/];
+    X -[cop]-> V;
+    X -[nsubj|expl:subj]-> PRO;
+}
+
+% ======= copula subject noun (Paul est ...)
+% coding attribute=subj value=noun_cop node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN/];
+    X -[cop]-> V;
+    X -[nsubj]-> N;
+}
+
+% ======= copula predicate noun (c'est Paul)
+% coding attribute=obj value=noun_cop node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN/];
+    N -[cop]-> V;
+}
+
+%--------------------------------------------------------
+% obj: DIRECT OBJECT (including predicate of copula)
+%--------------------------------------------------------
+
+% ======= direct object person 3
+% coding attribute=obj value=clit3 node=PRO addlemma=V
+pattern {
+    V -[obj]-> PRO;
+    V [upos=/AUX|VERB/];
+    PRO [form=/^l.*$/i, PronType="Prs"];
+}
+
+% ======= direct object person 1-2: me te nous vous
+% coding attribute=obj value=clit12 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[mtvn].*$/i, PronType="Prs"];
+    V -[obj]-> PRO;
+}
+
+% ======= direct object noun
+% coding attribute=obj value=noun node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN/];
+    V -[obj]-> N;
+}
+
+% ======= direct object quantifier + noun (beaucoup de gens, plusieurs livres, etc.)
+% coding attribute=obj value=quant node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    Q [upos="ADV"];
+    N [upos=/NOUN|PRON/];
+    V -[obj]-> Q;
+    Q -> N;
+}
+
+% ======= direct object pronoun (not clitic): relative, demonstrative (cela, lui, etc.)
+% coding attribute=obj value=pro node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos="PRON"];
+    V -[obj]-> N;
+}
+
+%--------------------------------------------------------
+% iobj: Dative objects
+%    - only clitics seem to be parsed as 'iobj', never nominal complements (they are oblique)
+%    - subordinate clauses with 'où...' are also 'iobj', but we don't code them as such (shouldn't they be ccomp?)
+%--------------------------------------------------------
+
+% ======= indirect object person 3
+% coding attribute=iobj value=clit3 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^l.*$/i, PronType="Prs"];
+    V -[iobj]-> PRO;
+}
+
+% ======= indirect object person 1-2
+% coding attribute=iobj value=clit12 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form=/^[mtvn].*$/i, PronType="Prs"];
+    V -[iobj]-> PRO;
+}
+
+%--------------------------------------------------------
+% refl: reflexive clitics and pronouns
+%--------------------------------------------------------
+
+% ======= reflexive
+% coding attribute=refl value=clit node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form = re"^[sS][e\']$", PronType="Prs"];   % tricky: apostrophes don't work in /regex/
+    V -> PRO;    % or expl:pv ?
+}
+
+%--------------------------------------------------------
+% oblique: Prepositional objects
+%--------------------------------------------------------
+
+% ======= à-PP argument
+% coding attribute=oblique value=aPP node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[obl:arg]-> N;  % target only first part of e.g. obl:arg
+    N -[case]-> P;
+    P [form=/^à|au|aux/i];
+}
+
+% ======= y
+% coding attribute=oblique value=y node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form="y"];
+    V -> PRO;
+}
+
+% ======= en
+% coding attribute=oblique value=en node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [form="en"];
+    V -> PRO;
+}
+
+
+%--------------------------------------------------------
+% modifier: Prepositional modifiers
+%--------------------------------------------------------
+
+% ======= à-PP other
+% coding attribute=modifier value=aPP node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    V -> N;
+    N -[case]-> P;
+    P [form=/^à|au|aux/i];
+}
+without {
+    V -[obl:arg]-> N;  % except oblique arguments coded above
+}
+
+% ======= other PP
+% coding attribute=modifier value=otherPP node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    V -> N;
+    N -[case]-> P;
+}
+
+%--------------------------------------------------------
+% cp: CLAUSAL/PHRASAL COMPLEMENTS
+%--------------------------------------------------------
+
+% ======= Infinitive modal verbs: tu veux lui donner...
+% coding attribute=cp value=inf_xcomp node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/, VerbForm=Inf];
+    Vmain -[xcomp]-> V;   
+}
+
+% ======= Infinitive complement clause: falloir, aller + INF
+% coding attribute=cp value=inf_ccomp node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/, VerbForm=Inf];
+    Vmain -[ccomp]-> V;   
+}
+
+% ======= complement clause: 
+% coding attribute=cp value=fin_comp node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/];
+    Vmain -[xcomp]-> V;   
+}
+
+% ======= complement clause: 
+% coding attribute=cp value=fin_ccomp node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/];
+    Vmain -[ccomp]-> V;   
+}
+
+% ======= other verbal complements except passive
+% coding attribute=cp value=other node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/];
+    Vmain -> V;   
+}
+without {
+    Vmain -[aux:pass]-> V;
+}
+
+%--------------------------------------------------------
+% comp: COMPLEMENTISER OF CLAUSAL/PHRASAL COMPLEMENTS
+%--------------------------------------------------------
+
+% ======= for all CPs xcomp|ccomp
+% coding attribute=comp value=a node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/];
+    C [form="à"];
+    Vmain -[ccomp|xcomp]-> V;
+    V -> C;
+}
+
+% ======= for all CPs xcomp|ccomp
+% coding attribute=comp value=de node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/];
+    C [form="de"];
+    Vmain -[ccomp|xcomp]-> V;
+    V -> C;
+}
+
+% ======= for all CPs xcomp|ccomp
+% coding attribute=comp value=empty node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/];
+    Vmain -[ccomp|xcomp]-> V;
+}
+without {
+    V -[mark]-> C;
+}
+
+% ======= for all CPs xcomp|ccomp
+% coding attribute=comp value=other node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/];
+    Vmain -[ccomp|xcomp]-> V;
+    V -> C;
+}
+
+%--------------------------------------------------------
+% passive: 
+%--------------------------------------------------------
+
+% ======= other complements:
+% coding attribute=passive value=1 node=AUX addlemma=V
+pattern {
+    V [upos="VERB"];
+    AUX [upos="AUX"];
+    V -[aux:pass]-> AUX;
+}
+
+%--------------------------------------------------------
+% aux: AUXILIARIES
+%--------------------------------------------------------
+
+% ======= avoir aux
+% coding attribute=aux value=A node=AUX addlemma=V
+pattern {
+    V [upos=/VERB/];
+    AUX [upos="AUX", lemma="avoir"];
+    V -[1=aux]-> AUX;
+}
+
+% ======= être aux
+% coding attribute=aux value=E node=AUX addlemma=V
+pattern {
+    V [upos="VERB"];
+    AUX [upos="AUX", lemma=/être|estre/];
+    V -[1=aux]-> AUX;
+}
+
+%--------------------------------------------------------
+% aux: AUXILIARIES
+%   abaisser|achever|adoucir|affaiblir|aggraver|agiter|agiter|agrandir|agreger|alléger|allonger|alourdir|amaigrir|amatir|améliorer|amenuiser|amoindrir|anoblir|anuiter|apetisser|aplanir|aplatir|apparaître|apparoir|approcher|ardre|arrêter|arrondir|assécher|attendrir|attrister|augmenter|avancer|aviver|baisser|baser|bestourner|blesser|bouiller|briser|brûler|calcifier|casser|cesser|changer|claquer|clore|commencer|continuer|convertir|corrompre|couler|crever|croître|découvrir|décroitre|dégâter|demontrer|démontrer|descendre|dérouler|déserrer|dessécher|déteériorer|dilater|diminuer|dissiper|diviser|doubler|durcir|éclairer|éclater|effacer|effondre|élargir|élever|embellir|empirer|endurcir|enfaiblir|enflammer|enfler|engendrer|enlaidir|envieillir|épandre|escorlogier|esparpiellier|éteindre|étendre|évanouir|exister|fendre|finer|finir|flétrir|former|former|fortifier|glisser|grossir|guérir|incliner|intensifier|introduire|irriter|jaunir|lever|maigrir|manifester|moisir|mollir|monter|montrer|mouiller|mouillier|mourir|muer|multiplier|obscurcir|obscurer|ocire|ouvrir|parfaire|passer|perfectionner|plier|prouver|putréfier|rallumer|ramollir|rapprocher|redoubler|réduire|refreidier|refroidir|réfroidir|remplir|remuer|remuer|renforcer|renouveler|répandre|rompre|sécher|soulever|soulever|tenir|terminer|tordre|tourner|trancher|transformer|transformer|trembler|trouver|vider
+%--------------------------------------------------------
+
+% ======= anticaus yes  (AC's lemma list from R script, as of Nov 25)
+% coding attribute=anticaus value=1 node=V addlemma=V
+pattern {
+    V [upos="VERB", lemma=/^(abaisser|achever|adoucir|affaiblir|aggraver|agiter|agiter|agrandir|agreger|alléger|allonger|alourdir|amaigrir|amatir|améliorer|amenuiser|amoindrir|anoblir|anuiter|apetisser|aplanir|aplatir|apparaître|apparoir|approcher|ardre|arrêter|arrondir|assécher|attendrir|attrister|augmenter|avancer|aviver|baisser|baser|bestourner|blesser|bouiller|briser|brûler|calcifier|casser|cesser|changer|claquer|clore|commencer|continuer|convertir|corrompre|couler|crever|croître|découvrir|décroitre|dégâter|demontrer|démontrer|descendre|dérouler|déserrer|dessécher|déteériorer|dilater|diminuer|dissiper|diviser|doubler|durcir|éclairer|éclater|effacer|effondre|élargir|élever|embellir|empirer|endurcir|enfaiblir|enflammer|enfler|engendrer|enlaidir|envieillir|épandre|escorlogier|esparpiellier|éteindre|étendre|évanouir|exister|fendre|finer|finir|flétrir|former|former|fortifier|glisser|grossir|guérir|incliner|intensifier|introduire|irriter|jaunir|lever|maigrir|manifester|moisir|mollir|monter|montrer|mouiller|mouillier|mourir|muer|multiplier|obscurcir|obscurer|ocire|ouvrir|parfaire|passer|perfectionner|plier|prouver|putréfier|rallumer|ramollir|rapprocher|redoubler|réduire|refreidier|refroidir|réfroidir|remplir|remuer|remuer|renforcer|renouveler|répandre|rompre|sécher|soulever|soulever|tenir|terminer|tordre|tourner|trancher|transformer|transformer|trembler|trouver|vider)$/];
+}
+
+
+%--------------------------------------------------------
+% sv: WORD-ORDER SUBJECT-VERB
+%--------------------------------------------------------
+
+% ======= subject noun
+% coding attribute=order_subj value=vs node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[1=nsubj]-> N;
+    V << N;
+}
+
+% ======= subject noun
+% coding attribute=order_subj value=sv node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[1=nsubj]-> N;
+    N << V;
+}
+
+
+
+exit 
+
+
+
+%--------------------------------------------------------
+% INTRANSITIVE (no way)
+%--------------------------------------------------------
+
+% coding attribute=intr value=1 node=X addlemma=V
+pattern {
+    V -> X;
+}
+without {
+    V -[obj|iobj]-> X;
+}

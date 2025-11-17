@@ -1,15 +1,17 @@
 # Processing French CHILDES data
 
-`childes.py` converts CHILDES CHAT files in a pipeline **CHAT -\> Tagger -\> Parser -\> CSV/CoNLL-U**.
+1. `childes.py` converts CHILDES CHAT files in a pipeline **CHAT -\> Tagger -\> Parser -\> CSV/CoNLL-U**.
 
-`dql.py` performs multiple Grew queries on CoNLL-U files and allows the resulting codings (attribute-value pairs) to be merged into the CSV file.
+2. `dql.py` performs multiple Grew queries on CoNLL-U files and allows the resulting codings (attribute-value pairs) to be merged into the CSV file.
 
 A wrapper `childes-pipeline.sh` contains an adaptable workflow for processing CHAT files with these scripts.
 
 The scripts were developed for French input, but `childes.py` is sensitive to the language CODE in CHAT files. French, Italian and English CHILDES files were processed successfully. For other languges, please adapt:
 
-- tokenisation rules in tokenise()
-- the options --pos_utterance and --pos_output when calling the script
+- `childes.py`: tokenisation rules in tokenise() and the options --pos_utterance and --pos_output 
+- `dql.py`: the Grew query for syntactic coding
+
+For some languages, the folder _other-languages_  contains a usable wrapper script and coding query file.
 
 ## childes.py
 

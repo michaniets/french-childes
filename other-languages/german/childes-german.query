@@ -1,0 +1,221 @@
+%--------------------------------------------------------
+% Rules for graphs created with UDPipe (German model german-gsd-ud)
+%
+% Rules are ranked by specificity
+% ==> run dql.py --first_rule
+% 
+% Rationale:
+% - attributes for functions: obj, iobj, oblique, modifier, refl
+% - for each function
+%   - rules specify positive values (e.g., clit3, nominal, etc.)
+%   - the last rule is a default rule with value "other"
+% - intransitive is inferred if no function is annotated for
+%   - there is no positive way to match intransitives
+%--------------------------------------------------------
+
+
+%--------------------------------------------------------
+% subj: SUBJECT
+%   1=nsubj (so that nsubj:pass is also matched)
+%--------------------------------------------------------
+
+% ======= subject noun
+% coding attribute=subj value=nom node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN/];
+    V -[1=nsubj]-> N;
+}
+
+% ======= subject pronoun
+% coding attribute=subj value=pron node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [upos=/PRON/, Case="Nom"];
+    V -[1=nsubj]-> PRO;
+}
+
+%--------------------------------------------------------
+% sv_order: SUBJECT-VERB ORDER
+%--------------------------------------------------------
+
+% ======= subject noun postverbal
+% coding attribute=sv_order value=vs node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN|PRON/];
+    V -[1=nsubj]-> N;
+    V << N;
+}
+
+% ======= subject noun
+% coding attribute=sv_order value=sv node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN|PRON/];
+    V -[1=nsubj]-> N;
+    N << V;
+}
+
+%--------------------------------------------------------
+% subj: SUBJECT OF COPULA
+%   (UD: the predicate is root and verb depends via 'cop')
+%--------------------------------------------------------
+
+% ======= copula subject pronoun (c'est X qui...)
+% coding attribute=subj value=pron_cop node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/PRON/];
+    X -[cop]-> V;
+    X -[nsubj|expl:subj]-> N;
+}
+
+% ======= copula subject noun (Paul est ...)
+% coding attribute=subj value=noun_cop node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN/];
+    X -[cop]-> V;
+    X -[nsubj]-> N;
+}
+
+% ======= copula predicate noun (c'est Paul)
+% coding attribute=obj value=noun_cop node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN/];
+    N -[cop]-> V;
+}
+
+%--------------------------------------------------------
+% obj: DIRECT OBJECT (including predicate of copula)
+%--------------------------------------------------------
+
+% ======= direct object noun
+% coding attribute=obj value=noun node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN/];
+    V -[obj]-> N;
+}
+
+% ======= direct object pronoun (not clitic): relative, demonstrative (cela, lui, etc.)
+% coding attribute=obj value=pro node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos="PRON"];
+    V -[obj]-> N;
+}
+
+%--------------------------------------------------------
+% iobj: Dative objects
+% in UDPipe model obl:arg
+%--------------------------------------------------------
+
+% ======= indirect object pronoun
+% coding attribute=iobj value=pron node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [PronType="Prs"];
+    V -[iobj|obl:arg]-> PRO;
+}
+
+% ======= indirect object noun
+% coding attribute=iobj value=nom node=N addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    N [upos=/NOUN|PROPN/];
+    V -[iobj|obl:arg]-> N;
+}
+
+%--------------------------------------------------------
+% refl: reflexive clitics and pronouns
+%--------------------------------------------------------
+
+% ======= reflexive
+% coding attribute=refl value=1 node=PRO addlemma=V
+pattern {
+    V [upos=/AUX|VERB/];
+    PRO [Reflex="Yes"];
+    V -> PRO; 
+}
+
+%--------------------------------------------------------
+% oblique: Prepositional objects (relevant for German?)
+%--------------------------------------------------------
+
+
+%--------------------------------------------------------
+% cp: CLAUSAL/PHRASAL COMPLEMENTS
+%--------------------------------------------------------
+
+% ======= Infinitival clause: lassen + INF,  zu...INF
+% coding attribute=cp value=xcomp node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/, VerbForm=Inf];
+    Vmain -[xcomp]-> V;   
+}
+
+% ======= complement clause: damit...
+% coding attribute=cp value=ccomp node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/, VerbForm=Inf];
+    Vmain -[ccomp]-> V;   
+}
+
+% ======= other complements:
+% coding attribute=cp value=coord node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/, VerbForm=Inf];
+    Vmain -[conj|parataxis]-> V;   
+}
+
+% ======= other complements:
+% coding attribute=cp value=other node=V addlemma=Vmain
+pattern {
+    Vmain [upos="VERB"];
+    V [upos=/AUX|VERB/, VerbForm=Inf];
+    Vmain -> V;   
+}
+without {
+    Vmain -[aux:pass]-> V;
+}
+
+%--------------------------------------------------------
+% passive: 
+%--------------------------------------------------------
+
+% ======= passive werden
+% coding attribute=passive value=werden node=AUX addlemma=V
+pattern {
+    V [upos="VERB"];
+    AUX [lemma="werden", upos="AUX"];
+    V -[aux:pass]-> AUX;
+}
+
+% ======= passive sein
+% coding attribute=passive value=sein node=AUX addlemma=V
+pattern {
+    V [upos="VERB"];
+    AUX [lemma="sein", upos="AUX"];
+    V -[aux:pass]-> AUX;
+}
+
+% ======= passive other (redundant)
+% coding attribute=passive value=other node=AUX addlemma=V
+pattern {
+    V [upos="VERB"];
+    AUX [upos="AUX"];
+    V -[aux:pass]-> AUX;
+}
+without {
+    AUX [lemma=/sein|werden/];
+}
+
+
+
+exit 

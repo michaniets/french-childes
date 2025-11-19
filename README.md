@@ -26,7 +26,7 @@ This script converts CHILDES chat data to a one-word-per-line CSV format. It int
   - **Non-Destructive Conversion:** The original utterance from the CHAT file is preserved. Special markers (e.g., `[//]`, `(.)`, `xxx`) are retained in the raw utterance column, while a cleaned version is used for tagging and parsing.
   - **Outputs:**
       - A **full CSV** (`.parsed.csv`) containing all original columns plus the complete CoNLL-U annotation for each token.
-      - A **light CSV** (`.light.csv` or `.work.csv`) containing a subset of columns, optionally filtered by the POS of the token (`--pos_output`).
+      - A **light CSV** (`.light.csv`) containing a subset of columns, optionally filtered by the POS of the token (`--pos_output`).
       - An optional **CoNLL-U file** (`.conllu`) for use with other NLP tools.
       - Optional **HTML files** for browsing the parsed dependency trees in a web browser.
 
@@ -35,10 +35,10 @@ This script converts CHILDES chat data to a one-word-per-line CSV format. It int
 The recommended method is to adapt the wrapper script `childes-pipeline.sh` to your local paths and run it with the CHAT file as an argument:
 
 ```sh
-./childes-pipeline.sh <chatfile.cha[.gz]>
+./childes-pipeline.sh [-1|-2] <chatfile.cha[.gz]>
 ```
 
-Alternatively, run `childes.py` manually.
+Use the options `-1`and `-2` if you want to execute conversion / annotation (`childes.py`) and coding queries (`dql.py`) separately. Or run the Python scripts manually.
 
 ### Examples:
 

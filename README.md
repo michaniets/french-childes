@@ -8,8 +8,8 @@ A wrapper `childes-pipeline.sh` contains an adaptable workflow for processing CH
 
 The scripts were developed for French input, but `childes.py` is sensitive to the language CODE in CHAT files. French, Italian and English CHILDES files were processed successfully. For other languges, please adapt:
 
-- `childes.py`: tokenisation rules in tokenise() and the options --pos_utterance and --pos_output 
-- `dql.py`: the Grew query for syntactic coding
+- `childes.py`: add tokenisation rules to the function `tokenise()`. If you use the options --pos_utterance and --pos_output, their  arguments need to match the language-specific pos tags.
+- `dql.py`: adapt the Grew query (syntactic coding) to language-specific UD annotation
 
 For some languages, the folder _other-languages_  contains a usable wrapper script and coding query file.
 

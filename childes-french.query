@@ -1,6 +1,9 @@
 %--------------------------------------------------------
 % Rules for graphs created with UDPipe (Default French)
-% AS 9.11.25
+% AS 1.12.25
+
+% TODO
+% - modpp and modadv are new attributes -> check overlap with modifier.
 %
 % Rules are ranked by specificity (query stops at first match per attribute)
 % ==> run dql.py with flag --first_rule  (or use childes-pipeline.sh)
@@ -192,6 +195,87 @@ pattern {
 
 
 %--------------------------------------------------------
+% modpp: modifiers as PPs
+% Inconsistent dependency relations:
+%   obj:   mets-le dedans, parterre, ...au lit
+%   advmod [ > case]:  tu le mets là(-haut), elle monte de partout
+%   obl:arg [ > case]:   monter dedans celui-là
+%--------------------------------------------------------
+
+% ======= modifier is PP
+% coding attribute=modpp value=obl_arg node=V addlemma=P
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[obl:arg]-> N; 
+    N -[case]-> P;
+}
+
+% coding attribute=modpp value=obl_mod node=V addlemma=P
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[obl:mod]-> N;  
+    N -[case]-> P;
+}
+
+% coding attribute=modpp value=adv node=V addlemma=P
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[advmod]-> N;
+    N -[case]-> P;
+}
+
+% coding attribute=modpp value=obj node=V addlemma=P
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[obj]-> N;
+    N -[case]-> P;
+}
+
+%--------------------------------------------------------
+% modpp: modifiers as single adverb
+% Inconsistent dependency relations:
+%   obj:   mets-le dedans, parterre, ...au lit
+%   advmod [ > case]:  tu le mets là(-haut), elle monte de partout
+%   obl:arg [ > case]:   monter dedans celui-là
+%--------------------------------------------------------
+
+% coding attribute=modadv value=obl_arg node=V addlemma=ADV
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[obl:arg]-> ADV;  
+}
+without {
+    ADV -[case]-> P;
+}
+
+% coding attribute=modadv value=obl_mod node=V addlemma=ADV
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[obl:mod]-> ADV;  
+}
+without {
+    ADV -[case]-> P;
+}
+
+% coding attribute=modadv value=adv node=V addlemma=ADV
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[advmod]-> ADV;
+}
+without {
+    ADV -[case]-> P;
+}
+
+% coding attribute=modadv value=obj node=V addlemma=ADV
+pattern {
+    V [upos=/AUX|VERB/];
+    V -[obj]-> ADV;
+}
+without {
+    ADV -[case]-> P;
+}
+
+%--------------------------------------------------------
 % modifier: Prepositional modifiers
 %--------------------------------------------------------
 
@@ -204,7 +288,7 @@ pattern {
     P [form=/^à|au|aux/i];
 }
 without {
-    V -[obl:arg]-> N;  % except oblique arguments coded above
+    V -[obl:arg]-> N;  % except oblique arguments coded as attribute oblique
 }
 
 % ======= other PP
@@ -373,17 +457,3 @@ pattern {
 
 
 exit 
-
-
-
-%--------------------------------------------------------
-% INTRANSITIVE (no way)
-%--------------------------------------------------------
-
-% coding attribute=intr value=1 node=X addlemma=V
-pattern {
-    V -> X;
-}
-without {
-    V -[obj|iobj]-> X;
-}

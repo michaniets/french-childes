@@ -1,6 +1,6 @@
 %--------------------------------------------------------
 % Rules for graphs created with UDPipe (Default French)
-% AS 1.12.25
+% AS 2.12.25
 
 % TODO
 % - modpp and modadv are new attributes -> check overlap with modifier.
@@ -423,7 +423,28 @@ pattern {
 }
 
 %--------------------------------------------------------
-% aux: AUXILIARIES
+% caus: causative faire/laisser + Inf 
+%   The UDpipe model codes the auxiliaries differently:
+%    laisser -xcomp-> INF
+%    INF -aux:caus-> faire
+%--------------------------------------------------------
+
+% coding attribute=caus value=laisser node=Vcaus addlemma=V
+pattern {
+    Vcaus [lemma="laisser", upos=/AUX|VERB/];
+    V [upos="VERB", VerbForm=Inf];
+    Vcaus -[ccomp|xcomp]-> V;   
+}
+
+% coding attribute=caus value=faire node=Vcaus addlemma=V
+pattern {
+    Vcaus [lemma="faire", upos=/AUX|VERB/];
+    V [upos="VERB", VerbForm=Inf];
+    V -[1=aux]-> Vcaus;   
+}
+
+%--------------------------------------------------------
+% anticaus: ANTICAUSATIVES
 %   abaisser|achever|adoucir|affaiblir|aggraver|agiter|agiter|agrandir|agreger|alléger|allonger|alourdir|amaigrir|amatir|améliorer|amenuiser|amoindrir|anoblir|anuiter|apetisser|aplanir|aplatir|apparaître|apparoir|approcher|ardre|arrêter|arrondir|assécher|attendrir|attrister|augmenter|avancer|aviver|baisser|baser|bestourner|blesser|bouiller|briser|brûler|calcifier|casser|cesser|changer|claquer|clore|commencer|continuer|convertir|corrompre|couler|crever|croître|découvrir|décroitre|dégâter|demontrer|démontrer|descendre|dérouler|déserrer|dessécher|déteériorer|dilater|diminuer|dissiper|diviser|doubler|durcir|éclairer|éclater|effacer|effondre|élargir|élever|embellir|empirer|endurcir|enfaiblir|enflammer|enfler|engendrer|enlaidir|envieillir|épandre|escorlogier|esparpiellier|éteindre|étendre|évanouir|exister|fendre|finer|finir|flétrir|former|former|fortifier|glisser|grossir|guérir|incliner|intensifier|introduire|irriter|jaunir|lever|maigrir|manifester|moisir|mollir|monter|montrer|mouiller|mouillier|mourir|muer|multiplier|obscurcir|obscurer|ocire|ouvrir|parfaire|passer|perfectionner|plier|prouver|putréfier|rallumer|ramollir|rapprocher|redoubler|réduire|refreidier|refroidir|réfroidir|remplir|remuer|remuer|renforcer|renouveler|répandre|rompre|sécher|soulever|soulever|tenir|terminer|tordre|tourner|trancher|transformer|transformer|trembler|trouver|vider
 %--------------------------------------------------------
 

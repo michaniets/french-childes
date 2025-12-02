@@ -4,7 +4,7 @@
 
 2. `dql.py` performs multiple Grew queries on CoNLL-U files and allows the resulting codings (attribute-value pairs) to be merged into the CSV file.
 
-A wrapper `childes-pipeline.sh` contains an adaptable workflow for processing CHAT files with these scripts.
+A wrapper script `childes-pipeline.sh` contains an adaptable workflow for processing CHAT files with these scripts.
 
 The scripts were developed for French input, but `childes.py` is sensitive to the language CODE in CHAT files. French, Italian and English CHILDES files were processed successfully. For other languges, please adapt:
 

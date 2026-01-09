@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "4.5"
-__status__ = "15.11.25"
+__version__ = "5.0"
+__status__ = "9.2.26"
 __license__ = "GPL"
 
 import sys
@@ -399,39 +399,6 @@ class ChatProcessor:
         
         self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
 
-    def parse_header(self, header_block):
-        self.childData = {}
-
-        if m := re.search(r'@PID:.*?-(\d+)', header_block):
-            self.pid = m.group(1)
-            self.pid = re.sub(r'^0+', '', self.pid)
-        
-        """
-        match @ID line, e.g.:  @ID:	fra|Paris|CHI|1;04.13|female|||Target_Child|||
-        French has child names in particpants line, German not (or not always?):
-          @Participants:	CHI Anaé Target_Child, MOT Marie Mother, BRO Ael Brother, BR1 Arthur Brother
-          @Participants:	MOT Mother, CHI Target_Child
-        """
-        if (m := re.search(r'@ID:\s+(.*?)\|(.*?)\|CHI\|([0-9;.]+)\|.*Target_Child', header_block)):
-            self.language, self.project, age_str = m.groups()
-            if age_str == '24;00.02': age_str = '2;00.02'  # fix bug in Italian Calambrone project (stating age 24 for Diana)
-            self.age, self.age_days = parseAge(age_str)
-            if self.html_exporter:                
-                self.html_exporter.project = self.project   # we use project name in html filenames
-            if (m_p := re.search(r'@Participants:.*CHI\s+([^\s,]+)', header_block)):
-                child_name = m_p.group(1)
-                self.child = f"{child_name}_{self.project[:3]}"
-                # normalise some inconsistencies in the original CHAT files
-                self.child = re.sub(r'[éè]', 'e', self.child)  # e.g. Anaé | Anae -> Anae
-                self.child = re.sub(r'Ann_Yor', 'Anne_Yor', self.child)
-                self.child = re.sub(r'(Greg|Gregx|Gregoire)_Cha', 'Gregoire_Cha', self.child)
-                self.child = re.sub(r'Sullyvan', 'Sullivan', self.child)
-                # store child data
-                self.childData['CHI'] = (self.child, self.age, self.age_days)
-            else: # Fallback if name is not next to CHI
-                self.child = f"NN_{self.project[:3]}"
-                self.childData['CHI'] = (self.child, self.age, self.age_days)
-    
     def generate_rows_from_tagger(self, splitUtt, raw_utt, speaker, uttID, timeCode):
         clean_val = splitUtt if self.args.utt_clean else ''
         words = self.tokenise(splitUtt).split(' ')
@@ -440,10 +407,96 @@ class ChatProcessor:
             age, age_days, child_other = self.get_speaker_age(speaker)
             self.outRows.append({'utt_id': f"{uttID}_w{wNr}", 'utt_nr': self.sNr, 'w_nr': wNr, 'speaker': speaker, 'child_project': self.child, 'child_other': child_other, 'age': age, 'age_days': age_days, 'time_code': timeCode, 'word': w, 'utterance': raw_utt, 'utt_clean': clean_val})
 
+    def parse_header(self, header_block):
+        """
+        Version >= 5.0: updated for multi-child corpora. Recursively finds ALL children and stores their age data.
+        """
+        self.childData = {}
+        self.project = ""
+        self.language = ""
+
+        # 1. Extract PID
+        if m_pid := re.search(r'@PID:.*?-(\d+)', header_block):
+            self.pid = m_pid.group(1)
+            sys.stderr.write(f"\n-------------> PID {self.pid}.\n")
+            self.pid = re.sub(r'^0+', '', self.pid)
+
+        # 2. Extract Project and Language from the first @ID line found
+        if m_id_gen := re.search(r'@ID:\s+(.*?)\|(.*?)\|', header_block):
+            self.language, self.project = m_id_gen.groups()
+            if self.html_exporter:
+                self.html_exporter.project = self.project
+
+        # 3. Build a map of Speaker Code -> Real Name from @Participants
+        code_to_name = {}
+        clean_header = re.sub(r'\n\t', ' ', header_block)
+        
+        if m_part := re.search(r'@Participants:\s+(.*)', clean_header):
+            participants_str = m_part.group(1)
+            parts = participants_str.split(',')
+            for p in parts:
+                tokens = p.strip().split()
+                if len(tokens) >= 2:
+                    code = tokens[0]
+                    name = tokens[1]
+                    code_to_name[code] = name
+
+        # 4. Parse all @ID lines to find ALL Target_Children
+        id_lines = re.findall(r'@ID:\s+(.*)', header_block)
+        
+        for line in id_lines:
+            fields = line.strip().split('|')
+            if len(fields) > 7:
+                code = fields[2]
+                age_str = fields[3]
+                role = fields[7]
+                
+                if role == 'Target_Child':
+                    if age_str == '24;00.02': age_str = '2;00.02'
+                    
+                    if age_str:
+                        _, age_days = parseAge(age_str)
+                    else:
+                        age_days = 0
+                        
+                    if code in code_to_name:
+                        child_name = code_to_name[code]
+                    else:
+                        child_name = code 
+                    
+                    # fix some inconsistencies in child names
+                    child_name = re.sub(r'[éè]', 'e', child_name)
+                    child_name = re.sub(r'Ann_Yor', 'Anne_Yor', child_name)
+                    child_name = re.sub(r'(Greg|Gregx|Gregoire)_Cha', 'Gregoire_Cha', child_name)
+                    child_name = re.sub(r'Sullyvan', 'Sullivan', child_name)
+                    
+                    full_id = f"{child_name}_{self.project[:3]}"
+                    
+                    self.childData[code] = (full_id, age_str, age_days)
+
+        # 5. Always identify at least one "target child," even if the CHAT file is missing the standard @ID headers
+        if not self.childData and 'CHI' in code_to_name:
+             self.childData['CHI'] = (f"{code_to_name['CHI']}_{self.project[:3]}", "", 0)
+        elif not self.childData:
+             self.childData['CHI'] = (f"NN_{self.project[:3]}", "", 0)
+
     def get_speaker_age(self, speaker):
-        if speaker in self.childData: return self.childData[speaker][1], self.childData[speaker][2], "C"
-        # For 'other' speakers, return empty age strings but carry over the target child's age_days for filtering/sorting
-        return '', self.childData.get('CHI', ('', '', 0))[2], "X"
+        """
+        Returns (AgeString, AgeDays, Category)
+        Category is "C" if speaker is a target child, "X" otherwise.
+        """
+        # 1. If the speaker is a known Target_Child: return age and "C" in column child_other
+        if speaker in self.childData:
+            return self.childData[speaker][1], self.childData[speaker][2], "C"
+        # 2. If not, it is an 'Other' (Adult/Investigator/Other Child)
+        # We add a reference age for sorting/binning purposes (in multi-child files, we use the first registered child's age)
+        ref_age_days = 0
+        if self.childData:
+            # Get the first available child's age
+            first_child = next(iter(self.childData.values()))
+            ref_age_days = first_child[2]
+            
+        return '', ref_age_days, "X"
     
     def finalize_output(self, *args, **kwargs):
         """Final processing: run tagger and/or parser, write output files"""

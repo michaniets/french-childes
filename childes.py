@@ -418,7 +418,6 @@ class ChatProcessor:
         # 1. Extract PID
         if m_pid := re.search(r'@PID:.*?-(\d+)', header_block):
             self.pid = m_pid.group(1)
-            sys.stderr.write(f"\n-------------> PID {self.pid}.\n")
             self.pid = re.sub(r'^0+', '', self.pid)
 
         # 2. Extract Project and Language from the first @ID line found

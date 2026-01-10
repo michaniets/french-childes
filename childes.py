@@ -2,7 +2,7 @@
 
 __author__ = "Achim Stein"
 __version__ = "5.0"
-__status__ = "9.2.26"
+__status__ = "10.1.26"
 __license__ = "GPL"
 
 import sys
@@ -402,20 +402,42 @@ class ChatProcessor:
     def generate_rows_from_tagger(self, splitUtt, raw_utt, speaker, uttID, timeCode):
         clean_val = splitUtt if self.args.utt_clean else ''
         words = self.tokenise(splitUtt).split(' ')
+        
+        age, age_days, child_other, child_project_id = self.get_speaker_age(speaker)
+        
+        for wNr, w in enumerate(words, 1):
+            if not w: continue
+            
+            self.outRows.append({
+                'utt_id': f"{uttID}_w{wNr}", 
+                'utt_nr': self.sNr, 
+                'w_nr': wNr, 
+                'speaker': speaker, 
+                'child_project': child_project_id,
+                'child_other': child_other, 
+                'age': age, 
+                'age_days': age_days, 
+                'time_code': timeCode, 
+                'word': w, 
+                'utterance': raw_utt, 
+                'utt_clean': clean_val
+            })
+    
+    def generate_rows_from_tagger_OLD(self, splitUtt, raw_utt, speaker, uttID, timeCode):
+        clean_val = splitUtt if self.args.utt_clean else ''
+        words = self.tokenise(splitUtt).split(' ')
         for wNr, w in enumerate(words, 1):
             if not w: continue
             age, age_days, child_other = self.get_speaker_age(speaker)
             self.outRows.append({'utt_id': f"{uttID}_w{wNr}", 'utt_nr': self.sNr, 'w_nr': wNr, 'speaker': speaker, 'child_project': self.child, 'child_other': child_other, 'age': age, 'age_days': age_days, 'time_code': timeCode, 'word': w, 'utterance': raw_utt, 'utt_clean': clean_val})
 
     def parse_header(self, header_block):
-        """
-        Version >= 5.0: updated for multi-child corpora. Recursively finds ALL children and stores their age data.
-        """
         self.childData = {}
         self.project = ""
         self.language = ""
+        # Do NOT reset self.pid here; it persists from the preamble chunk.
 
-        # 1. Extract PID
+        # 1. Update PID only if a new one is found (usually in the preamble)
         if m_pid := re.search(r'@PID:.*?-(\d+)', header_block):
             self.pid = m_pid.group(1)
             self.pid = re.sub(r'^0+', '', self.pid)
@@ -450,20 +472,22 @@ class ChatProcessor:
                 age_str = fields[3]
                 role = fields[7]
                 
+                # Check if this ID belongs to a target child
                 if role == 'Target_Child':
-                    if age_str == '24;00.02': age_str = '2;00.02'
+                    if age_str == '24;00.02': age_str = '2;00.02' # Fix known data bug
                     
                     if age_str:
                         _, age_days = parseAge(age_str)
                     else:
                         age_days = 0
                         
+                    # Determine Identifier (Name_Project or Code_Project)
                     if code in code_to_name:
                         child_name = code_to_name[code]
                     else:
                         child_name = code 
-                    
-                    # fix some inconsistencies in child names
+                        
+                    # Normalise inconsistencies
                     child_name = re.sub(r'[éè]', 'e', child_name)
                     child_name = re.sub(r'Ann_Yor', 'Anne_Yor', child_name)
                     child_name = re.sub(r'(Greg|Gregx|Gregoire)_Cha', 'Gregoire_Cha', child_name)
@@ -471,9 +495,10 @@ class ChatProcessor:
                     
                     full_id = f"{child_name}_{self.project[:3]}"
                     
+                    # Store data: self.childData[CODE] = (ID, AgeString, AgeDays)
                     self.childData[code] = (full_id, age_str, age_days)
 
-        # 5. Always identify at least one "target child," even if the CHAT file is missing the standard @ID headers
+        # 5. Fallback: If no child data found, assign default CHI
         if not self.childData and 'CHI' in code_to_name:
              self.childData['CHI'] = (f"{code_to_name['CHI']}_{self.project[:3]}", "", 0)
         elif not self.childData:
@@ -481,21 +506,25 @@ class ChatProcessor:
 
     def get_speaker_age(self, speaker):
         """
-        Returns (AgeString, AgeDays, Category)
+        Returns (AgeString, AgeDays, Category, ProjectID)
         Category is "C" if speaker is a target child, "X" otherwise.
         """
-        # 1. If the speaker is a known Target_Child: return age and "C" in column child_other
+        # 1. Is the speaker a known Target Child?
         if speaker in self.childData:
-            return self.childData[speaker][1], self.childData[speaker][2], "C"
-        # 2. If not, it is an 'Other' (Adult/Investigator/Other Child)
-        # We add a reference age for sorting/binning purposes (in multi-child files, we use the first registered child's age)
+            # childData[speaker] = (full_id, age_str, age_days)
+            return self.childData[speaker][1], self.childData[speaker][2], "C", self.childData[speaker][0]
+        
+        # 2. If not, it is an 'Other' (Adult/Investigator)
+        # Fallback: Use the first registered child's ID and Age as the "Session Reference"
         ref_age_days = 0
+        ref_project_id = "" 
+        
         if self.childData:
-            # Get the first available child's age
             first_child = next(iter(self.childData.values()))
+            ref_project_id = first_child[0] # e.g. "Dylan_Pal"
             ref_age_days = first_child[2]
             
-        return '', ref_age_days, "X"
+        return '', ref_age_days, "X", ref_project_id
     
     def finalize_output(self, *args, **kwargs):
         """Final processing: run tagger and/or parser, write output files"""

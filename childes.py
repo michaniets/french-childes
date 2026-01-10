@@ -628,20 +628,21 @@ class ChatProcessor:
         # DictWriter messes up the =HYPERLINK() formulas by quoting them.
         # - Step 1 write without quotes, use dummy escapechar (required by csv module)
         tmp_file = parsed_csv_path + ".tmp"
-        sys.stderr.write(f"Writing first output to {tmp_file}\n")
+        sys.stderr.write(f"Writing temporary tabular output to {tmp_file}\n")
         with open(tmp_file, 'w', newline='', encoding='utf8') as f_parsed:
             writer_parsed = csv.DictWriter(f_parsed, delimiter='\t', fieldnames=header_parsed,
                                            extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\x1e')
             writer_parsed.writeheader()
             writer_parsed.writerows(processed_rows_for_initial_write)
 
-        """ 
-        (DictWriter unwantedly quotes them and makes URLs uninterpretable in Spreadsheet)
+        """
+        "Manual" export step to final CSV files (workaround to preserve valid URLs) 
+        (DictWriter unwantedly quotes URLs and makes them uninterpretable in Spreadsheet)
         In this step, we also apply utterance filtering for light version.
         This is not elegant, but avoids the csv module.
         """
         # - Step 2 read temp file and delete escapechar
-        sys.stderr.write("Reading back initial TSV and writing final files manually...\n")
+        sys.stderr.write("Reading back temporary CSV and writing final files manually...\n")
 
         light_csv_path = parsed_csv_path.replace("parsed", "light")  # *.light.csv
 
@@ -757,7 +758,7 @@ class ChatProcessor:
             chunk_content = "\n\n".join(chunk)
             current_chunk_num = i//chunk_size + 1
             eta = round(len(chunk) / 330)
-            progress_msg = f"\r  Sending chunk {current_chunk_num}/{total_chunks} ({len(chunk)} utterances) to API. ETA for this chunk ~{eta}s..."
+            progress_msg = f"\r  Sending chunk {current_chunk_num}/{total_chunks} ({len(chunk)} utterances) to API. Processing time ~{eta}s..."
             sys.stderr.write(progress_msg)
             sys.stderr.flush()
             params = {'model': model, 'input': 'conllu', 'tagger': '', 'parser': ''}

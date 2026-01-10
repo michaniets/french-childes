@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # childes-pipeline.sh
-# Version 2.2
-# Nov 2025
+# Version 2.3
+# Dec 2025
 #
 # pipeline to process a CHAT file. It uses childes.py verion>=4.0 to handle
 # conversion, tagging, parsing, and HTML generation in a single step.
@@ -18,6 +18,7 @@
 # --- Configuration ---
 # Path to your scripts and models
 # UDPipe model list: https://lindat.mff.cuni.cz/repository/items/41f05304-629f-4313-b9cf-9eeb0a2ca7c6
+PYCMD="python3.11"  # or python3, adjust to your Python command
 DATAPATH="."
 SERVER_IP="julienas.philosophie.uni-stuttgart.de"  # replace with your server IP address or domain name
 PYPATH="$HOME/git/french-childes"  # adjust to your path
@@ -27,6 +28,7 @@ HTML_DIR="ch_fr"  # subfolder for parsed HTML files (don't precede with './')
 SERVER_URL="https://${SERVER_IP}/${HTML_DIR}"  # julienas - keep string short to avoid large output files
 # for Step 2: dql.py request file for linguistic codings
 DQL_REQUESTS="childes-french.query"  
+CODE_HEAD_FLAG=""   # ONLY set to "--code_head" if you want coding attributes to be inserted in the table row of the node 'addlemma' (instead of 'node')
 
 
 set -e       # stop on error
@@ -102,7 +104,7 @@ if [ "$RUN_STEP_1" = true ]; then
     # Version>=4.0 of childes.py replaces the old multi-step process.
     # converts CHAT to table and calls the UDPipe API
     # optionally: runs TreeTagger, generates HTML, generates CoNLL-U
-    python3 "${PYPATH}/childes.py" "${INPUT_FILE}" \
+    $PYCMD "${PYPATH}/childes.py" "${INPUT_FILE}" \
         --pos_utterance '^(AUX|VER|VV)' --pos_output '(AUX|VER|VV)' \
         --write_conllu --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
         --api_model "${API_MODEL}" --parameters "${TAGGER_PAR}"   # (un)comment --parameters to (not) use TreeTagger
@@ -136,6 +138,7 @@ if [ "$RUN_STEP_2" = true ]; then
     # You may need to adjust the arguments.
     # dql.py requires grewpy, see https://grew.fr/usage/python/
     #
+
     
     # Define expected input files for step 2
     CONLLU_INPUT="${FILE_BASENAME}.conllu"
@@ -143,7 +146,8 @@ if [ "$RUN_STEP_2" = true ]; then
     
     # Check if Step 1's outputs exist, otherwise Step 2 can't run
     # Attempt to gunzip if .gz versions exist
-    if [ ! -f "$CONLLU_INPUT" ]; then
+
+    if [ ! -f "${CONLLU_INPUT}" ]; then
         if [ -f "$CONLLU_INPUT.gz" ]; then
             echo "Found gzipped CoNLL-U file, uncompressing..."
             gunzip -f "$CONLLU_INPUT.gz"
@@ -151,7 +155,7 @@ if [ "$RUN_STEP_2" = true ]; then
     fi
     
     if [ ! -f "$PARSED_CSV_INPUT" ]; then
-        if [ -f "$PARSED_CSV_INPUT.gz" ]; then
+        if [ -f "${PARSED_CSV_INPUT}.gz" ]; then
             echo "Found gzipped parsed CSV file, uncompressing..."
             gunzip -f "$PARSED_CSV_INPUT.gz"
         fi
@@ -166,13 +170,13 @@ if [ "$RUN_STEP_2" = true ]; then
     fi
     if [ -f "$DQL_REQUESTS" ]; then
         echo "Running dql.py to add codings..."
-        python3 "${PYPATH}/dql.py" --first_rule "${DQL_REQUESTS}" "${CONLLU_INPUT}" > "${FILE_BASENAME}.coded.conllu"
+        $PYCMD "${PYPATH}/dql.py" --first_rule "${DQL_REQUESTS}" "${CONLLU_INPUT}" > "${FILE_BASENAME}.coded.conllu"
         echo "  Codings added. New CoNLL-U file: ${FILE_BASENAME}.coded.conllu"
         
         echo ""
         echo "Running dql.py to merge codings into table..."
         # Use the correct .cha.parsed.csv name
-        python3 "${PYPATH}/dql.py" --code_head --merge "${PARSED_CSV_INPUT}" "${FILE_BASENAME}.coded.conllu"
+        $PYCMD "${PYPATH}/dql.py" ${CODE_HEAD_FLAG} --merge "${PARSED_CSV_INPUT}" "${FILE_BASENAME}.coded.conllu"
         
         # Define the merged file name as output by dql.py
         MERGED_CSV="${FILE_BASENAME}.parsed.coded.csv" # Adjusted

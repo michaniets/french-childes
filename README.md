@@ -86,7 +86,7 @@ python3 dql.py --merge childes-all.cha.tagged.csv childes-all.coded.conllu
 This command reads `childes-all.coded.conllu`, extracts the codings, and writes a new CSV file named `childes-all.cha.tagged.coded.csv`.
 
   - For a coding string like `clitic:obj(3>5_lemma)`, the script adds the value `obj(3>5_lemma)` to a column named `clitic`.
-  - By default, the coding is added to the row corresponding to the **node** token (token `3` in the example).
+  - By default, the coding is added to the row corresponding to the **node**, specified by e.g. `node=V` in the coding instruction (token `3` in the example).
   - `--code_head`: Use this flag to add the coding to the row of the **head** token instead (token `5` in the example). For example, when coding verb valencies, this will group the annotations in the row of the verbal head.
 
 
@@ -97,7 +97,7 @@ This command reads `childes-all.coded.conllu`, extracts the codings, and writes 
 Query files contain one or more Grew patterns. Each pattern must be preceded by a comment line specifying the coding metadata to add upon a match.
 
 ```grew
-% coding attribute=modal value=other node=MOD addlemma=V
+% coding attribute=modal value=other node=V addlemma=MOD
 pattern {
     MOD [lemma="pouvoir"] | [lemma="vouloir"];
     V [upos="VERB"];
@@ -107,14 +107,14 @@ without {
     MOD [lemma="savoir"]
 }
 
-% coding attribute=modal value=savoir node=MOD addlemma=V
+% coding attribute=modal value=savoir node=V addlemma=MOD
 pattern {
     MOD [lemma="savoir"];
     V [upos="VERB"];
     MOD -[re".*"]-> V;
 }
 
-% coding attribute=mod_linear value=inf node=MOD addlemma=V
+% coding attribute=mod_linear value=inf node=V addlemma=MOD
 pattern {
     MOD [lemma=/(pouvoir|vouloir|devoir)/];
     V [upos="VERB"];

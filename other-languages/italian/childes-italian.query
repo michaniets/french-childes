@@ -1,7 +1,10 @@
 %--------------------------------------------------------
 % Rules for graphs created with UDPipe (Default Italian)
+% AS May 25
 %
-% % AS May 25
+% --merge: Codings are added to the table in the row of 'node'
+% ==> run dql.py WITHOUT flag --code_head
+%         (--code_head would add attributes to the row of 'addlemma')
 %--------------------------------------------------------
 
 %--------------------------------------------------------
@@ -9,7 +12,7 @@
 %--------------------------------------------------------
 
 % ======= direct object person 3
-% coding attribute=clitic_acc value=obj3 node=PRO addlemma=V
+% coding attribute=clitic_acc value=obj3 node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^[lL].*$/, PronType="Prs"];
@@ -17,7 +20,7 @@ pattern {
 }
 
 % ======= direct object person 1-2
-% coding attribute=clitic_acc value=obj12 node=PRO addlemma=V
+% coding attribute=clitic_acc value=obj12 node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^[mtvnMTVN].*$/, PronType="Prs"];
@@ -25,7 +28,7 @@ pattern {
 }
 
 % ======= indirect object person 3
-% coding attribute=clitic_dat value=iobj3 node=PRO addlemma=V
+% coding attribute=clitic_dat value=iobj3 node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^[lgLG].*$/, PronType="Prs"];
@@ -33,7 +36,7 @@ pattern {
 }
 
 % ======= indirect object person 1-2
-% coding attribute=clitic_dat value=iobj12 node=PRO addlemma=V
+% coding attribute=clitic_dat value=iobj12 node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^[mtvcMTVC].*$/, PronType="Prs"];
@@ -41,11 +44,11 @@ pattern {
 }
 
 % ======= ci
-% coding attribute=clitic_adv value=loc node=PRO addlemma=V
+% coding attribute=clitic_adv value=loc node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
-    PRO [form=/^[cC][i']/, PronType="Prs"];
-    V -[expl|expl:comp|obl:mod/]-> PRO;
+    PRO [form=re"^[cC][i']", PronType="Prs"];
+    V -[expl|expl:comp|obl:mod]-> PRO;
 }
 
 %--------------------------------------------------------
@@ -54,7 +57,7 @@ pattern {
 %--------------------------------------------------------
 
 % ======= reflexive person 3
-% coding attribute=refl value=3 node=PRO addlemma=V
+% coding attribute=refl value=3 node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [Clitic="Yes", Person="3", PronType="Prs"];
@@ -62,7 +65,7 @@ pattern {
 }
 
 % ======= reflexive person 1-2
-% coding attribute=refl value=12 node=PRO addlemma=V
+% coding attribute=refl value=12 node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [Clitic="Yes", Person=/[12]/, PronType="Prs"];
@@ -75,10 +78,11 @@ pattern {
 %--------------------------------------------------------
 
 % ======= a PP
-% coding attribute=a_pp value=mod node=P addlemma=N
+% coding attribute=a_pp value=mod node=V addlemma=P
 pattern {
     V [upos=/AUX|VERB/];
-    P [form=/^(a|alla|alle|agli|al|all')/];
+%    P [form=/^(a|alla|alle|agli|al|all')/];   % apostrophe casts error in slashed regex
+    P [form=re"^(a|alla|alle|agli|al|all')"];
     N [upos=/NOUN|PROPN/];
     V -[obl|obl:mod]-> N;
     N -[case]-> P;
@@ -89,7 +93,7 @@ pattern {
 %--------------------------------------------------------
 
 % ======= giù etc.
-% coding attribute=part value=adv node=P addlemma=V
+% coding attribute=part value=adv node=V addlemma=P
 pattern {
     V [upos=/AUX|VERB/];
     P [ ];

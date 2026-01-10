@@ -1,18 +1,13 @@
 %--------------------------------------------------------
 % Rules for graphs created with UDPipe (Default French)
-% AS 2.12.25
-
-% TODO
-% - modpp and modadv are new attributes -> check overlap with modifier.
+% AS 29.12.25
 %
 % Rules are ranked by specificity (query stops at first match per attribute)
 % ==> run dql.py with flag --first_rule  (or use childes-pipeline.sh)
-% 
-% Rationale:
-% - attributes for functions: obj, iobj, oblique, modifier, refl
-% - for each function
-%   - rules specify positive values (e.g., clit3, nominal, etc.)
-%   - the last rule is a default rule with value "other"
+%
+% --merge: Codings are added to the table in the row of 'node'
+% ==> run dql.py WITHOUT flag --code_head
+%         (--code_head would add attributes to the row of 'addlemma')
 %--------------------------------------------------------
 
 
@@ -22,7 +17,7 @@
 %--------------------------------------------------------
 
 % ======= impersonal subject 
-% coding attribute=subj value=clit_imp node=PRO addlemma=V
+% coding attribute=subj value=clit_imp node=V addlemma=PRO
 pattern {
     V -[expl:subj]-> PRO;
     V [upos=/AUX|VERB/];
@@ -30,15 +25,15 @@ pattern {
 }
 
 % ======= subject clitic
-% coding attribute=subj value=clit node=PRO addlemma=V
+% coding attribute=subj value=clit node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
-    PRO [];
+    PRO [PronType="Prs"];
     V -[1=nsubj]-> PRO;
 }
 
 % ======= subject noun
-% coding attribute=subj value=noun node=N addlemma=V
+% coding attribute=subj value=noun node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     N [upos=/NOUN|PROPN/];
@@ -46,20 +41,20 @@ pattern {
 }
 
 % ======= subject pronoun (not clitic): relative, demonstrative (ce, on, etc.)
-% coding attribute=subj value=pro node=N addlemma=V
+% coding attribute=subj value=pro node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     N [upos="PRON"];
     V -[1=nsubj]-> N;
 }
 
-%--------------------------------------------------------
+%%--------------------------------------------------------
 % subj: SUBJECT OF COPULA
 %   (UD: the predicate is root and verb depends via 'cop')
 %--------------------------------------------------------
 
 % ======= copula subject pronoun (c'est X qui...)
-% coding attribute=subj value=pron_cop node=N addlemma=V
+% coding attribute=subj value=pron_cop node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     PRO [upos=/PRON/];
@@ -68,7 +63,7 @@ pattern {
 }
 
 % ======= copula subject noun (Paul est ...)
-% coding attribute=subj value=noun_cop node=N addlemma=V
+% coding attribute=subj value=noun_cop node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     N [upos=/NOUN|PROPN/];
@@ -77,7 +72,7 @@ pattern {
 }
 
 % ======= copula predicate noun (c'est Paul)
-% coding attribute=obj value=noun_cop node=N addlemma=V
+% coding attribute=obj value=noun_cop node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     N [upos=/NOUN|PROPN/];
@@ -89,7 +84,7 @@ pattern {
 %--------------------------------------------------------
 
 % ======= direct object person 3
-% coding attribute=obj value=clit3 node=PRO addlemma=V
+% coding attribute=obj value=clit3 node=V addlemma=PRO
 pattern {
     V -[obj]-> PRO;
     V [upos=/AUX|VERB/];
@@ -97,7 +92,7 @@ pattern {
 }
 
 % ======= direct object person 1-2: me te nous vous
-% coding attribute=obj value=clit12 node=PRO addlemma=V
+% coding attribute=obj value=clit12 node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^[mtvn].*$/i, PronType="Prs"];
@@ -105,7 +100,7 @@ pattern {
 }
 
 % ======= direct object noun
-% coding attribute=obj value=noun node=N addlemma=V
+% coding attribute=obj value=noun node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     N [upos=/NOUN|PROPN/];
@@ -113,7 +108,7 @@ pattern {
 }
 
 % ======= direct object quantifier + noun (beaucoup de gens, plusieurs livres, etc.)
-% coding attribute=obj value=quant node=N addlemma=V
+% coding attribute=obj value=quant node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     Q [upos="ADV"];
@@ -123,7 +118,7 @@ pattern {
 }
 
 % ======= direct object pronoun (not clitic): relative, demonstrative (cela, lui, etc.)
-% coding attribute=obj value=pro node=N addlemma=V
+% coding attribute=obj value=pro node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     N [upos="PRON"];
@@ -137,7 +132,7 @@ pattern {
 %--------------------------------------------------------
 
 % ======= indirect object person 3
-% coding attribute=iobj value=clit3 node=PRO addlemma=V
+% coding attribute=iobj value=clit3 node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^l.*$/i, PronType="Prs"];
@@ -145,7 +140,7 @@ pattern {
 }
 
 % ======= indirect object person 1-2
-% coding attribute=iobj value=clit12 node=PRO addlemma=V
+% coding attribute=iobj value=clit12 node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form=/^[mtvn].*$/i, PronType="Prs"];
@@ -157,7 +152,7 @@ pattern {
 %--------------------------------------------------------
 
 % ======= reflexive
-% coding attribute=refl value=clit node=PRO addlemma=V
+% coding attribute=refl value=clit node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form = re"^[sS][e\']$", PronType="Prs"];   % tricky: apostrophes don't work in /regex/
@@ -169,7 +164,7 @@ pattern {
 %--------------------------------------------------------
 
 % ======= à-PP argument
-% coding attribute=oblique value=aPP node=N addlemma=V
+% coding attribute=oblique value=aPP node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     V -[obl:arg]-> N;  % target only first part of e.g. obl:arg
@@ -178,7 +173,7 @@ pattern {
 }
 
 % ======= y
-% coding attribute=oblique value=y node=PRO addlemma=V
+% coding attribute=oblique value=y node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form="y"];
@@ -186,7 +181,7 @@ pattern {
 }
 
 % ======= en
-% coding attribute=oblique value=en node=PRO addlemma=V
+% coding attribute=oblique value=en node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
     PRO [form="en"];
@@ -232,7 +227,7 @@ pattern {
 }
 
 %--------------------------------------------------------
-% modpp: modifiers as single adverb
+% modadv: modifiers as single adverb
 % Inconsistent dependency relations:
 %   obj:   mets-le dedans, parterre, ...au lit
 %   advmod [ > case]:  tu le mets là(-haut), elle monte de partout
@@ -280,7 +275,7 @@ without {
 %--------------------------------------------------------
 
 % ======= à-PP other
-% coding attribute=modifier value=aPP node=N addlemma=V
+% coding attribute=modifier value=aPP node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     V -> N;
@@ -292,7 +287,7 @@ without {
 }
 
 % ======= other PP
-% coding attribute=modifier value=otherPP node=N addlemma=V
+% coding attribute=modifier value=otherPP node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     V -> N;
@@ -304,7 +299,7 @@ pattern {
 %--------------------------------------------------------
 
 % ======= Infinitive modal verbs: tu veux lui donner...
-% coding attribute=cp value=inf_xcomp node=V addlemma=Vmain
+% coding attribute=cp value=inf_xcomp node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
     V [upos=/AUX|VERB/, VerbForm=Inf];
@@ -312,7 +307,7 @@ pattern {
 }
 
 % ======= Infinitive complement clause: falloir, aller + INF
-% coding attribute=cp value=inf_ccomp node=V addlemma=Vmain
+% coding attribute=cp value=inf_ccomp node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
     V [upos=/AUX|VERB/, VerbForm=Inf];
@@ -320,7 +315,7 @@ pattern {
 }
 
 % ======= complement clause: 
-% coding attribute=cp value=fin_comp node=V addlemma=Vmain
+% coding attribute=cp value=fin_xcomp node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
     V [upos=/AUX|VERB/];
@@ -328,7 +323,7 @@ pattern {
 }
 
 % ======= complement clause: 
-% coding attribute=cp value=fin_ccomp node=V addlemma=Vmain
+% coding attribute=cp value=fin_ccomp node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
     V [upos=/AUX|VERB/];
@@ -336,7 +331,7 @@ pattern {
 }
 
 % ======= other verbal complements except passive
-% coding attribute=cp value=other node=V addlemma=Vmain
+% coding attribute=cp value=other node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
     V [upos=/AUX|VERB/];
@@ -351,7 +346,7 @@ without {
 %--------------------------------------------------------
 
 % ======= for all CPs xcomp|ccomp
-% coding attribute=comp value=a node=V addlemma=Vmain
+% coding attribute=comp value=a node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
     V [upos=/AUX|VERB/];
@@ -361,7 +356,7 @@ pattern {
 }
 
 % ======= for all CPs xcomp|ccomp
-% coding attribute=comp value=de node=V addlemma=Vmain
+% coding attribute=comp value=de node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
     V [upos=/AUX|VERB/];
@@ -371,7 +366,7 @@ pattern {
 }
 
 % ======= for all CPs xcomp|ccomp
-% coding attribute=comp value=empty node=V addlemma=Vmain
+% coding attribute=comp value=empty node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
     V [upos=/AUX|VERB/];
@@ -382,7 +377,7 @@ without {
 }
 
 % ======= for all CPs xcomp|ccomp
-% coding attribute=comp value=other node=V addlemma=Vmain
+% coding attribute=comp value=other node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
     V [upos=/AUX|VERB/];
@@ -395,7 +390,7 @@ pattern {
 %--------------------------------------------------------
 
 % ======= other complements:
-% coding attribute=passive value=1 node=AUX addlemma=V
+% coding attribute=passive value=1 node=V addlemma=AUX
 pattern {
     V [upos="VERB"];
     AUX [upos="AUX"];
@@ -407,7 +402,7 @@ pattern {
 %--------------------------------------------------------
 
 % ======= avoir aux
-% coding attribute=aux value=A node=AUX addlemma=V
+% coding attribute=aux value=A node=V addlemma=AUX
 pattern {
     V [upos=/VERB/];
     AUX [upos="AUX", lemma="avoir"];
@@ -415,7 +410,7 @@ pattern {
 }
 
 % ======= être aux
-% coding attribute=aux value=E node=AUX addlemma=V
+% coding attribute=aux value=E node=V addlemma=AUX
 pattern {
     V [upos="VERB"];
     AUX [upos="AUX", lemma=/être|estre/];
@@ -429,14 +424,14 @@ pattern {
 %    INF -aux:caus-> faire
 %--------------------------------------------------------
 
-% coding attribute=caus value=laisser node=Vcaus addlemma=V
+% coding attribute=caus value=laisser node=V addlemma=Vcaus
 pattern {
     Vcaus [lemma="laisser", upos=/AUX|VERB/];
     V [upos="VERB", VerbForm=Inf];
     Vcaus -[ccomp|xcomp]-> V;   
 }
 
-% coding attribute=caus value=faire node=Vcaus addlemma=V
+% coding attribute=caus value=faire node=V addlemma=Vcaus
 pattern {
     Vcaus [lemma="faire", upos=/AUX|VERB/];
     V [upos="VERB", VerbForm=Inf];
@@ -460,7 +455,7 @@ pattern {
 %--------------------------------------------------------
 
 % ======= subject noun
-% coding attribute=order_subj value=vs node=N addlemma=V
+% coding attribute=order_subj value=vs node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     V -[1=nsubj]-> N;
@@ -468,13 +463,39 @@ pattern {
 }
 
 % ======= subject noun
-% coding attribute=order_subj value=sv node=N addlemma=V
+% coding attribute=order_subj value=sv node=V addlemma=N
 pattern {
     V [upos=/AUX|VERB/];
     V -[1=nsubj]-> N;
     N << V;
 }
 
+%--------------------------------------------------------
+% right: DISTRIBUTION RIGHT
+%--------------------------------------------------------
+
+% ======= Verb + à-PP
+% coding attribute=right value=aPP node=V addlemma=N
+pattern {
+    V [upos=/AUX|VERB/];
+    RIGHT [form=/^à|au|aux/i];
+    N [upos=/NOUN|PROPN|PRON/];
+    V < RIGHT;
+    N -> RIGHT;
+
+}
+
+% ======= Verb + pas + à-PP
+% coding attribute=right value=aPP_neg node=V addlemma=N
+pattern {
+    V [upos=/AUX|VERB/];
+    NEG [form=/pas|jamais|rien|personne/];
+    RIGHT [form=/^à|au|aux/i];
+    N [upos=/NOUN|PROPN|PRON/];
+    V < NEG;
+    NEG < RIGHT;
+    N -> RIGHT;
+}
 
 
 exit 

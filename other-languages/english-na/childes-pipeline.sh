@@ -18,6 +18,7 @@
 # --- Configuration ---
 # Path to your scripts and models
 # UDPipe model list: https://lindat.mff.cuni.cz/repository/items/41f05304-629f-4313-b9cf-9eeb0a2ca7c6
+PYCMD="python3.11"  # or python3, adjust to your Python command
 DATAPATH="."
 SERVER_IP="julienas.philosophie.uni-stuttgart.de"  # replace with your server IP address or domain name
 PYPATH="$HOME/git/french-childes"  # adjust to your path
@@ -27,6 +28,7 @@ HTML_DIR="ch_en"  # subfolder for parsed HTML files (don't precede with './')
 SERVER_URL="https://${SERVER_IP}/${HTML_DIR}"  # julienas - keep string short to avoid large output files
 # For Step 2: Grew query file for adding codings
 DQL_REQUESTS="childes-english.query"
+CODE_HEAD_FLAG=""   # ONLY set to "--code_head" if you want coding attributes to be inserted in the table row of the node 'addlemma' (instead of 'node')
 
 
 set -e       # stop on error
@@ -102,7 +104,7 @@ if [ "$RUN_STEP_1" = true ]; then
     # Version>=4.0 of childes.py replaces the old multi-step process.
     # converts CHAT to table and calls the UDPipe API
     # optionally: runs TreeTagger, generates HTML, generates CoNLL-U
-    python3 "${PYPATH}/childes.py" "${INPUT_FILE}" \
+    $PYCMD "${PYPATH}/childes.py" "${INPUT_FILE}" \
         --pos_utterance '^(AUX|VER|VV|VH|VB|MD)' --pos_output '(AUX|VER|VV|VH|VB|MD)' \
         --write_conllu --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
         --api_model "${API_MODEL}" --parameters "${TAGGER_PAR}"   # (un)comment --parameters to (not) use TreeTagger
@@ -166,13 +168,13 @@ if [ "$RUN_STEP_2" = true ]; then
     fi
     if [ -f "$DQL_REQUESTS" ]; then
         echo "Running dql.py to add codings..."
-        python3 "${PYPATH}/dql.py" --first_rule "${DQL_REQUESTS}" "${CONLLU_INPUT}" > "${FILE_BASENAME}.coded.conllu"
+        $PYCMD "${PYPATH}/dql.py" --first_rule "${DQL_REQUESTS}" "${CONLLU_INPUT}" > "${FILE_BASENAME}.coded.conllu"
         echo "  Codings added. New CoNLL-U file: ${FILE_BASENAME}.coded.conllu"
         
         echo ""
         echo "Running dql.py to merge codings into table..."
         # Use the correct .cha.parsed.csv name
-        python3 "${PYPATH}/dql.py" --code_head --merge "${PARSED_CSV_INPUT}" "${FILE_BASENAME}.coded.conllu"
+        $PYCMD "${PYPATH}/dql.py" ${CODE_HEAD_FLAG} --merge "${PARSED_CSV_INPUT}" "${FILE_BASENAME}.coded.conllu"
         
         # Define the merged file name as output by dql.py
         MERGED_CSV="${FILE_BASENAME}.parsed.coded.csv" # Adjusted

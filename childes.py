@@ -430,6 +430,7 @@ class ChatProcessor:
                 'w_nr': wNr, 
                 'speaker': speaker, 
                 'child_project': child_project_id,
+                'language': self.language,
                 'child_other': child_other, 
                 'age': age, 
                 'age_days': age_days, 
@@ -558,7 +559,7 @@ class ChatProcessor:
 
         if not self.args.parameters and not self.args.api_model:
             final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.csv'
-            header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'utterance', 'utt_clean']
+            header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'language', 'child_other', 'age', 'age_days', 'time_code', 'word', 'utterance', 'utt_clean']
             with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
                 writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='|')
                 writer.writeheader()
@@ -582,9 +583,9 @@ class ChatProcessor:
         parsed_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.parsed.csv'
         light_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.light.csv' # Define light path here
 
-        header_parsed = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged']
+        header_parsed = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'language', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged']
         header_parsed.extend([f'conll_{i}' for i in range(1, 11)])
-        header_light = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged'] # Define light header
+        header_light = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'language', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged'] # Define light header
 
         processed_rows_for_initial_write = [] # Store processed rows temporarily
 

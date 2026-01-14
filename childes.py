@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "5.0"
-__status__ = "10.1.26"
+__version__ = "5.1"
+__status__ = "14.1.26"
 __license__ = "GPL"
 
 import sys
@@ -269,11 +269,18 @@ class ChatProcessor:
             s = re.sub(reEndString, r' \1', s)
             s = re.sub(r'\s+', ' ', s)
         # Add other languages here with 'elif self.args.language == "other_language":'
+        elif hasattr(self, 'language') and re.search(r'ita|italian', self.language):
+            # Punctuation and delimiters like French
+            s = re.sub(r'([\|\{\(\/\´\`"»«°<])', r'\1 ', s)
+            s = re.sub(r'([\]\|\}\/\`\"\),\;\:\!\?\.\%»«>])(?=\s|$)', r' \1', s)
+            # Split apostrophe preceding a letter: l', un', c', d', gl', dell', quest', etc.
+            #   but NOT split apocope like "po' " (followed by space)
+            s = re.sub(r"([a-zA-Z]+')(?=[a-zA-Zà-úÀ-Ú])", r"\1 ", s)
+            s = re.sub(r'\s+', ' ', s)
         elif hasattr(self, 'language') and re.search(r'eng|english', self.language):
             s = re.sub(r'n\'t', r" n't", s)  # haven't -> have n't
             s = re.sub(r"I'm", r"I 'm", s)  # it's -> it 's, I've -> I 've
             s = re.sub(r'(\S)\'(s|ve|ll|d|re)', r"\1 '\2", s)  # it's -> it 's, I've -> I 've etc.
-            pass
         elif hasattr(self, 'language') and re.search(r'deu|german', self.language):
             pass
         else:
@@ -332,7 +339,11 @@ class ChatProcessor:
         return tagged
 
     def run(self):
-        """Main entry point using a session-aware streaming parser."""
+        """
+        Main entry point using a session-aware streaming parser. 
+        v5.1. revised to handle headers correctly, using split after @End (instead of before @Begin).
+              This includes @PID in the preamble before the first @Begin.
+        """
         try:
             self.tagger_input_file = tempfile.NamedTemporaryFile(mode='w+', encoding='utf8', delete=False, suffix=".txt")
             
@@ -342,36 +353,41 @@ class ChatProcessor:
             with opener(self.args.out_file, 'rt', encoding=encoding) as f:
                 full_content = f.read()
 
-            # Split the entire file content into session blocks based on @Begin
-            # The filter(None, ...) removes any empty strings that might result from the split.
-            session_blocks = filter(None, re.split(r'(?=@Begin)', full_content))
-            total_sessions = len(list(re.finditer(r'@Begin', full_content)))
-            if total_sessions == 0: total_sessions = 1 # Case for files without @Begin
-            sys.stderr.write(f"Found {total_sessions} session(s) to process (@Begin...@End).\n")
+            session_blocks = filter(None, re.split(r'(?<=@End)', full_content))    # FIX v5.1: Split after @End 
+            
+            # Simple counter for logging (optional)
+            total_sessions = len(re.findall(r'@Begin', full_content)) 
+            if total_sessions == 0: total_sessions = 1 
+            sys.stderr.write(f"Found {total_sessions} session(s) to process.\n")
             
             session_blocks_list = list(session_blocks)
             if not session_blocks_list:
                  session_blocks_list = [full_content]
 
             for i, session_content in enumerate(session_blocks_list):
-                sys.stderr.write(f"\rProcessing session {i}/{total_sessions}...")
+                sys.stderr.write(f"\rProcessing session {i+1}/{total_sessions}...")
                 sys.stderr.flush()
-                # Find the header part of the current session (can span multiple lines, e.g. Italian files)
-                header_match = re.match(r'((?:(?:@|\t)[^\n]*\n)*)', session_content)
+
+                # 1. Parse headers
+                # Now that we split after @End, 'session_content' starts with the PID/ID headers
+                header_match = re.match(r'((?:(?:@|\t)[^\n]*\n)*)', session_content.lstrip())
                 if not header_match:
-                    continue
+                    # Skip empty blocks or blocks with only whitespace
+                    if not session_content.strip(): continue
+                    # Fallback: try to find header if it's not at the very top
+                    header_match = re.search(r'((?:(?:@|\t)[^\n]*\n)+)', session_content)
                 
-                header_block = header_match.group(1)
-                self.parse_header(header_block)
+                if header_match:
+                    header_block = header_match.group(1)
+                    self.parse_header(header_block)
+                    
+                    # 2. Process Utterances using the self.pid set by parse_header
+                    # We start processing after the header block
+                    utterance_content = session_content[session_content.find(header_block) + len(header_block):]
+                    utterance_blocks = re.findall(r'(\*[^\n]*(?:\n(?![*@])[^\n]*)*)', utterance_content)
 
-                # The rest of the session content contains the utterances
-                utterance_content = session_content[len(header_block):]
-                
-                # Use a regex to find all utterance blocks (*-tier + dependent %-tiers)
-                utterance_blocks = re.findall(r'(\*[^\n]*(?:\n(?![*@])[^\n]*)*)', utterance_content)
-
-                for block in utterance_blocks:
-                    self.process_utterance_block(block)
+                    for block in utterance_blocks:
+                        self.process_utterance_block(block)
 
             sys.stderr.write("\nInitial parsing complete.\n")
             self.finalize_output()
@@ -423,14 +439,6 @@ class ChatProcessor:
                 'utt_clean': clean_val
             })
     
-    def generate_rows_from_tagger_OLD(self, splitUtt, raw_utt, speaker, uttID, timeCode):
-        clean_val = splitUtt if self.args.utt_clean else ''
-        words = self.tokenise(splitUtt).split(' ')
-        for wNr, w in enumerate(words, 1):
-            if not w: continue
-            age, age_days, child_other = self.get_speaker_age(speaker)
-            self.outRows.append({'utt_id': f"{uttID}_w{wNr}", 'utt_nr': self.sNr, 'w_nr': wNr, 'speaker': speaker, 'child_project': self.child, 'child_other': child_other, 'age': age, 'age_days': age_days, 'time_code': timeCode, 'word': w, 'utterance': raw_utt, 'utt_clean': clean_val})
-
     def parse_header(self, header_block):
         self.childData = {}
         self.project = ""

@@ -444,19 +444,19 @@ class ChatProcessor:
         self.childData = {}
         self.project = ""
         self.language = ""
-        # Do NOT reset self.pid here; it persists from the preamble chunk.
-
-        # 1. Update PID only if a new one is found (usually in the preamble)
+        
+        # 1. search PID in header
         if m_pid := re.search(r'@PID:.*?-(\d+)', header_block):
-            self.pid = m_pid.group(1)
-            self.pid = re.sub(r'^0+', '', self.pid)
-
+            new_pid_raw = m_pid.group(1)
+            new_pid = re.sub(r'^0+', '', new_pid_raw)
+            if new_pid != self.pid:  # Only reset if  PID has changed
+                self.pid = new_pid
+                self.sNr = 0
         # 2. Extract Project and Language from the first @ID line found
         if m_id_gen := re.search(r'@ID:\s+(.*?)\|(.*?)\|', header_block):
             self.language, self.project = m_id_gen.groups()
             if self.html_exporter:
                 self.html_exporter.project = self.project
-
         # 3. Build a map of Speaker Code -> Real Name from @Participants
         code_to_name = {}
         clean_header = re.sub(r'\n\t', ' ', header_block)
@@ -579,7 +579,8 @@ class ChatProcessor:
                 sys.stderr.write(f"Generated standalone CoNLL-U file: {conllu_output_path}\n")
 
         # Process rows and write initial FULL parsed CSV
-        sys.stderr.write("Processing rows and writing initial parsed CSV...\n")
+        sys.stderr.write("Output tables:\n")
+        sys.stderr.write("- Processing rows and writing initial parsed CSV...\n")
         parsed_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.parsed.csv'
         light_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.light.csv' # Define light path here
 
@@ -637,7 +638,7 @@ class ChatProcessor:
         # DictWriter messes up the =HYPERLINK() formulas by quoting them.
         # - Step 1 write without quotes, use dummy escapechar (required by csv module)
         tmp_file = parsed_csv_path + ".tmp"
-        sys.stderr.write(f"Writing temporary tabular output to {tmp_file}\n")
+        sys.stderr.write(f"- Writing temporary tabular output to {tmp_file}\n")
         with open(tmp_file, 'w', newline='', encoding='utf8') as f_parsed:
             writer_parsed = csv.DictWriter(f_parsed, delimiter='\t', fieldnames=header_parsed,
                                            extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\x1e')
@@ -651,7 +652,7 @@ class ChatProcessor:
         This is not elegant, but avoids the csv module.
         """
         # - Step 2 read temp file and delete escapechar
-        sys.stderr.write("Reading back temporary CSV and writing final files manually...\n")
+        sys.stderr.write("- Reading back temporary CSV and writing final files manually...\n")
 
         light_csv_path = parsed_csv_path.replace("parsed", "light")  # *.light.csv
 
@@ -688,8 +689,8 @@ class ChatProcessor:
                     light_vals = [clean_val(row.get(col, "")) for col in header_light]
                     f_light.write('\t'.join(light_vals) + '\n')
 
-        sys.stderr.write(f"  OUTPUT (full): {parsed_csv_path}\n")
-        sys.stderr.write(f"  OUTPUT (light): {light_csv_path}\n")
+        sys.stderr.write(f"- Full table (one row per token): {parsed_csv_path}\n")
+        sys.stderr.write(f"- Light table (selected columns and filtered tokens): {light_csv_path}\n")
         os.unlink(tmp_file)  # delete temp file after writing
 
     def _parse_conllu_output(self, conllu_str):

@@ -21,6 +21,7 @@ This script converts CHILDES chat data to a one-word-per-line CSV format. It int
 
   - **Integrated Pipeline:** Handles the entire conversion and annotation process from a CHAT file (`.cha` or `.cha.gz`) to tabular (CSV) and CoNLL-U formats.
   - **Parsing:** Calls the UDPipe API for dependency parsing. The model can be specified (e.g., `french-gsd`).
+  - **Graph rewriting:** Optionally uses Grew for modifying or correcting CoNLL-U annotations.
   - **Tagging:** Optionally uses TreeTagger for POS tagging before parsing. If not used, tokenised text is sent directly to the parser.
   - **Session-Aware Streaming:** Processes large files by handling them as a series of sessions (based on `@Begin` markers) and sending data to the parsing API in manageable chunks.
   - **Non-Destructive Conversion:** The original utterance from the CHAT file is preserved. Special markers (e.g., `[//]`, `(.)`, `xxx`) are retained in the raw utterance column, while a cleaned version is used for tagging and parsing.
@@ -120,6 +121,36 @@ pattern {
     V [upos="VERB"];
     MOD < V;
 }
+```
+
+## Sample rewrite file
+
+Correct or adapt Dependency annotation by adding to the flag --write_conllu the flag --rewrite <GRS file>.
+A GRS file is a request (query) pattern block, an optional `without` block, and a command block. The command block contains the rules for rewriting the graph if the pattern is matched. For more information, see [https://grew.fr/doc/rule/](https://grew.fr/doc/rule/).
+
+Here is a sample rewrite file:
+
+```
+% Marie tu lui donnes quelque chose à Louis ?
+%   delete the oblique object relation 'à Louis' and attach it as dislocated to 'lui'
+rule disloc_dative_post {
+pattern {
+    V [upos=VERB];
+    N1 [form=lui];
+    PREP [form=/à|au|aux/];
+    N1 << V; V << N2;
+    e1: V -[iobj]-> N1;
+    e2: V -[obl:arg]-> N2; 
+    N2 -[case]-> PREP;
+}
+commands {
+    del_edge e2;
+    add_edge N1 -[dislocated]-> N2;   % obl:arg --> dislocated
+    N2.fix = disloc_dative_post;
+}
+
+% Onf = One normal form (Apply rules repeatedly until stable)
+strat main {  Onf (dislocation) }
 ```
 
 ## Workflow for processing Childes files

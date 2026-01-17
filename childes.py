@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "5.1"
-__status__ = "14.1.26"
+__version__ = "5.2"
+__status__ = "16.1.26"
 __license__ = "GPL"
 
 import sys
@@ -15,6 +15,7 @@ import gzip
 import io
 import requests
 from conllu import parse
+from grewpy import Corpus, GRS
 
 #-------------------------------------------------------
 # Helper functions
@@ -37,6 +38,7 @@ def cleanUtt(s):
     """
     s = re.sub(r' 0([\S+])', r' \1', s)           # 0word -> word
     s = re.sub(r'0faire ', 'faire ', s)           # Specific fix for 0faire
+    s = re.sub(r'&=li ', ' ', s)                   # Remove non-canonical liaison markers (mostly in Lyon project)
     s = re.sub(r'<[^>]+> \[//?\] ', '', s)        # Remove retracings <...> [//]
     s = re.sub(r'\[\!\] ?', ' ', s)               # Remove stressing [!]
     s = re.sub(r' ?\(\.+\) ', ' ', s)            # Pauses (.) (..) -> remove
@@ -535,6 +537,39 @@ class ChatProcessor:
             
         return '', ref_age_days, "X", ref_project_id
     
+    def apply_grew_rewrite(self, conllu_file, rule_file):
+        """
+        Applies Grew rewrite rules to a CoNLL-U file and saves the result.
+        """
+        sys.stderr.write(f"  -> Correcting parser output with Grew rewrite rules from {rule_file}...\n")
+        
+        try:
+            # Load the rule system (GRS) and the corpus
+            grs = GRS(rule_file)
+            corpus = Corpus(conllu_file)
+            
+            # Apply the rules. 
+            # Note: grs.run returns a dict {sent_id: [Graph, ...]} 
+            corpus_corrected = grs.run(corpus)
+            
+            # Write the corrected data back to the CoNLL-U file
+            with open(conllu_file, 'w', encoding='utf8') as f:
+                for sent_id in corpus_corrected:
+                    # Get the list of transformed graphs
+                    graphs = corpus_corrected[sent_id]
+                    
+                    # Take the first solution (assuming deterministic rules)
+                    if len(graphs) > 0:
+                        f.write(graphs[0].to_conll() + "\n")
+                    else:
+                        sys.stderr.write(f"    Warning: No rewrite result for {sent_id}\n")
+            
+            sys.stderr.write(f"  Rewrite complete. Updated {conllu_file}\n")
+
+        except Exception as e:
+            sys.stderr.write(f"  Error during Grew rewrite: {e}\n")
+            # sys.exit(1)
+
     def finalize_output(self, *args, **kwargs):
         """Final processing: run tagger and/or parser, write output files"""
         if not self.outRows:
@@ -577,6 +612,14 @@ class ChatProcessor:
                 with open(conllu_output_path, 'w', encoding='utf8') as f_conllu:
                     f_conllu.write(parsed_conllu_str)
                 sys.stderr.write(f"Generated standalone CoNLL-U file: {conllu_output_path}\n")
+
+                # version 5.2: Apply Grew Rewrite if requested
+                if self.args.rewrite:
+                    self.apply_grew_rewrite(conllu_output_path, self.args.rewrite)
+                    # reload the data so that CSV/HTML below use the corrected version
+                    with open(conllu_output_path, 'r', encoding='utf8') as f:
+                        parsed_conllu_str = f.read()
+                    conllu_data = self._parse_conllu_output(parsed_conllu_str)
 
         # Process rows and write initial FULL parsed CSV
         sys.stderr.write("Output tables:\n")
@@ -847,6 +890,7 @@ if __name__ == "__main__":
     parser.add_argument('--chunk_html', type=int, default=5000, help='Number of utterances per HTML output file. Default: 5000.')
     parser.add_argument('--pos_output', default=".*", type=str, help='Regex to match POS tags. The reduced "light" table will only contain matching rows.')
     parser.add_argument('--pos_utterance', type=str, help='Regex to match POS tags. The full utterance text will only be printed on matching rows.')
+    parser.add_argument('--rewrite', type=str, help='Path to a Grew rule file (.grs) to correct the parsed CoNLL-U output.')
     parser.add_argument('--utt_clean', action='store_true', help='Populate the utt_clean column.')
     parser.add_argument('--utt_tagged', action='store_true', help='Populate the utt_tagged column.')
     

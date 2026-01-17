@@ -1,5 +1,6 @@
 # For childes.py
 requests
 conllu
+grewpy
 # For dql.py
 grewpy

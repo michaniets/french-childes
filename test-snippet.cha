@@ -1,0 +1,59 @@
+@UTF8
+@PID:	11312/c-00028167-1
+@Begin
+@Languages:	fra
+@Participants:	CHI Marie Target_Child , MOT Mother , FAT Father
+@ID:	fra|Geneva|CHI|2;06.10||||Target_Child|||
+@ID:	fra|Geneva|MOT||female|||Mother|||
+@ID:	fra|Geneva|FAT||male|||Father|||
+@Media:	020610, audio, unlinked
+@Location:	at home , Geneva , CH
+@Date:	26-AUG-1996
+@Time Duration:	9:00-9:45
+@Comment:	MLU is 3.03
+*CHI:	oui tetE@u là .
+%mor:	co|oui=yes uni|tetE adv:place|là .
+*FAT:	oui (.) c'est là .
+%mor:	co|oui=yes pro:dem|ce$v:exist|être&PRES&3s adv:place|là .
+*CHI:	p(eu)t-être .
+%mor:	adv|peut-être .
+*CHI:	je peux aller dedans .
+%mor:	pro:subj|je v:mdl|pouvoir&PRES&12s v:mdl|aller&INF adv:place|dedans
+	.
+*FAT:	non .
+%mor:	co|non=no .
+*FAT:	non Marie (.) tu ne vas pas dedans .
+%mor:	co|non=no n:prop|Marie pro:subj|tu adv:neg|ne v:mdl|aller&PRES&2s
+	adv:neg|pas adv:place|dedans .
+*CHI:	mais oui .
+%mor:	adv|mais n|oui&m .
+*FAT:	non Marie c'est pas prévu pour .
+%mor:	co|non=no n:prop|Marie pro:dem|ce$v:aux|être&PRES&3s adv:neg|pas
+	part|pré-voir&PP&m conj|pour .
+*FAT:	c'est pas solide .
+%mor:	pro:dem|ce$v:aux|être&PRES&3s adv:neg|pas n|solide&m .
+*FAT:	viens !
+%mor:	v|venir-IMP&2s !
+*CHI:	hm hm .
+%mor:	co|hm co|hm .
+*FAT:	non .
+%mor:	co|non=no .
+*FAT:	non non non .
+%mor:	co|non=no co|non=no co|non=no .
+*FAT:	tu viens .
+%mor:	pro:subj|tu v|venir-IMP&2s .
+*CHI:	oui (.) c'est solide .
+%mor:	co|oui=yes pro:dem|ce$v:exist|être&PRES&3s n|solide&m .
+*FAT:	non (.) c'est pas solide .
+%mor:	co|non=no pro:dem|ce$v:aux|être&PRES&3s adv:neg|pas n|solide&m .
+*FAT:	allez viens par ici !
+%mor:	v:mdl|aller&PRES&2p v|venir-PRES&12s adv|par adv:place|ici !
+*CHI:	non laisse (ou)vert !
+%mor:	co|non=no n|laisse&f part|ouvrir-PP&m !
+*FAT:	mais ça prend beaucoup de place .
+%mor:	adv|mais pro:dem|ça v|prendre-PRES&3s adv|beaucoup prep|de
+	n|place&f .
+*FAT:	on n' a plus beaucoup de place pour jouer après .
+%mor:	pro:subj|on adv:neg|ne v:aux|avoir&PRES&3s qn|plus adv|beaucoup
+	prep|de n|place&f prep|pour v|jouer-INF adv|après .
+@End

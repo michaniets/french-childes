@@ -545,7 +545,7 @@ def merge_with_csv(conllu_file, csv_file, code_head=False):
     sys.stderr.write(f"Writing final output to {merged_file}\n")
     os.unlink(tmp_file)
 
-def merge_with_csv(conllu_file, csv_file, code_head=False):
+def merge_with_csv_PREVIOUS(conllu_file, csv_file, code_head=False):
     # --- Read CoNLL-U data first (unchanged) ---
     corpus = Corpus(conllu_file)
     draft_corpus = CorpusDraft(corpus) # Use CorpusDraft directly

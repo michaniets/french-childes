@@ -1,0 +1,221 @@
+% Grew Rules for CHILDES Parser Correction
+% AS Jan 26
+%
+% Corrections for UDpipe model french-gsd-ud-2.5-191206
+%   targeting mainly issues with spoken and incomplete language observed with CHILDES data
+%
+% Status: experimental
+
+rule init_fix_misc {
+  pattern { V [upos=VERB|AUX, !fix]; }
+  commands { V.fix = ""; }
+}
+
+package duplicate_complements {
+  % tu me/obj le/obj donnes 
+  rule two_object_pronouns {
+    pattern {
+      V [];
+      PRON1 [form=/^[mtnv].*/, upos=PRON];   % me, te, nous, vous
+      PRON2 [form=/^l.*/, upos=PRON];     % le, la, les
+      e1:V -[obj]-> PRON1;
+      V -[obj]-> PRON2;
+    }
+    commands {
+      del_edge e1;
+      add_edge V -[iobj]-> PRON1;
+      V.fix = V.fix + two_object_pronouns + ",";
+    }
+  }
+}
+
+
+package oblique {
+  % tu vas à la maternelle / à l'arrière / il arrive à la maison
+  % NOTE may overcorrect (c'est arrivé à maman), but personal datives are rare
+  rule aller_a {
+    pattern {
+      V [lemma=/aller|arriver/, upos=VERB];
+      N [upos=NOUN];
+      P [lemma=/^à/];   % à or à.le 
+      N -[1=case]-> P;  % case:det also exists
+      e:V -[obl:arg]-> N;
+    }
+    commands {
+      del_edge e;
+      add_edge V -[obl:loc]-> N;
+      V.fix = V.fix + aller_a + ",";
+    }
+  }
+}
+
+package dislocation {
+  % Marie je tiens seulement le livre
+  rule double_subject_pre {
+    pattern {
+      V [upos=VERB];
+      N1 < N2;
+      N2 << V;
+      e1: V -[nsubj]-> N1;
+      e2: V -[nsubj]-> N2;
+    }
+    commands {
+      del_edge e1;
+      del_edge e2;
+      add_edge V -[dislocated:todo]-> N1;
+      add_edge V -[nsubj]-> N2;
+      V.fix = V.fix + double_subject_pre + ",";
+      V.todo = attach;
+    }
+  }
+
+  rule double_subject_post {
+    pattern {
+      V [upos=VERB];
+      N1 << V;
+      V << N2;
+      e1: V -[nsubj]-> N1;
+      e2: V -[nsubj]-> N2;
+    }
+    commands {
+      del_edge e1;
+      del_edge e2;
+      add_edge V -[nsubj]-> N1;
+      add_edge V -[dislocated:todo]-> N2;
+      V.fix = V.fix + double_subject_post + ",";
+    }
+  }
+
+  rule double_subject_post_vocative {
+    pattern {
+      V [upos=VERB];
+      COMMA [form=","];
+      N1 << V; V << COMMA; COMMA << N2;
+      e1: V -[nsubj]-> N1;
+      e2: V -[nsubj]-> N2;
+    }
+    commands {
+      del_edge e1;
+      del_edge e2;
+      add_edge V -[nsubj]-> N1;
+      add_edge V -[vocative]-> N2;
+      V.fix = V.fix + double_subject_post_vocative + ",";
+    }
+  }
+
+  % il parle, ton bébé
+  rule subject_right_dislocation_with_comma {
+    pattern {
+      V [upos=VERB];
+      COMMA [form=","];
+      N1 << V; V << COMMA; COMMA << N2;
+      e1: V -[nsubj]-> N1;
+      e2: V -[obj]-> N2;
+    }
+    commands {
+      del_edge e2;
+      add_edge N1 -[dislocated]-> N2;
+      V.fix = V.fix + subject_right_dislocation_with_comma + ",";
+    }
+  }
+
+  % il parle ton bébé
+  % no comma separator, only for intransitive verbs
+  rule subject_right_dislocation_intransitive (verbs from "french-verbs.grewlex.tsv") {
+    pattern {
+      V [upos=VERB, lemma=verbs.lemma];  % only intransitive verbs
+      N1 << N2;
+      e1: V -[nsubj]-> N1;
+      e2: V -[obj]-> N2;
+    }
+    without {
+      COMMA [form=","];
+      N1 << V; V << COMMA; COMMA << N2;
+    }
+    commands {
+      del_edge e2;
+      add_edge N1 -[dislocated]-> N2;
+      V.fix = V.fix + subject_right_dislocation_intransitive + ",";
+    }
+  }
+ 
+  % là, lui il a un bonnet (.) et <lui il a une> [>] casquette.
+  rule disloc_dative_pre {
+    pattern {
+      V [upos=VERB];
+      N1 [form=lui];
+      N2 [form=il];
+      N1 < N2; N2 << V;
+      e1: V -[iobj]-> N1;
+      e2: V -> N2;
+    }
+    commands {
+      del_edge e1;
+      del_edge e2;
+      add_edge V -[dislocated]-> N1;
+      add_edge V -[nsubj]-> N2;
+      V.fix = V.fix + disloc_dative_pre + ",";
+    }
+  }
+
+  % Marie tu lui donnes quelque chose à Louis ?
+  %    problem: matches also adverbials: Tu peux lui donner <à la fourchette> aussi
+  rule disloc_dative_post {
+    pattern {
+      V [upos=VERB];
+      N1 [];
+      PREP [form=/à|au|aux/];
+      N1 << V; V << N2;
+      e1: V -[iobj]-> N1;
+      e2: V -[obl:arg]-> N2; 
+      N2 -[case]-> PREP;
+    }
+    commands {
+      del_edge e2;
+      add_edge N1 -[dislocated]-> N2;   % obl:arg --> dislocated
+      V.fix = V.fix + disloc_dative_post + ",";
+    }
+  }
+
+  % Montre lui, à Marie, le livre !
+  rule disloc_dative_comma {
+    pattern {
+      V [];
+      PRON [form=/lui|leur/];
+      COMMA [form=","];
+      P [lemma=/^à/];   % à or à.le 
+      N [upos=NOUN|PROPN];
+      N -[1=case]-> P;  % case:det also exists
+      COMMA < P;
+      e1:V -> PRON;
+      e2:V -[obl:arg]-> N;
+    }
+    commands {
+      del_edge e1; del_edge e2;
+      add_edge V -[iobj]-> PRON;  % keep iobj or correct other
+      add_edge PRON -[dislocated]-> N;
+      V.fix = V.fix + disloc_dative_comma + ",";
+    }
+  }
+
+}
+
+% ============================================================
+% strategy
+% ============================================================
+
+% Onf = One normal form (Apply rules repeatedly until stable)
+% Alt = Try all rules in the list
+strat main {
+  Onf (Alt (
+    init_fix_misc,
+    duplicate_complements,
+    oblique,
+    dislocation,
+  ))
+}
+
+% ============================================================
+% lexicon
+% ============================================================
+

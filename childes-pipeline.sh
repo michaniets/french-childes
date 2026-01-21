@@ -24,6 +24,7 @@ SERVER_IP="julienas.philosophie.uni-stuttgart.de"  # replace with your server IP
 PYPATH="$HOME/git/french-childes"  # adjust to your path
 TAGGER_PAR="${DATAPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
 API_MODEL="french"  # UDPipe model. / French: french-gsd-ud-2.5-191206 / German: german-gsd-ud / Italian: italian-isdt-ud-2.5
+GRS_FILE="french-gsd-ud.grs"  # GREW rules file for parsing corrections (Option --rewrite))
 HTML_DIR="ch_fr"  # subfolder for parsed HTML files (don't precede with './')
 SERVER_URL="https://${SERVER_IP}/${HTML_DIR}"  # julienas - keep string short to avoid large output files
 # for Step 2: dql.py request file for linguistic codings
@@ -104,9 +105,20 @@ if [ "$RUN_STEP_1" = true ]; then
     # Version>=4.0 of childes.py replaces the old multi-step process.
     # converts CHAT to table and calls the UDPipe API
     # optionally: runs TreeTagger, generates HTML, generates CoNLL-U
+    # optionally exports a CoNLL-U file (--write_conllu) applies GREW rules for corrections (--rewrite)
+
+    # Check if Grew rewrite rules (GRS file) exists and set flag
+    REWRITE_FLAG=""
+    if [ -f "$GRS_FILE" ]; then
+        REWRITE_FLAG="--rewrite ${GRS_FILE}"
+        echo "  (Grew rewriting enabled using ${GRS_FILE})"
+    else
+        echo "  WARNING: GRS file '${GRS_FILE}' not found. Skipping rewrite."
+    fi
+
     $PYCMD "${PYPATH}/childes.py" "${INPUT_FILE}" \
         --pos_utterance '^(AUX|VER|VV)' --pos_output '(AUX|VER|VV)' \
-        --write_conllu --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
+        --write_conllu ${REWRITE_FLAG} --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
         --api_model "${API_MODEL}" --parameters "${TAGGER_PAR}"   # (un)comment --parameters to (not) use TreeTagger
 
     echo ""

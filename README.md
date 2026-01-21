@@ -4,7 +4,11 @@
 
 2. `dql.py` performs multiple Grew queries on CoNLL-U files and allows the resulting codings (attribute-value pairs) to be merged into the CSV file.
 
-A wrapper script `childes-pipeline.sh` contains an adaptable workflow for processing CHAT files with these scripts.
+A wrapper script `childes-pipeline.sh` contains an adaptable workflow for processing CHAT files with these scripts.  When the path and filename variables are adapted to your installation, the command
+
+> childes-pipeline.sh test-snippet.cha
+
+will produce `test-snippet.parsed.coded.csv` (and other optional output files), a table with one row per token, and columns for meta annatation (from the CHAT file), pos tagging, dependency parsing and syntactic coding.
 
 The scripts were developed for French input, but `childes.py` is sensitive to the language CODE in CHAT files. French, Italian and English CHILDES files were processed successfully. For other languges, please adapt:
 
@@ -125,33 +129,11 @@ pattern {
 
 ## Sample rewrite file
 
-Correct or adapt Dependency annotation by adding to the flag --write_conllu the flag --rewrite <GRS file>.
+A function for correcting systematic errors in the Dependency annotation can be called by adding to the flag --write_conllu the flag --rewrite <GRS file>. `childes.py` will process the rules internally before writing the CoNLL-U output.
+
+For French, a sample Grew rewrite file (*.grs) and a minimal lexicon (*.tsv) are part of this distribution. They are standard Grew files and can also be used with a stand-alone installatino of `grew`.
+
 A GRS file is a request (query) pattern block, an optional `without` block, and a command block. The command block contains the rules for rewriting the graph if the pattern is matched. For more information, see [https://grew.fr/doc/rule/](https://grew.fr/doc/rule/).
-
-Here is a sample rewrite file:
-
-```
-% Marie tu lui donnes quelque chose à Louis ?
-%   delete the oblique object relation 'à Louis' and attach it as dislocated to 'lui'
-rule disloc_dative_post {
-pattern {
-    V [upos=VERB];
-    N1 [form=lui];
-    PREP [form=/à|au|aux/];
-    N1 << V; V << N2;
-    e1: V -[iobj]-> N1;
-    e2: V -[obl:arg]-> N2; 
-    N2 -[case]-> PREP;
-}
-commands {
-    del_edge e2;
-    add_edge N1 -[dislocated]-> N2;   % obl:arg --> dislocated
-    N2.fix = disloc_dative_post;
-}
-
-% Onf = One normal form (Apply rules repeatedly until stable)
-strat main {  Onf (dislocation) }
-```
 
 ## Workflow for processing Childes files
 
@@ -167,6 +149,8 @@ _childes.py_ calls the UDPipe API.  This is recommended, because the API uses UD
 If you want to use UDPipe1 or any other parser locally, feel free to add the necessary function to _chides.py_.
 
 ### Local use of UDPipe
+
+(This refers to UDPipe version 1.  The Lindat API provides version 2, with higher accuracy.)
 
 1. Install Python bindings
 > pip3 install ufal.udpipe

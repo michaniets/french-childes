@@ -5,6 +5,10 @@
 %   targeting mainly issues with spoken and incomplete language observed with CHILDES data
 %
 % Status: experimental
+% 
+% Note: We log rule application in the Attribute "fix=<rule name>". 
+%       For fix= to be added to column MISC, the (default) configuration 'ud' is required.
+%       see https://grew.fr/doc/conllu/#how-the-misc-field-is-handled-by-grew
 
 rule init_fix_misc {
   pattern { V [upos=VERB|AUX, !fix]; }
@@ -155,6 +159,29 @@ package dislocation {
       add_edge V -[dislocated]-> N1;
       add_edge V -[nsubj]-> N2;
       V.fix = V.fix + disloc_dative_pre + ",";
+    }
+  }
+
+  % et lui va là .  (no subject, wrong iobj)
+  rule tonic_subject_pronoun {
+    pattern {
+      X -[root]-> V;                % only for root verbs
+      V [upos=VERB, VerbForm=Fin];  % only for finite verbs
+      N1 [form=lui];
+      N1 < V;
+      e1: V -[iobj]-> N1;
+    }
+    without {
+      NEG << V;
+      NEG [form=/ne|0ne/];  % don't apply to imperatives: ne lui coupe pas...
+    }
+    without {
+      V -[nsubj|expl:subj]-> N2;  
+    }
+    commands {
+      del_edge e1;
+      add_edge V -[nsubj]-> N1;
+      V.fix = V.fix + tonic_subject_pronoun + ",";
     }
   }
 

@@ -59,7 +59,7 @@ def cleanUtt(s):
     revised v4.4
     """
     s = re.sub(r' 0([\S+])', r' \1', s)           # 0word -> word
-    s = re.sub(r'0faire ', 'faire ', s)           # Specific fix for 0faire
+    s = re.sub(r'0(faire|ne) ', '\1 ', s)           # Specific fix for 0faire, 0ne
     s = re.sub(r'&=li ', ' ', s)                   # Remove non-canonical liaison markers (mostly in Lyon project)
     s = re.sub(r'<[^>]+> \[//?\] ', '', s)        # Remove retracings <...> [//]
     s = re.sub(r'\[\!\] ?', ' ', s)               # Remove stressing [!]

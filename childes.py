@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 __author__ = "Achim Stein"
-__version__ = "5.2"
-__status__ = "16.1.26"
+__version__ = "5.3"
+__status__ = "23.1.26"
 __license__ = "GPL"
 
 import sys
@@ -13,9 +13,31 @@ import csv
 import tempfile
 import gzip
 import io
+import time
 import requests
 from conllu import parse
-from grewpy import Corpus, GRS
+#from grewpy import Corpus, GRS
+
+# Robust Grew import 
+try:
+    import grewpy
+    from grewpy import Corpus, GRS
+    # Explicit init inside the try block
+    grewpy.init() 
+except Exception as e:
+    sys.stderr.write(f"  [INFO] Initial Grew connection failed. Retrying in 1s...\n")
+    time.sleep(1)
+    try:
+        # Retry the import and initialization
+        import grewpy
+        from grewpy import Corpus, GRS
+        grewpy.init()
+    except Exception as final_e:
+        sys.stderr.write(f"  [WARNING] Grew backend failed to initialize: {final_e}\n")
+        sys.stderr.write("            Rewrite rules will not work.\n")
+        sys.stderr.write("   TRY THIS:\n")
+        sys.stderr.write("     - Check if you have a VPN running: disconnecting from the VPN might help.\n")
+        sys.stderr.write("     - Check if grew_backend is installed correctly (for your Python version), maybe re-install\n\n")
 
 #-------------------------------------------------------
 # Helper functions
@@ -250,7 +272,7 @@ class ChatProcessor:
         self.conllu_input_file = None
         self.html_exporter = None
         if args.html_dir:
-            file_basename = os.path.basename(args.out_file)
+            file_basename = os.path.basename(args.chat_file)
             file_basename = os.path.splitext(file_basename)[0]
             self.html_exporter = HtmlExporter(args.html_dir, file_basename, chunk_size=args.chunk_html)
 
@@ -349,10 +371,10 @@ class ChatProcessor:
         try:
             self.tagger_input_file = tempfile.NamedTemporaryFile(mode='w+', encoding='utf8', delete=False, suffix=".txt")
             
-            opener = gzip.open if self.args.out_file.endswith('.gz') else open
+            opener = gzip.open if self.args.chat_file.endswith('.gz') else open
             encoding = 'utf8'
 
-            with opener(self.args.out_file, 'rt', encoding=encoding) as f:
+            with opener(self.args.chat_file, 'rt', encoding=encoding) as f:
                 full_content = f.read()
 
             session_blocks = filter(None, re.split(r'(?<=@End)', full_content))    # FIX v5.1: Split after @End 
@@ -593,7 +615,7 @@ class ChatProcessor:
                 parsed_conllu_str = self.run_udpipe_api(self.conllu_input_file, self.args.api_model, chunk_size=self.args.chunk_parse)
 
         if not self.args.parameters and not self.args.api_model:
-            final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.csv'
+            final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.chat_file) + '.csv'
             header = ['utt_id', 'utt_nr', 'w_nr', 'speaker', 'child_project', 'language', 'child_other', 'age', 'age_days', 'time_code', 'word', 'utterance', 'utt_clean']
             with open(final_csv_path, 'w', newline='', encoding='utf8') as f:
                 writer = csv.DictWriter(f, delimiter='\t', fieldnames=header, extrasaction='ignore', quoting=csv.QUOTE_NONE, escapechar='\\', quotechar='|')
@@ -608,7 +630,7 @@ class ChatProcessor:
             if self.html_exporter:
                 html_links = self.html_exporter.export(parsed_conllu_str, self.outRows)
             if self.args.write_conllu:
-                conllu_output_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.conllu'
+                conllu_output_path = re.sub(r'\.cha(\.gz)?$', '', self.args.chat_file) + '.conllu'
                 with open(conllu_output_path, 'w', encoding='utf8') as f_conllu:
                     f_conllu.write(parsed_conllu_str)
                 sys.stderr.write(f"Generated standalone CoNLL-U file: {conllu_output_path}\n")
@@ -624,8 +646,8 @@ class ChatProcessor:
         # Process rows and write initial FULL parsed CSV
         sys.stderr.write("Output tables:\n")
         sys.stderr.write("- Processing rows and writing initial parsed CSV...\n")
-        parsed_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.parsed.csv'
-        light_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.out_file) + '.light.csv' # Define light path here
+        parsed_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.chat_file) + '.parsed.csv'
+        light_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.chat_file) + '.light.csv' # Define light path here
 
         header_parsed = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'language', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged']
         header_parsed.extend([f'conll_{i}' for i in range(1, 11)])
@@ -880,7 +902,7 @@ class ChatProcessor:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('out_file', type=str,  help='The input CHAT file (e.g., french-sample.cha or a .gz file)')
+    parser.add_argument('chat_file', type=str,  help='The input CHAT file (e.g., french-sample.cha or a .gz file)')
     parser.add_argument('-p', '--parameters', type=str, help='(Optional) TreeTagger parameter file. Requires TreeTagger binary in ./tree-tagger.')
     parser.add_argument('--api_model', type=str, help='(Optional) Name of the UDPipe model for the Lindat API (e.g., french).')
     parser.add_argument('--html_dir', type=str, help='(Optional) Directory to save HTML dependency parse files (keep the name short!). Requires --api_model.')

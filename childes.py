@@ -2,7 +2,7 @@
 
 __author__ = "Achim Stein"
 __version__ = "5.3"
-__status__ = "23.1.26"
+__status__ = "27.1.26"
 __license__ = "GPL"
 
 import sys
@@ -389,7 +389,7 @@ class ChatProcessor:
                  session_blocks_list = [full_content]
 
             for i, session_content in enumerate(session_blocks_list):
-                sys.stderr.write(f"\rProcessing session {i+1}/{total_sessions}...")
+                sys.stderr.write(f"\rProcessing session {i}/{total_sessions}...")
                 sys.stderr.flush()
 
                 # 1. Parse headers
@@ -563,7 +563,7 @@ class ChatProcessor:
         """
         Applies Grew rewrite rules to a CoNLL-U file and saves the result.
         """
-        sys.stderr.write(f"  -> Correcting parser output with Grew rewrite rules from {rule_file}...\n")
+        sys.stderr.write(f"- Correcting parser output with Grew rewrite rules from {rule_file}...\n")
         
         try:
             # Load the rule system (GRS) and the corpus
@@ -586,7 +586,7 @@ class ChatProcessor:
                     else:
                         sys.stderr.write(f"    Warning: No rewrite result for {sent_id}\n")
             
-            sys.stderr.write(f"  Rewrite complete. Updated {conllu_file}\n")
+            sys.stderr.write(f"- Rewrite complete. Updated {conllu_file}\n")
 
         except Exception as e:
             sys.stderr.write(f"  Error during Grew rewrite: {e}\n")

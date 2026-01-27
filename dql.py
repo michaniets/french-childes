@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 __author__ = "Anonymous"
-__version__ = "1.3"
-__status__ = "15.11.2025"
+__version__ = "1.4"
+__status__ = "27.1.2026"
 __license__ = "GPL"
 
 import sys
@@ -441,134 +441,31 @@ def process_in_chunks(conllu_file: str, query_text: str, chunk_size: int, args):
 # --------------------------
 
 def merge_with_csv(conllu_file, csv_file, code_head=False):
+    # 1. Read the CoNLL-U data
     corpus = Corpus(conllu_file)
-    sys.stderr.write(f"Reading table {csv_file}...\n")
-    rows = []
-    headers = ['utt_id']
-    if os.path.exists(csv_file):
-        with open(csv_file, mode='r', newline='', encoding='utf-8') as file:
-            reader = csv.DictReader(file, delimiter='\t')
-            headers = reader.fieldnames if reader.fieldnames else headers
-            rows = list(reader)
-
-    draft_corpus = CorpusDraft(corpus) if not isinstance(corpus, CorpusDraft) else corpus
-    sys.stderr.write(f"- Reading the corpus to map item_id -> coding...")
+    draft_corpus = CorpusDraft(corpus)
+    sys.stderr.write(f"Merge codings from {conllu_file} to {csv_file}\n")
+    
     id_meta = {}
     coded = 0
-    for sent_id, graph in draft_corpus.items():
-        coding = graph.meta.get('coding', '')
-        item_id = graph.meta.get('item_id')
-        if item_id is None:
-            continue
-        id_meta[item_id] = coding
-        if coding:
-            coded += 1
-    sys.stderr.write(f"{len(id_meta.keys())} graphs, {coded} codings\n")
-
-    sys.stderr.write(f"- Mapping CSV IDs to rows...\n")
-    row_dict = {}
-    for row in rows:
-        utt_id = row.get('utt_id')
-        if utt_id is not None:
-            row_dict[utt_id] = row
-        else:
-            sys.stderr.write(f"WARNING: Row missing 'utt_id': {row}\n")
-
-    for sent_id, coding in id_meta.items():
-        if coding == '':
-            continue
-        coding_entries = [e.strip() for e in coding.split(';') if e.strip()]
-        coding_dict = {}
-        node_id = 1
-
-        for entry in coding_entries:
-            parts = re.split(r':', entry, maxsplit=1)
-            attr = parts[0].strip()
-            val = parts[1].strip() if len(parts) > 1 else None
-            if not val:
-                sys.stderr.write(f"   WARNING ({sent_id}): Missing value for attribute '{attr}'. Skipping entry.\n")
-                continue
-
-            m = re.search(r'\((\d+)>(\d+)', val)
-            if m:
-                node_id = m.group(1)
-                head_id = m.group(2)
-            else:
-                sys.stderr.write(f"   No node info found in coding {entry}. Adding coding to node 1 instead.\n")
-                node_id = "1"
-                head_id = "1"
-
-            if node_id == "0":
-                sys.stderr.write(f"   WARNING ({sent_id}): Can't write to node '0'. Adding coding to node 1 instead. VAL = {val}\n")
-                node_id = "1"
-
-            target_id = head_id if code_head else node_id
-            coding_dict.setdefault(attr, []).append((val, target_id))
-
-        for attr in coding_dict.keys():
-            if attr not in headers:
-                sys.stderr.write(f"  Adding attribute as new column header: {attr}\n")
-                headers.append(attr)
-
-        for attr, values in coding_dict.items():
-            for val, nid in values:
-                if sent_id is None:
-                    sys.stderr.write(f"WARNING: sent_id is None for node_id {nid}. Skipping.\n")
-                    this_id = "0000" + f"_w{nid}"
-                else:
-                    this_id = sent_id + f"_w{nid}"
-                if this_id in row_dict:
-                    row = row_dict[this_id]
-                    if attr in row and row[attr]:
-                        row[attr] += f";{val}"
-                    else:
-                        row[attr] = val
-                else:
-                    sys.stderr.write(f"! WARNING: ID not found in CSV: {this_id}\n")
-
-    merged_file = re.sub(r'(\.\w+)$', '.coded\\1', csv_file)
-
-    # DictWriter messes up the =HYPERLINK() formulas by quoting them.
-    # - Step 1 write without quotes, use dummy escapechar (required by csv module)
-    tmp_file = merged_file + ".tmp"
-    sys.stderr.write(f"Writing first output to {tmp_file}\n")
-    with open(tmp_file, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=headers, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\x1e')
-        writer.writeheader()
-        writer.writerows(row_dict.values())
-    # - Step 2 read temp file and delete escapechar
-    sys.stderr.write(f"Cleaning quotes around =HYPERLINK() formulas\n")
-    with open(tmp_file, mode='r', encoding='utf-8') as infile, open(merged_file, mode='w', encoding='utf-8') as outfile:
-        for line in infile:
-            cleaned_line = re.sub(r"\x1e", "", line)  # unescape double quotes
-            outfile.write(cleaned_line)
-    sys.stderr.write(f"Writing final output to {merged_file}\n")
-    os.unlink(tmp_file)
-
-def merge_with_csv_PREVIOUS(conllu_file, csv_file, code_head=False):
-    # --- Read CoNLL-U data first (unchanged) ---
-    corpus = Corpus(conllu_file)
-    draft_corpus = CorpusDraft(corpus) # Use CorpusDraft directly
-    sys.stderr.write(f"- Reading the corpus to map item_id -> coding...")
-    id_meta = {}
-    coded = 0
-    newly_encountered_attributes = set() # Track potential new headers from codings
+    newly_encountered_attributes = set()
 
     for sent_id, graph in draft_corpus.items():
         coding = graph.meta.get('coding', '')
         item_id = graph.meta.get('item_id')
         if item_id is None: continue
+        
         id_meta[item_id] = coding
         if coding:
             coded += 1
-            # Pre-scan coding attributes to find potential new headers
             for entry in [e.strip() for e in coding.split(';') if e.strip()]:
+                # Extract attribute name (e.g. "subj" from "subj:clit(...)")
                 attr = entry.split(':', 1)[0].strip()
                 if attr: newly_encountered_attributes.add(attr)
 
-    sys.stderr.write(f"{len(draft_corpus)} graphs, {coded} codings\n")
+    sys.stderr.write(f"- Reading the corpus to map item_id -> coding...{len(draft_corpus)} graphs, {coded} codings\n")
 
-    # --- Read CSV safely ---
+    # 2. Read the existing CSV
     sys.stderr.write(f"Reading table {csv_file}...\n")
     rows = []
     original_headers = []
@@ -576,110 +473,96 @@ def merge_with_csv_PREVIOUS(conllu_file, csv_file, code_head=False):
     if os.path.exists(csv_file):
         with open(csv_file, mode='r', newline='', encoding='utf-8') as file:
             try:
-                # Use standard csv.reader to get headers without None issue
+                # Read headers first to filter empty ones
                 header_reader = csv.reader(file, delimiter='\t')
                 original_headers = next(header_reader)
-                # Filter out empty strings which might cause None keys later
-                original_headers = [h for h in original_headers if h]
-                file.seek(0) # Rewind to read with DictReader using corrected headers
+                original_headers = [h for h in original_headers if h] # Remove empty header strings
+                
+                file.seek(0)
+                # Use DictReader with refined headers
                 reader = csv.DictReader(file, fieldnames=original_headers, delimiter='\t')
-                next(reader) # Skip the (potentially problematic) header row
+                next(reader) # skip header row
                 rows = list(reader)
-            except StopIteration:
-                 sys.stderr.write(f"WARNING: Input CSV file {csv_file} is empty or has no header.\n")
             except Exception as e:
                  sys.stderr.write(f"ERROR: Could not read CSV {csv_file}. Error: {e}\n")
                  return
 
-    # Check if 'utt_id' is present
     if 'utt_id' not in original_headers:
-         sys.stderr.write(f"ERROR: 'utt_id' column not found in CSV file {csv_file} header. Cannot merge.\n")
+         sys.stderr.write(f"ERROR: 'utt_id' column not found in CSV. Cannot merge.\n")
          return
 
-    # --- Map CSV rows (unchanged logic, but safer input) ---
-    sys.stderr.write(f"- Mapping CSV IDs to rows...\n")
+    # 3. Clean rows to avoid matching errors
+    # Remove 'None' key if present (caused by trailing tabs/extra columns in input)
+    for row in rows:
+        if None in row:
+            del row[None]
+
+    # Map rows by ID
     row_dict = {}
+    sys.stderr.write("- Mapping CSV IDs to rows...\n")
     for row in rows:
         utt_id = row.get('utt_id')
         if utt_id is not None:
             row_dict[utt_id] = row
-        else:
-            sys.stderr.write(f"WARNING: Row missing 'utt_id': {row}\n")
 
-    # --- Determine final headers ---
-    final_headers = list(original_headers) # Start with headers from CSV
+    # 4. Determine Final Headers
+    final_headers = list(original_headers)
     for attr in sorted(list(newly_encountered_attributes)):
         if attr not in final_headers:
             sys.stderr.write(f"  Adding attribute as new column header: {attr}\n")
             final_headers.append(attr)
 
-    # --- Apply codings to row_dict (largely unchanged logic) ---
+    # 5. Merge Data
     for sent_id, coding in id_meta.items():
-        if coding == '': continue
+        if not coding: continue
         coding_entries = [e.strip() for e in coding.split(';') if e.strip()]
 
         for entry in coding_entries:
             parts = re.split(r':', entry, maxsplit=1)
             attr = parts[0].strip()
-            if not attr:
-                sys.stderr.write(f"   WARNING ({sent_id}): Encountered coding with empty attribute name in entry '{entry}'. Skipping.\n")
-                continue
+            if not attr or len(parts) < 2: continue
+            val = parts[1].strip()
 
-            val = parts[1].strip() if len(parts) > 1 else None
-            if not val:
-                sys.stderr.write(f"   WARNING ({sent_id}): Missing value for attribute '{attr}'. Skipping entry.\n")
-                continue
+            # Logic to find target word index
+            m = re.search(r'\((\d+)>(\d+)(?:_.*)?\)$', val)
+            node_id_str = m.group(1) if m else "1"
+            head_id_str = m.group(2) if m else "0"
+            
+            # Fallback for root
+            if not m and re.search(r'\((\d+)>0\)$', val):
+                 node_id_str = re.search(r'\((\d+)>0\)$', val).group(1)
 
-            # Simplified node/head parsing (assuming structure like attr:val(node>head_lemma))
-            m = re.search(r'\((\d+)>(\d+)(?:_.*)?\)$', val) # Digits after '(', digits after '>'
-            node_id_str = "1" # Default if parsing fails
-            head_id_str = "0" # Default (matches >0 case)
-            if m:
-                node_id_str = m.group(1)
-                head_id_str = m.group(2)
-            else:
-                 # Check specifically for >0 case if the main regex failed
-                 m0 = re.search(r'\((\d+)>0\)$', val)
-                 if m0:
-                     node_id_str = m0.group(1)
-                     head_id_str = "0" # Already default, but explicit
-                 else:
-                     sys.stderr.write(f"   WARNING ({sent_id}): Could not parse node/head IDs in coding '{entry}'. Applying to node 1.\n")
-
-
-            target_node_id_str = head_id_str if code_head else node_id_str
-            # Construct the full utt_id (e.g., sent_id_w1)
-            this_id = f"{sent_id}_w{target_node_id_str}" if sent_id else f"UNKNOWN_w{target_node_id_str}"
+            target_node = head_id_str if code_head else node_id_str
+            this_id = f"{sent_id}_w{target_node}"
 
             if this_id in row_dict:
                 row = row_dict[this_id]
-                current_val = row.get(attr, '') # Safely get current value
-                if current_val:
-                    row[attr] = f"{current_val};{val}"
-                else:
-                    row[attr] = val
-            elif sent_id: # Only warn if sent_id was valid
-                    sys.stderr.write(f"! WARNING: ID not found in CSV: {this_id}\n")
+                current_val = row.get(attr, '')
+                row[attr] = f"{current_val};{val}" if current_val else val
 
-    # --- Writing Logic ---
+    # 6. Write Output
     merged_file = re.sub(r'(\.\w+)$', r'.coded\1', csv_file)
     tmp_file = merged_file + ".tmp"
     sys.stderr.write(f"Writing first output to {tmp_file}\n")
 
     with open(tmp_file, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=final_headers, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\x1e', extrasaction='ignore')
+        # Added extrasaction='ignore' to prevent crashes on unknown keys
+        writer = csv.DictWriter(file, fieldnames=final_headers, delimiter='\t', 
+                                quoting=csv.QUOTE_NONE, escapechar='\x1e', 
+                                extrasaction='ignore')
         writer.writeheader()
         writer.writerows(row_dict.values())
 
-    # --- Clean Hyperlink Quotes (unchanged) ---
+    # Final cleanup of quotes
     sys.stderr.write(f"  Cleaning quotes around =HYPERLINK() formulas\n")
     with open(tmp_file, mode='r', encoding='utf-8') as infile, open(merged_file, mode='w', encoding='utf-8') as outfile:
         for line in infile:
             cleaned_line = re.sub(r"\x1e", "", line)
             outfile.write(cleaned_line)
+            
     sys.stderr.write(f"Writing final output to {merged_file}\n")
     os.unlink(tmp_file)
-    
+
 # --------------------------
 # CLI
 # --------------------------

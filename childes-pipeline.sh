@@ -20,7 +20,7 @@
 # UDPipe model list: https://lindat.mff.cuni.cz/repository/items/41f05304-629f-4313-b9cf-9eeb0a2ca7c6
 PYCMD="python3.11"  # or python3, adjust to your Python command
 DATAPATH="."
-SERVER_IP="julienas.philosophie.uni-stuttgart.de"  # replace with your server IP address or domain name
+SERVER_IP="server-for-html-version-of-corpus.org"  # replace with your server IP address or domain name
 PYPATH="$HOME/git/french-childes"  # adjust to your path
 TAGGER_PAR="${DATAPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
 API_MODEL="french"  # UDPipe model. / French: french-gsd-ud-2.5-191206 / German: german-gsd-ud / Italian: italian-isdt-ud-2.5
@@ -219,9 +219,3 @@ if [ "$RUN_STEP_2" = true ]; then
     
     echo "--- Step 2 finished successfully ---"
 fi
-
-### Concatenate coded csv files
-# for i in *.light.coded.csv; do gawk -F'\t' '$12~/^(VER|AUX)/' $i > verbs-only/$i;done
-# cat *.light.coded.csv | head -1 > verbs-only/00header.csv
-# cat verbs-only/*.csv > french-childes.coded.csv
-# rm verbs_only/*

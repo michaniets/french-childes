@@ -10,7 +10,7 @@ A wrapper script `childes-pipeline.sh` contains an adaptable workflow for proces
 
 will produce `test-snippet.parsed.coded.csv` (and other optional output files), a table with one row per token, and columns for meta annatation (from the CHAT file), pos tagging, dependency parsing and syntactic coding.
 
-The scripts were developed for French input, but `childes.py` is sensitive to the language CODE in CHAT files. French, Italian and English CHILDES files were processed successfully. For other languges, please adapt:
+The scripts were developed for French input, but `childes.py` is sensitive to the language CODE in CHAT files. French, Italian, German and English CHILDES files were processed successfully. For other languges, please adapt:
 
 - `childes.py`: add tokenisation rules to the function `tokenise()`. If you use the options --pos_utterance and --pos_output, their  arguments need to match the language-specific pos tags.
 - `dql.py`: adapt the Grew query (syntactic coding) to language-specific UD annotation

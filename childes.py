@@ -1,8 +1,16 @@
 #!/usr/bin/python3
 
+# /// script
+# requires-python = ">=3.8"
+# dependencies = [
+#     "requests",
+#     "conllu",
+# ]
+# ///
+
 __author__ = "Achim Stein"
-__version__ = "5.3"
-__status__ = "27.1.26"
+__version__ = "5.4"
+__status__ = "21.6.26"
 __license__ = "GPL"
 
 import sys
@@ -320,19 +328,26 @@ class ChatProcessor:
         with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', delete=False, suffix=".conllu.in") as temp_f:
             self.conllu_input_file = temp_f.name
 
-        # Group words by utterance ID to reconstruct sentences
+        # Group words by utterance ID to reconstruct sentences, storing metadata safely
         utterances = {}
         for row in self.outRows:
             utt_id_base = re.match(r'(.*)_w\d+', row['utt_id']).group(1)
             if utt_id_base not in utterances:
-                utterances[utt_id_base] = []
-            # The word is at index 10 in the row dictionary
-            utterances[utt_id_base].append(row['word'])
+                utterances[utt_id_base] = {
+                    'tokens': [],
+                    'speaker': row.get('speaker') or '_',
+                    'age': row.get('age') or '_',
+                    'utterance': row.get('utterance') or '_'
+                }
+            utterances[utt_id_base]['tokens'].append(row['word'])
 
         with open(self.conllu_input_file, 'w', encoding='utf8') as f:
-            for utt_id, tokens in utterances.items():
+            for utt_id, data in utterances.items():
                 f.write(f"# item_id = {utt_id}\n")
-                for idx, token in enumerate(tokens, 1):
+                f.write(f"# speaker = {data['speaker']}\n")
+                f.write(f"# age = {data['age']}\n")
+                f.write(f"# utterance = {data['utterance']}\n")
+                for idx, token in enumerate(data['tokens'], 1):
                     # Basic CoNLL-U: ID, FORM, and underscores for the rest
                     line = f"{idx}\t{token}\t_\t_\t_\t_\t_\t_\t_\t_\n"
                     f.write(line)
@@ -785,7 +800,19 @@ class ChatProcessor:
         if self.args.api_model:
             with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', delete=False, suffix=".conllu.in") as temp_f:
                 self.conllu_input_file = temp_f.name
-            self.tagged2conllu(tagged, self.conllu_input_file)
+
+            meta_map = {}
+            for row in self.outRows:
+                m = re.search(r'_u(\d+)', row['utt_id'])
+                if m:
+                    utt_num = f"u{m.group(1)}"
+                    if utt_num not in meta_map:
+                        meta_map[utt_num] = {
+                            'speaker': row.get('speaker') or '_',
+                            'age': row.get('age') or '_',
+                            'utterance': row.get('utterance') or '_'
+                        }
+            self.tagged2conllu(tagged, self.conllu_input_file, meta_map)
         words, pos, lemmas, tagged_sents = {}, {}, {}, {}
         sentences = re.split(r'(<s_([^>]+)>)', tagged)
         for i in range(1, len(sentences), 3):
@@ -801,14 +828,22 @@ class ChatProcessor:
             tagged_sents[key] = content_oneline.strip()
         return words, pos, lemmas, tagged_sents
 
-    def tagged2conllu(self, str_in, conllu_out_path):
+    def tagged2conllu(self, str_in, conllu_out_path, meta_map=None):
         sys.stderr.write(f"Creating temporary CoNLL-U file with lemmas: '{conllu_out_path}'...\n")
         with open(conllu_out_path, 'w', encoding='utf8') as f:
             sentences = re.split(r'(<s_([^>]+)>)', str_in)
             for i in range(1, len(sentences), 3):
                 sent_id = sentences[i+1]
                 body = sentences[i+2].strip()
+
+                utt_num_match = re.search(r'_u(\d+)', sent_id)
+                utt_num = f"u{utt_num_match.group(1)}" if utt_num_match else ''
+                meta = (meta_map or {}).get(utt_num, {})
+
                 f.write(f"# item_id = {sent_id}\n")
+                f.write(f"# speaker = {meta.get('speaker', '_')}\n")
+                f.write(f"# age = {meta.get('age', '_')}\n")
+                f.write(f"# utterance = {meta.get('utterance', '_')}\n")
                 tokens = [line.split('\t') for line in body.split('\n') if line]
                 for idx, token_parts in enumerate(tokens):
                     if len(token_parts) != 3: continue

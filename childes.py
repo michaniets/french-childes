@@ -5,6 +5,7 @@
 # dependencies = [
 #     "requests",
 #     "conllu",
+#     "grewpy"
 # ]
 # ///
 

@@ -10,8 +10,8 @@
 # ///
 
 __author__ = "Achim Stein"
-__version__ = "5.4"
-__status__ = "21.6.26"
+__version__ = "5.5"
+__status__ = "21.8.26"
 __license__ = "GPL"
 
 import sys
@@ -338,7 +338,8 @@ class ChatProcessor:
                     'tokens': [],
                     'speaker': row.get('speaker') or '_',
                     'age': row.get('age') or '_',
-                    'utterance': row.get('utterance') or '_'
+                    'text': row.get('utt_text') or '',
+                    'chat': row.get('utterance') or ''
                 }
             utterances[utt_id_base]['tokens'].append(row['word'])
 
@@ -347,7 +348,11 @@ class ChatProcessor:
                 f.write(f"# item_id = {utt_id}\n")
                 f.write(f"# speaker = {data['speaker']}\n")
                 f.write(f"# age = {data['age']}\n")
-                f.write(f"# utterance = {data['utterance']}\n")
+                # omitted rather than '_' when empty: both are reserved/parsed fields
+                if data['text']:
+                    f.write(f"# text = {data['text']}\n")
+                if data['chat']:
+                    f.write(f"# chat = {data['chat']}\n")
                 for idx, token in enumerate(data['tokens'], 1):
                     # Basic CoNLL-U: ID, FORM, and underscores for the rest
                     line = f"{idx}\t{token}\t_\t_\t_\t_\t_\t_\t_\t_\n"
@@ -475,9 +480,12 @@ class ChatProcessor:
                 'age': age, 
                 'age_days': age_days, 
                 'time_code': timeCode, 
-                'word': w, 
-                'utterance': raw_utt, 
-                'utt_clean': clean_val
+                'word': w,
+                'utterance': raw_utt,
+                'utt_clean': clean_val,
+                # not a CSV column: source of '# text' in CoNLL-U, which must be
+                # recoverable from the FORM column, unlike the raw CHAT string
+                'utt_text': splitUtt
             })
     
     def parse_header(self, header_block):
@@ -811,7 +819,8 @@ class ChatProcessor:
                         meta_map[utt_num] = {
                             'speaker': row.get('speaker') or '_',
                             'age': row.get('age') or '_',
-                            'utterance': row.get('utterance') or '_'
+                            'text': row.get('utt_text') or '',
+                            'chat': row.get('utterance') or ''
                         }
             self.tagged2conllu(tagged, self.conllu_input_file, meta_map)
         words, pos, lemmas, tagged_sents = {}, {}, {}, {}
@@ -844,7 +853,11 @@ class ChatProcessor:
                 f.write(f"# item_id = {sent_id}\n")
                 f.write(f"# speaker = {meta.get('speaker', '_')}\n")
                 f.write(f"# age = {meta.get('age', '_')}\n")
-                f.write(f"# utterance = {meta.get('utterance', '_')}\n")
+                # omitted rather than '_' when empty: both are reserved/parsed fields
+                if meta.get('text'):
+                    f.write(f"# text = {meta['text']}\n")
+                if meta.get('chat'):
+                    f.write(f"# chat = {meta['chat']}\n")
                 tokens = [line.split('\t') for line in body.split('\n') if line]
                 for idx, token_parts in enumerate(tokens):
                     if len(token_parts) != 3: continue

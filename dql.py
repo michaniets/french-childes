@@ -1,9 +1,16 @@
 #!/usr/local/bin/python3
-# -*- coding: utf-8 -*-
+
+# /// script
+# requires-python = ">=3.8"
+# dependencies = [
+#     "typing",
+#     "grewpy"
+# ]
+# ///
 
 __author__ = "Anonymous"
-__version__ = "1.4"
-__status__ = "27.1.2026"
+__version__ = "1.5"
+__status__ = "21.6.2026"
 __license__ = "GPL"
 
 import sys

@@ -1,3 +1,7 @@
+This repository was previously hosted at [https://github.com/french-childes](https://github.com/french-childes). The pre-transfer release
+(version 3.1) is archived at https://doi.org/10.5281/zenodo.22112353.
+
+
 # Processing French CHILDES data
 
 1. `childes.py` converts CHILDES CHAT files in a pipeline **CHAT -\> Tagger -\> Parser -\> CSV/CoNLL-U**.

@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "french-childes: a pipeline for tagging, parsing and syntactic coding of CHILDES data"
+abstract: >-
+  Python tools for converting CHILDES CHAT files into tabular (CSV) and CoNLL-U
+  format, including tokenisation, POS tagging with TreeTagger, dependency
+  parsing via the UDPipe API, graph rewriting and syntactic coding with Grew
+  queries. Developed for French, but also used for Italian, German and English.
+type: software
+authors:
+  - family-names: Stein
+    given-names: Achim
+    affiliation: "University of Stuttgart"
+    email: achim.stein@ling.uni-stuttgart.de
+    orcid: "https://orcid.org/0000-0001-8848-1977"
+repository-code: "https://github.com/michaniets/french-childes"
+url: "https://github.com/michaniets/french-childes"
+license: GPL-3.0
+version: "3.0"
+date-released: "2026-02-13"
+keywords:
+  - CHILDES
+  - language acquisition
+  - corpus linguistics
+  - dependency parsing
+  - Universal Dependencies
+  - CoNLL-U
+  - Grew
+  - UDPipe
+  - French

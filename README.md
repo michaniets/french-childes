@@ -17,6 +17,31 @@ The scripts were developed for French input, but `childes.py` is sensitive to th
 
 For some languages, the folder _other-languages_  contains a usable wrapper script and coding query file.
 
+## Citation
+
+If you use these scripts in your research, please cite them. Citation metadata is
+provided in [`CITATION.cff`](CITATION.cff); GitHub renders it as a *Cite this
+repository* button in the sidebar.
+
+> Stein, Achim (2026). *french-childes: a pipeline for tagging, parsing and syntactic
+> coding of CHILDES data* (Version 3.0) [Computer software].
+> https://github.com/michaniets/french-childes
+
+```bibtex
+@software{stein_french_childes,
+  author  = {Stein, Achim},
+  title   = {french-childes: a pipeline for tagging, parsing and syntactic coding of CHILDES data},
+  year    = {2026},
+  version = {3.0},
+  license = {GPL-3.0},
+  url     = {https://github.com/michaniets/french-childes}
+}
+```
+
+Please also cite the resources this pipeline builds on: the CHILDES/TalkBank corpora
+you process, [UDPipe](https://lindat.mff.cuni.cz/services/udpipe/),
+[Grew](https://grew.fr/) and, if used, TreeTagger.
+
 ## childes.py
 
 This script converts CHILDES chat data to a one-word-per-line CSV format. It integrates tokenisation, optional POS tagging with TreeTagger, and dependency parsing via the UDPipe API into a single process.

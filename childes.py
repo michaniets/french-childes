@@ -10,8 +10,8 @@
 # ///
 
 __author__ = "Achim Stein"
-__version__ = "5.5"
-__status__ = "21.8.26"
+__version__ = "5.6"
+__status__ = "27.8.26"
 __license__ = "GPL"
 
 import sys
@@ -314,6 +314,14 @@ class ChatProcessor:
             s = re.sub(r'n\'t', r" n't", s)  # haven't -> have n't
             s = re.sub(r"I'm", r"I 'm", s)  # it's -> it 's, I've -> I 've
             s = re.sub(r'(\S)\'(s|ve|ll|d|re)', r"\1 '\2", s)  # it's -> it 's, I've -> I 've etc.
+            # English UK: Forrester has arrows in utterances (for intonation?)
+            s = re.sub(r" ?[↗→↓∇] ?", r"", s)  # *FAT:	of the thunder ↗ 
+            s = re.sub(r"(\w):+(\w)", r"\1\2", s)  # n::::O →
+            s = re.sub(r"\n\s+\(\d\.\d\).*", r"", s)    # *FAT:	that good darlin' ↗ 10340_13805<BR>	(24.8) 13805_34059
+            s = re.sub(r" ?\(\d\.\d\)", r"", s)  # ⌊eh a:::o⌋ → (0.4)
+            # English UK Belfast
+            s = re.sub(r" ?‡", r"", s)  # oh ‡ aren't they gorgeous !
+
         elif hasattr(self, 'language') and re.search(r'deu|german', self.language):
             pass
         else:
@@ -519,20 +527,29 @@ class ChatProcessor:
                     name = tokens[1]
                     code_to_name[code] = name
 
+        # 3b. Sekali-specific: @ID carries no age field for this corpus; the age at
+        #     recording is instead coded in @Media as a YYMMDD ("Y;MM.DD") string.
+        media_age_str = ''
+        if self.project == 'Sekali':
+            if m_media := re.search(r'@Media:\s+(\d{2})(\d{2})(\d{2})', header_block):
+                y, mth, d = m_media.groups()
+                media_age_str = f"{int(y)};{mth}.{d}"
+
         # 4. Parse all @ID lines to find ALL Target_Children
         id_lines = re.findall(r'@ID:\s+(.*)', header_block)
-        
+
         for line in id_lines:
             fields = line.strip().split('|')
             if len(fields) > 7:
                 code = fields[2]
                 age_str = fields[3]
                 role = fields[7]
-                
+
                 # Check if this ID belongs to a target child
                 if role == 'Target_Child':
-                    if age_str == '24;00.02': age_str = '2;00.02' # Fix known data bug
-                    
+                    if age_str == '24;00.02': age_str = '2;00.02' # Fix known data bug (Italian childes)
+                    if not age_str and media_age_str: age_str = media_age_str  # Fallback for Sekali corpus
+
                     if age_str:
                         _, age_days = parseAge(age_str)
                     else:
@@ -812,16 +829,14 @@ class ChatProcessor:
 
             meta_map = {}
             for row in self.outRows:
-                m = re.search(r'_u(\d+)', row['utt_id'])
-                if m:
-                    utt_num = f"u{m.group(1)}"
-                    if utt_num not in meta_map:
-                        meta_map[utt_num] = {
-                            'speaker': row.get('speaker') or '_',
-                            'age': row.get('age') or '_',
-                            'text': row.get('utt_text') or '',
-                            'chat': row.get('utterance') or ''
-                        }
+                utt_id_base = re.match(r'(.*)_w\d+', row['utt_id']).group(1)  # e.g. "18980_u1"
+                if utt_id_base not in meta_map:
+                    meta_map[utt_id_base] = {
+                        'speaker': row.get('speaker') or '_',
+                        'age': row.get('age') or '_',
+                        'text': row.get('utt_text') or '',
+                        'chat': row.get('utterance') or ''
+                    }
             self.tagged2conllu(tagged, self.conllu_input_file, meta_map)
         words, pos, lemmas, tagged_sents = {}, {}, {}, {}
         sentences = re.split(r'(<s_([^>]+)>)', tagged)
@@ -846,9 +861,7 @@ class ChatProcessor:
                 sent_id = sentences[i+1]
                 body = sentences[i+2].strip()
 
-                utt_num_match = re.search(r'_u(\d+)', sent_id)
-                utt_num = f"u{utt_num_match.group(1)}" if utt_num_match else ''
-                meta = (meta_map or {}).get(utt_num, {})
+                meta = (meta_map or {}).get(sent_id, {})
 
                 f.write(f"# item_id = {sent_id}\n")
                 f.write(f"# speaker = {meta.get('speaker', '_')}\n")

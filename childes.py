@@ -80,10 +80,12 @@ def cleanUtt(s):
     s = re.sub(r'\[.*?\] ?', '', s)               # Remove all other bracketed content [...]
     s = re.sub(r'\(([A-Za-z]+)\)', r'\1', s)      # Keep text inside parentheses (word) -> word
     s = re.sub(r' \+/+', ' ', s)                  # Remove +/
-    s = re.sub(r'[_=]', ' ', s)                   # Replace _ and = with space
     # added v4.4
     s = re.sub(r'@[a-z:0-9]+', '', s)             # Remove special CHAT suffixes like @c, @s:eng
-    s = re.sub(r'&[\S]+', '', s)                  # Remove phonological fragments like &mm
+    s = re.sub(r'&[\S]+', '', s)                  # Remove phonological fragments like &mm, event codes like &=laugh
+    # must run AFTER the &-removal above: &=word's '=' would otherwise be turned into a
+    # space first, splitting it into a bare '&' plus a stray real-looking word ('& laugh')
+    s = re.sub(r'[_=]', ' ', s)                   # Replace _ and = with space
     # final cleanups
     s = re.sub(r'[<>]', '', s)                    # Remove remaining angle brackets
     s = re.sub(r'\s+', ' ', s)                    # Normalize spaces
@@ -285,6 +287,29 @@ class ChatProcessor:
             file_basename = os.path.splitext(file_basename)[0]
             self.html_exporter = HtmlExporter(args.html_dir, file_basename, chunk_size=args.chunk_html)
 
+    def strip_transcription_noise(self, s):
+        """
+        Removes language/corpus-specific transcription noise (timed pauses,
+        intonation arrows, phoneme-lengthening colons, vocalisation/event codes)
+        that is not part of tokenisation proper. Applied once, right after
+        cleanUtt(), before the result is captured as '# text'/utt_clean AND
+        handed to tokenise() for the tagger/FORM input - so both stay in sync
+        instead of '# text' retaining noise that tokenise() alone used to strip.
+        """
+        if hasattr(self, 'language') and re.search(r'eng|english', self.language):
+            # English UK: Forrester has arrows in utterances (for intonation?)
+            s = re.sub(r" ?[↗→↓∇] ?", r"", s)  # *FAT:	of the thunder ↗
+            s = re.sub(r"(\w):+(\w)", r"\1\2", s)  # n::::O →
+            s = re.sub(r"\n\s+\(\d\.\d\).*", r"", s)    # *FAT:	that good darlin' ↗ 10340_13805<BR>	(24.8) 13805_34059
+            s = re.sub(r" ?\(\d\.\d\)", r"", s)  # ⌊eh a:::o⌋ → (0.4)
+            # English UK Belfast
+            s = re.sub(r" ?‡", r"", s)  # oh ‡ aren't they gorgeous !
+            # English UK Wells
+            s = re.sub(r" ?\(\d+\.\d*\)", r"", s)   # *CHI:	(5.) &=laugh (5.) &=noise (4.) &=noise .
+            s = re.sub(r" ?&=\w+", r"", s)          # *CHI:	(5..) &=laugh (5..) &=noise (4..) &=noise .
+            s = re.sub(r'\s+', ' ', s).strip()
+        return s
+
     def tokenise(self, s):
         """
         Tokenises a string, with language-specific rules.
@@ -314,14 +339,6 @@ class ChatProcessor:
             s = re.sub(r'n\'t', r" n't", s)  # haven't -> have n't
             s = re.sub(r"I'm", r"I 'm", s)  # it's -> it 's, I've -> I 've
             s = re.sub(r'(\S)\'(s|ve|ll|d|re)', r"\1 '\2", s)  # it's -> it 's, I've -> I 've etc.
-            # English UK: Forrester has arrows in utterances (for intonation?)
-            s = re.sub(r" ?[↗→↓∇] ?", r"", s)  # *FAT:	of the thunder ↗ 
-            s = re.sub(r"(\w):+(\w)", r"\1\2", s)  # n::::O →
-            s = re.sub(r"\n\s+\(\d\.\d\).*", r"", s)    # *FAT:	that good darlin' ↗ 10340_13805<BR>	(24.8) 13805_34059
-            s = re.sub(r" ?\(\d\.\d\)", r"", s)  # ⌊eh a:::o⌋ → (0.4)
-            # English UK Belfast
-            s = re.sub(r" ?‡", r"", s)  # oh ‡ aren't they gorgeous !
-
         elif hasattr(self, 'language') and re.search(r'deu|german', self.language):
             pass
         else:
@@ -346,6 +363,8 @@ class ChatProcessor:
                     'tokens': [],
                     'speaker': row.get('speaker') or '_',
                     'age': row.get('age') or '_',
+                    'child': row.get('child') or '_',
+                    'project': row.get('project') or '_',
                     'text': row.get('utt_text') or '',
                     'chat': row.get('utterance') or ''
                 }
@@ -356,6 +375,8 @@ class ChatProcessor:
                 f.write(f"# item_id = {utt_id}\n")
                 f.write(f"# speaker = {data['speaker']}\n")
                 f.write(f"# age = {data['age']}\n")
+                f.write(f"# child = {data['child']}\n")
+                f.write(f"# project = {data['project']}\n")
                 # omitted rather than '_' when empty: both are reserved/parsed fields
                 if data['text']:
                     f.write(f"# text = {data['text']}\n")
@@ -462,7 +483,7 @@ class ChatProcessor:
         self.sNr += 1
         uttID = f"{self.pid}_u{self.sNr}"
         
-        splitUtt = cleanUtt(utt)
+        splitUtt = self.strip_transcription_noise(cleanUtt(utt))
         if self.args.parameters is not None:
             self.tagger_input_file.write(f"<s_{uttID}> {self.tokenise(splitUtt)}\n")
         
@@ -472,28 +493,30 @@ class ChatProcessor:
         clean_val = splitUtt if self.args.utt_clean else ''
         words = self.tokenise(splitUtt).split(' ')
         
-        age, age_days, child_other, child_project_id = self.get_speaker_age(speaker)
-        
+        age, age_days, child_other, child_project_id, child_name = self.get_speaker_age(speaker)
+
         for wNr, w in enumerate(words, 1):
             if not w: continue
-            
+
             self.outRows.append({
-                'utt_id': f"{uttID}_w{wNr}", 
-                'utt_nr': self.sNr, 
-                'w_nr': wNr, 
-                'speaker': speaker, 
+                'utt_id': f"{uttID}_w{wNr}",
+                'utt_nr': self.sNr,
+                'w_nr': wNr,
+                'speaker': speaker,
                 'child_project': child_project_id,
                 'language': self.language,
-                'child_other': child_other, 
-                'age': age, 
-                'age_days': age_days, 
-                'time_code': timeCode, 
+                'child_other': child_other,
+                'age': age,
+                'age_days': age_days,
+                'time_code': timeCode,
                 'word': w,
                 'utterance': raw_utt,
                 'utt_clean': clean_val,
-                # not a CSV column: source of '# text' in CoNLL-U, which must be
-                # recoverable from the FORM column, unlike the raw CHAT string
-                'utt_text': splitUtt
+                # not CSV columns: source of '# text'/'# child'/'# project' in CoNLL-U,
+                # which must be recoverable from the FORM column, unlike the raw CHAT string
+                'utt_text': splitUtt,
+                'child': child_name,
+                'project': self.project
             })
     
     def parse_header(self, header_block):
@@ -568,37 +591,39 @@ class ChatProcessor:
                     child_name = re.sub(r'Sullyvan', 'Sullivan', child_name)
                     
                     full_id = f"{child_name}_{self.project[:3]}"
-                    
-                    # Store data: self.childData[CODE] = (ID, AgeString, AgeDays)
-                    self.childData[code] = (full_id, age_str, age_days)
+
+                    # Store data: self.childData[CODE] = (ID, AgeString, AgeDays, ChildName)
+                    self.childData[code] = (full_id, age_str, age_days, child_name)
 
         # 5. Fallback: If no child data found, assign default CHI
         if not self.childData and 'CHI' in code_to_name:
-             self.childData['CHI'] = (f"{code_to_name['CHI']}_{self.project[:3]}", "", 0)
+             self.childData['CHI'] = (f"{code_to_name['CHI']}_{self.project[:3]}", "", 0, code_to_name['CHI'])
         elif not self.childData:
-             self.childData['CHI'] = (f"NN_{self.project[:3]}", "", 0)
+             self.childData['CHI'] = (f"NN_{self.project[:3]}", "", 0, "NN")
 
     def get_speaker_age(self, speaker):
         """
-        Returns (AgeString, AgeDays, Category, ProjectID)
+        Returns (AgeString, AgeDays, Category, ProjectID, ChildName)
         Category is "C" if speaker is a target child, "X" otherwise.
         """
         # 1. Is the speaker a known Target Child?
         if speaker in self.childData:
-            # childData[speaker] = (full_id, age_str, age_days)
-            return self.childData[speaker][1], self.childData[speaker][2], "C", self.childData[speaker][0]
-        
+            # childData[speaker] = (full_id, age_str, age_days, child_name)
+            return self.childData[speaker][1], self.childData[speaker][2], "C", self.childData[speaker][0], self.childData[speaker][3]
+
         # 2. If not, it is an 'Other' (Adult/Investigator)
         # Fallback: Use the first registered child's ID and Age as the "Session Reference"
         ref_age_days = 0
-        ref_project_id = "" 
-        
+        ref_project_id = ""
+        ref_child_name = ""
+
         if self.childData:
             first_child = next(iter(self.childData.values()))
             ref_project_id = first_child[0] # e.g. "Dylan_Pal"
             ref_age_days = first_child[2]
-            
-        return '', ref_age_days, "X", ref_project_id
+            ref_child_name = first_child[3]
+
+        return '', ref_age_days, "X", ref_project_id, ref_child_name
     
     def apply_grew_rewrite(self, conllu_file, rule_file):
         """
@@ -834,6 +859,8 @@ class ChatProcessor:
                     meta_map[utt_id_base] = {
                         'speaker': row.get('speaker') or '_',
                         'age': row.get('age') or '_',
+                        'child': row.get('child') or '_',
+                        'project': row.get('project') or '_',
                         'text': row.get('utt_text') or '',
                         'chat': row.get('utterance') or ''
                     }
@@ -866,6 +893,8 @@ class ChatProcessor:
                 f.write(f"# item_id = {sent_id}\n")
                 f.write(f"# speaker = {meta.get('speaker', '_')}\n")
                 f.write(f"# age = {meta.get('age', '_')}\n")
+                f.write(f"# child = {meta.get('child', '_')}\n")
+                f.write(f"# project = {meta.get('project', '_')}\n")
                 # omitted rather than '_' when empty: both are reserved/parsed fields
                 if meta.get('text'):
                     f.write(f"# text = {meta['text']}\n")

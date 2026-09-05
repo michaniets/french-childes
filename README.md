@@ -55,14 +55,23 @@ This script converts CHILDES chat data to a one-word-per-line CSV format. It int
   - **Integrated Pipeline:** Handles the entire conversion and annotation process from a CHAT file (`.cha` or `.cha.gz`) to tabular (CSV) and CoNLL-U formats.
   - **Parsing:** Calls the UDPipe API for dependency parsing. The model can be specified (e.g., `french-gsd`).
   - **Graph rewriting:** Optionally uses Grew for modifying or correcting CoNLL-U annotations.
-  - **Tagging:** Optionally uses TreeTagger for POS tagging before parsing. If not used, tokenised text is sent directly to the parser.
+  - **Tagging:** Optionally uses TreeTagger for POS tagging before parsing. If TreeTagger is not used, tokenisation is no longer done by `childes.py` itself: cleaned but untokenised utterance text is sent to UDPipe, which performs its own UD-compliant tokenisation (including multiword tokens, e.g. English `gonna` -> `gon`+`na`).
   - **Session-Aware Streaming:** Processes large files by handling them as a series of sessions (based on `@Begin` markers) and sending data to the parsing API in manageable chunks.
   - **Non-Destructive Conversion:** The original utterance from the CHAT file is preserved. Special markers (e.g., `[//]`, `(.)`, `xxx`) are retained in the raw utterance column, while a cleaned version is used for tagging and parsing.
+  - **POS-based filtering:** `--pos_output`/`--pos_utterance` match the parser's universal POS (UPOS) by default when `--api_model` is used, rather than the tagger's own language/model-specific tag - so the same regex (e.g. `VERB`) works across corpora and tagger models. Use `--use_tagger_pos` to restore matching against the tagger's tag. `--pos_utterance` defaults to `--pos_output`'s value when not given explicitly.
   - **Outputs:**
       - A **full CSV** (`.parsed.csv`) containing all original columns plus the complete CoNLL-U annotation for each token.
       - A **light CSV** (`.light.csv`) containing a subset of columns, optionally filtered by the POS of the token (`--pos_output`).
       - An optional **CoNLL-U file** (`.conllu`) for use with other NLP tools.
       - Optional **HTML files** for browsing the parsed dependency trees in a web browser.
+
+### Recent changes (v5.7)
+
+  - **Tokenisation without a tagger:** when `--api_model` is used without `-p/--parameters`, `childes.py` no longer pre-splits words with its own (TreeTagger-oriented) rules before sending them to UDPipe. It now sends cleaned, untokenised utterance text and lets UDPipe tokenise it (`tokenizer=presegmented`), so tokens follow the Universal Dependencies guidelines for that language, including multiword tokens. Utterances that clean down to nothing (pure event/pause coding, e.g. `(5.) &=laugh`) are dropped before submission rather than sent as blank lines, which would otherwise desynchronise every following utterance's metadata. This does not affect runs that use TreeTagger (`-p`).
+  - **CoNLL-U header metadata:** sentence headers now also carry `# child = <name>` (unabbreviated) and `# project = <name>`, alongside the existing `# item_id`, `# speaker`, `# age`, `# text`, `# chat`.
+  - **`# text` vs `# chat`:** `# text` is now guaranteed to reflect the actual tokens (transcription noise such as timed pauses, intonation arrows, and event codes like `&=laugh` is stripped from it, matching what is tagged/parsed); `# chat` keeps the original CHAT-coded line unchanged.
+  - **CHAT-cleaning fixes:** `&=word` event/vocalisation codes (e.g. `&=laughs`, `&=noise`) are now fully removed instead of leaving a stray `&` plus a spurious real-looking word in the tagged/parsed output.
+  - Bug fix: a metadata-desync in `run_treetagger()`/`tagged2conllu()` (used with `-p` together with `--api_model`) that could attach one session's `# speaker`/`# age`/`# text`/`# chat` to a different session's tokens whenever utterance numbers repeated across `@PID` boundaries.
 
 ### How to use
 

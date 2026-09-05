@@ -10,8 +10,8 @@
 # ///
 
 __author__ = "Achim Stein"
-__version__ = "5.6"
-__status__ = "27.8.26"
+__version__ = "5.7"
+__status__ = "5.9.26"
 __license__ = "GPL"
 
 import sys
@@ -278,9 +278,15 @@ class ChatProcessor:
         self.sNr = 0 # This is now a global utterance counter
         self.childData = {}
         self.outRows = []
+        # Per-utterance metadata for the --api_model-only path (no --parameters):
+        # tokenisation is deferred to UDPipe itself, so there is no per-word grid to
+        # append to outRows until the parsed CoNLL-U comes back. See
+        # record_utterance_for_parsing()/restamp_presegmented_output().
+        self.pendingUtterances = {}
         self.tagger_input_file = None
         self.tagged_temp_file = None
         self.conllu_input_file = None
+        self.presegmented_input_file = None
         self.html_exporter = None
         if args.html_dir:
             file_basename = os.path.basename(args.chat_file)
@@ -347,46 +353,98 @@ class ChatProcessor:
             s = re.sub(r'\s+', ' ', s)
         return s
 
-    def tokens2conllu(self):
-        """Creates a basic CoNLL-U file from tokens when TreeTagger is not used."""
-        sys.stderr.write("Creating temporary CoNLL-U file from tokens for parsing...\n")
-        
-        with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', delete=False, suffix=".conllu.in") as temp_f:
-            self.conllu_input_file = temp_f.name
+    def build_presegmented_input(self):
+        """
+        Builds the plain-text, one-utterance-per-line input for UDPipe's own
+        tokenizer (tokenizer=presegmented), used for --api_model without
+        --parameters. Utterances that cleaned to an empty string are skipped:
+        UDPipe silently drops blank lines rather than emitting an empty sentence
+        for them (verified live against the API), which would otherwise desync
+        every following utterance's metadata - the same class of bug fixed earlier
+        for the tagger+api_model meta_map. Returns the ordered list of uttIDs
+        actually submitted, matching 1:1 in order with the sentences UDPipe returns.
+        """
+        sys.stderr.write("Creating temporary presegmented-text file for UDPipe tokenizer...\n")
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', delete=False, suffix=".txt") as temp_f:
+            self.presegmented_input_file = temp_f.name
+            ordered_ids = []
+            skipped = 0
+            for uttID, data in self.pendingUtterances.items():
+                text = data['utt_text'].strip()
+                if not text:
+                    skipped += 1
+                    continue
+                temp_f.write(text + "\n")
+                ordered_ids.append(uttID)
+        if skipped:
+            sys.stderr.write(f"  [INFO] Skipped {skipped} empty utterance(s) (no content after cleaning) - not sent to parser.\n")
+        return ordered_ids
 
-        # Group words by utterance ID to reconstruct sentences, storing metadata safely
-        utterances = {}
-        for row in self.outRows:
-            utt_id_base = re.match(r'(.*)_w\d+', row['utt_id']).group(1)
-            if utt_id_base not in utterances:
-                utterances[utt_id_base] = {
-                    'tokens': [],
-                    'speaker': row.get('speaker') or '_',
-                    'age': row.get('age') or '_',
-                    'child': row.get('child') or '_',
-                    'project': row.get('project') or '_',
-                    'text': row.get('utt_text') or '',
-                    'chat': row.get('utterance') or ''
-                }
-            utterances[utt_id_base]['tokens'].append(row['word'])
+    def restamp_presegmented_output(self, raw_parsed, ordered_ids):
+        """
+        Post-processes UDPipe's tokenizer=presegmented output: replaces UDPipe's own
+        per-sentence comments (# newdoc, # newpar, # sent_id, # text) with our own
+        metadata (# item_id, # speaker, # age, # child, # project, # text, # chat),
+        matched to the submitted utterances by ORDER - build_presegmented_input()
+        guarantees one output sentence per submitted line, in order (verified live).
+        Also builds self.outRows from the returned tokens - this is the first point
+        at which real tokens exist for this code path - skipping multiword-token
+        summary rows (e.g. "1-2 he's") the same way _parse_conllu_output() already
+        does, so word-numbering stays the plain per-token CoNLL-U ID that dql.py's
+        --merge step expects (atomic sub-tokens are always numbered contiguously
+        1..N regardless of any MWT grouping over them, so this doesn't introduce
+        gaps).
+        """
+        blocks = [b for b in raw_parsed.strip().split('\n\n') if b.strip()]
+        if len(blocks) != len(ordered_ids):
+            sys.stderr.write(
+                f"  [WARNING] UDPipe returned {len(blocks)} sentences for {len(ordered_ids)} submitted "
+                f"utterances - metadata alignment is unreliable; truncating to the shorter of the two.\n"
+            )
 
-        with open(self.conllu_input_file, 'w', encoding='utf8') as f:
-            for utt_id, data in utterances.items():
-                f.write(f"# item_id = {utt_id}\n")
-                f.write(f"# speaker = {data['speaker']}\n")
-                f.write(f"# age = {data['age']}\n")
-                f.write(f"# child = {data['child']}\n")
-                f.write(f"# project = {data['project']}\n")
-                # omitted rather than '_' when empty: both are reserved/parsed fields
-                if data['text']:
-                    f.write(f"# text = {data['text']}\n")
-                if data['chat']:
-                    f.write(f"# chat = {data['chat']}\n")
-                for idx, token in enumerate(data['tokens'], 1):
-                    # Basic CoNLL-U: ID, FORM, and underscores for the rest
-                    line = f"{idx}\t{token}\t_\t_\t_\t_\t_\t_\t_\t_\n"
-                    f.write(line)
-                f.write("\n")
+        restamped_blocks = []
+        for uttID, block in zip(ordered_ids, blocks):
+            meta = self.pendingUtterances[uttID]
+            token_lines = [line for line in block.splitlines() if line and not line.startswith('#')]
+
+            header_lines = [
+                f"# item_id = {uttID}",
+                f"# speaker = {meta['speaker'] or '_'}",
+                f"# age = {meta['age'] or '_'}",
+                f"# child = {meta['child'] or '_'}",
+                f"# project = {meta['project'] or '_'}",
+            ]
+            # omitted rather than '_' when empty: both are reserved/parsed fields
+            if meta['utt_text']:
+                header_lines.append(f"# text = {meta['utt_text']}")
+            if meta['utterance']:
+                header_lines.append(f"# chat = {meta['utterance']}")
+            restamped_blocks.append("\n".join(header_lines) + "\n" + "\n".join(token_lines))
+
+            for line in token_lines:
+                cols = line.split('\t')
+                if len(cols) < 2 or not cols[0].isdigit():
+                    continue  # skip MWT summary rows ("1-2"), same convention as _parse_conllu_output()
+                self.outRows.append({
+                    'utt_id': f"{uttID}_w{cols[0]}",
+                    'utt_nr': meta['utt_nr'],
+                    'w_nr': int(cols[0]),
+                    'speaker': meta['speaker'],
+                    'child_project': meta['child_project'],
+                    'language': meta['language'],
+                    'child_other': meta['child_other'],
+                    'age': meta['age'],
+                    'age_days': meta['age_days'],
+                    'time_code': meta['time_code'],
+                    'word': cols[1],
+                    'utterance': meta['utterance'],
+                    'utt_clean': meta['utt_clean_val'],
+                    'utt_text': meta['utt_text'],
+                    'child': meta['child'],
+                    'project': meta['project']
+                })
+
+        return "\n\n".join(restamped_blocks) + "\n"
 
     def correct_tagger_output(self, tagged):
         """Corrects known tagger errors for a specific language."""
@@ -470,6 +528,7 @@ class ChatProcessor:
             if self.tagger_input_file: self.tagger_input_file.close(); os.unlink(self.tagger_input_file.name)
             if self.tagged_temp_file: self.tagged_temp_file.close(); os.unlink(self.tagged_temp_file.name)
             if self.conllu_input_file and os.path.exists(self.conllu_input_file): os.unlink(self.conllu_input_file)
+            if self.presegmented_input_file and os.path.exists(self.presegmented_input_file): os.unlink(self.presegmented_input_file)
 
     def process_utterance_block(self, block):
         block = re.sub(r'\n\s+', ' ', block, flags=re.DOTALL)
@@ -486,8 +545,15 @@ class ChatProcessor:
         splitUtt = self.strip_transcription_noise(cleanUtt(utt))
         if self.args.parameters is not None:
             self.tagger_input_file.write(f"<s_{uttID}> {self.tokenise(splitUtt)}\n")
-        
-        self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
+            self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
+        elif self.args.api_model:
+            # No tagger: defer tokenisation to UDPipe's own tokenizer (UD-compliant),
+            # instead of pre-splitting with tokenise()'s tagger-oriented rules. The
+            # per-word outRows grid for this utterance is built later, from the
+            # returned CoNLL-U, by restamp_presegmented_output().
+            self.record_utterance_for_parsing(splitUtt, utt.strip(), speaker, uttID, timeCode)
+        else:
+            self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
 
     def generate_rows_from_tagger(self, splitUtt, raw_utt, speaker, uttID, timeCode):
         clean_val = splitUtt if self.args.utt_clean else ''
@@ -518,7 +584,31 @@ class ChatProcessor:
                 'child': child_name,
                 'project': self.project
             })
-    
+
+    def record_utterance_for_parsing(self, splitUtt, raw_utt, speaker, uttID, timeCode):
+        """
+        Records per-utterance metadata only (no word-splitting) for the --api_model
+        path when no tagger is used. self.outRows for this utterance is built later,
+        from the actual tokens UDPipe's own tokenizer returns, by
+        restamp_presegmented_output().
+        """
+        age, age_days, child_other, child_project_id, child_name = self.get_speaker_age(speaker)
+        self.pendingUtterances[uttID] = {
+            'utt_nr': self.sNr,
+            'speaker': speaker,
+            'child_project': child_project_id,
+            'language': self.language,
+            'child_other': child_other,
+            'age': age,
+            'age_days': age_days,
+            'time_code': timeCode,
+            'utterance': raw_utt,
+            'utt_clean_val': splitUtt if self.args.utt_clean else '',
+            'utt_text': splitUtt,
+            'child': child_name,
+            'project': self.project
+        }
+
     def parse_header(self, header_block):
         self.childData = {}
         self.project = ""
@@ -658,9 +748,24 @@ class ChatProcessor:
             sys.stderr.write(f"  Error during Grew rewrite: {e}\n")
             # sys.exit(1)
 
+    def resolve_filter_pos(self, row):
+        """
+        Returns the POS value that --pos_output/--pos_utterance should match against.
+        Default: the parser's universal POS (UPOS, CoNLL-U column 4 / 'conll_4') when
+        --api_model was used - portable across corpora/tagger models, unlike the
+        tagger's own tag. Falls back to the tagger's tag ('pos') when --use_tagger_pos
+        is given, or when no parser UPOS is available (no --api_model, or this row has
+        none, e.g. untagged punctuation-only row).
+        """
+        if not self.args.use_tagger_pos:
+            upos = row.get('conll_4')
+            if upos and upos != '_':
+                return upos
+        return row.get('pos', '')
+
     def finalize_output(self, *args, **kwargs):
         """Final processing: run tagger and/or parser, write output files"""
-        if not self.outRows:
+        if not self.outRows and not self.pendingUtterances:
             sys.stderr.write("\nNo data rows were generated. Exiting.\n")
             return
 
@@ -674,11 +779,20 @@ class ChatProcessor:
                 _, itemPOS, itemLemmas, itemTagged = self.run_treetagger(taggerInput)
 
         if self.args.api_model:
-            if not self.conllu_input_file or not os.path.exists(self.conllu_input_file):
-                self.tokens2conllu()
-            
-            if self.conllu_input_file and os.path.exists(self.conllu_input_file):
-                parsed_conllu_str = self.run_udpipe_api(self.conllu_input_file, self.args.api_model, chunk_size=self.args.chunk_parse)
+            if self.args.parameters:
+                # Tagger active: run_treetagger() already built self.conllu_input_file
+                # (tagged2conllu()), pre-tokenised by the tagger. UDPipe respects those
+                # exact tokens (input=conllu, no tokenizer) and only re-tags/re-parses.
+                if self.conllu_input_file and os.path.exists(self.conllu_input_file):
+                    parsed_conllu_str = self.run_udpipe_api(self.conllu_input_file, self.args.api_model, chunk_size=self.args.chunk_parse)
+            else:
+                # No tagger: submit untokenised, CHAT-cleaned utterance text and let
+                # UDPipe's own tokenizer produce genuinely UD-compliant tokens.
+                ordered_ids = self.build_presegmented_input()
+                if ordered_ids:
+                    raw_parsed = self.run_udpipe_api(self.presegmented_input_file, self.args.api_model, chunk_size=self.args.chunk_parse, presegmented=True)
+                    if raw_parsed:
+                        parsed_conllu_str = self.restamp_presegmented_output(raw_parsed, ordered_ids)
 
         if not self.args.parameters and not self.args.api_model:
             final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.chat_file) + '.csv'
@@ -746,7 +860,7 @@ class ChatProcessor:
                 row['lemma'] = conll_row[2] if len(conll_row) > 2 and conll_row[2] else '_'
 
             # Utterance filtering logic (applied again later for light version)
-            if self.args.pos_utterance and not re.search(self.args.pos_utterance, row.get('pos', '')):
+            if self.args.pos_utterance and not re.search(self.args.pos_utterance, self.resolve_filter_pos(row)):
                  row['utterance'] = row['utt_clean'] = row['utt_tagged'] = ''
 
             # Construct Hyperlink Strings (with doubled quotes inside)
@@ -793,7 +907,7 @@ class ChatProcessor:
 
         # filter light version for pos_output constraint
         def keep_light(row: dict) -> bool:
-            pos_val = row.get('pos', '')
+            pos_val = self.resolve_filter_pos(row)
             if re.search(re.compile(self.args.pos_output), pos_val):
                 return True  # print row
             else:
@@ -911,23 +1025,37 @@ class ChatProcessor:
                     f.write(line)
                 f.write("\n")
 
-    def run_udpipe_api(self, input_file, model, chunk_size):
+    def run_udpipe_api(self, input_file, model, chunk_size, presegmented=False):
+        """
+        presegmented=True: input_file is plain text, one utterance per line (built by
+        build_presegmented_input()); UDPipe's own tokenizer segments each line into
+        UD-compliant tokens (tokenizer=presegmented preserves our line-based sentence
+        boundaries - verified live - unlike its default resegmentation).
+        presegmented=False (default): input_file is pre-built CoNLL-U with fixed FORM
+        tokens (from tagged2conllu(), i.e. the tagger's own tokenisation); UDPipe
+        respects those tokens exactly (input=conllu, no tokenizer) and only re-tags/
+        re-parses.
+        """
         API_URL = "https://lindat.mff.cuni.cz/services/udpipe/api/process"
         sys.stderr.write(f"Calling Lindat API with UDPipe model '{model}'...\n")
         with open(input_file, 'r', encoding='utf8') as f:
             full_content = f.read()
-        sentences = full_content.strip().split('\n\n')
+        sep = '\n' if presegmented else '\n\n'
+        sentences = full_content.strip('\n').split(sep) if presegmented else full_content.strip().split(sep)
         total_chunks = (len(sentences) + chunk_size - 1) // chunk_size
         parsed_results = []
         for i in range(0, len(sentences), chunk_size):
             chunk = sentences[i:i + chunk_size]
-            chunk_content = "\n\n".join(chunk)
+            chunk_content = sep.join(chunk)
             current_chunk_num = i//chunk_size + 1
             eta = round(len(chunk) / 330)
             progress_msg = f"\r  Sending chunk {current_chunk_num}/{total_chunks} ({len(chunk)} utterances) to API. Processing time ~{eta}s..."
             sys.stderr.write(progress_msg)
             sys.stderr.flush()
-            params = {'model': model, 'input': 'conllu', 'tagger': '', 'parser': ''}
+            if presegmented:
+                params = {'model': model, 'tokenizer': 'presegmented', 'tagger': '', 'parser': ''}
+            else:
+                params = {'model': model, 'input': 'conllu', 'tagger': '', 'parser': ''}
             response = requests.post(API_URL, data=params, files={'data': chunk_content})
             if response.status_code == 200:
                 result = response.json().get('result')
@@ -937,33 +1065,38 @@ class ChatProcessor:
                     sys.stderr.write(f"\nWarning: API call for chunk {current_chunk_num} succeeded but returned no result.\n")
             else:
                 sys.stderr.write(f"\nError: API call for chunk {current_chunk_num} failed with status {response.status_code}: {response.text}\n")
-                self._debug_udpipe_chunk(chunk_content, model, small_chunk_size=10, out_path='error_chunk.conllu')
+                self._debug_udpipe_chunk(chunk_content, model, small_chunk_size=10, out_path='error_chunk.conllu', presegmented=presegmented)
                 return None
         sys.stderr.write("\nAPI processing complete.\n")
         return "".join(parsed_results) if parsed_results else None
 
-    def _debug_udpipe_chunk(self, chunk_content, model, small_chunk_size=10, out_path='error_chunk.conllu'):
+    def _debug_udpipe_chunk(self, chunk_content, model, small_chunk_size=10, out_path='error_chunk.conllu', presegmented=False):
         """
-        Split a failing CoNLL-U chunk into smaller chunks (default: 10 sentences),
-        send each to the UDPipe API; on error write content and exit.
+        Split a failing CoNLL-U (or presegmented-text) chunk into smaller chunks
+        (default: 10 sentences), send each to the UDPipe API; on error write content
+        and exit.
         We check for some of the HTTP status codes returned by UDPipe/Lindat:
         200=OK, 400=Bad Request (malformed CoNLL-U), 403=Forbidden, 413=Payload Too Large, 429=Too Many Requests, 500=Server Error, 502–504=Gateway/Timeout issues.
         """
         API_URL = "https://lindat.mff.cuni.cz/services/udpipe/api/process"
-        sentences = [s for s in chunk_content.strip().split('\n\n') if s.strip()]
+        sep = '\n' if presegmented else '\n\n'
+        sentences = [s for s in chunk_content.strip(sep).split(sep) if s.strip()]
 
         total_small = (len(sentences) + small_chunk_size - 1) // small_chunk_size
         sys.stderr.write(f"\nDEBUG: Entering fine-grained UDPipe check ({total_small} mini-chunks of {small_chunk_size} sentences)...\n")
 
         for j in range(0, len(sentences), small_chunk_size):
             mini = sentences[j:j + small_chunk_size]
-            mini_content = "\n\n".join(mini)
+            mini_content = sep.join(mini)
             mini_idx = j // small_chunk_size + 1
             sys.stderr.write(f"\r  -> Testing mini-chunk {mini_idx}/{total_small} ({len(mini)} sentences)...")
             sys.stderr.flush()
 
             try:
-                params = {'model': model, 'input': 'conllu', 'tagger': '', 'parser': ''}
+                if presegmented:
+                    params = {'model': model, 'tokenizer': 'presegmented', 'tagger': '', 'parser': ''}
+                else:
+                    params = {'model': model, 'input': 'conllu', 'tagger': '', 'parser': ''}
                 resp = requests.post(API_URL, data=params, files={'data': mini_content})
             except Exception as e:
                 # Network/transport error: save and exit
@@ -1001,12 +1134,17 @@ if __name__ == "__main__":
     parser.add_argument('--write_conllu', action='store_true', help='(Optional) Write the final parsed CoNLL-U data to a standalone file. Requires --api_model.')
     parser.add_argument('--chunk_parse', type=int, default=10000, help='Number of utterances per API parsing chunk. Default: 10000.')
     parser.add_argument('--chunk_html', type=int, default=5000, help='Number of utterances per HTML output file. Default: 5000.')
-    parser.add_argument('--pos_output', default=".*", type=str, help='Regex to match POS tags. The reduced "light" table will only contain matching rows.')
-    parser.add_argument('--pos_utterance', type=str, help='Regex to match POS tags. The full utterance text will only be printed on matching rows.')
+    parser.add_argument('--pos_output', default=".*", type=str, help='Regex to match POS tags. The reduced "light" table will only contain matching rows.\nMatches the parser\'s universal POS (UPOS) when --api_model is used; see --use_tagger_pos.')
+    parser.add_argument('--pos_utterance', type=str, help='Regex to match POS tags. The full utterance text will only be printed on matching rows.\nMatches the parser\'s universal POS (UPOS) when --api_model is used; see --use_tagger_pos.\nDefaults to --pos_output\'s value when not given explicitly.')
+    parser.add_argument('--use_tagger_pos', action='store_true', help='Make --pos_output/--pos_utterance match the tagger\'s own (language/model-specific) POS tag instead of the parser\'s universal POS (UPOS). Has no effect without --parameters; has no effect on rows the tagger did not tag if --api_model is not set (only source of POS in that case).')
     parser.add_argument('--rewrite', type=str, help='Path to a Grew rule file (.grs) to correct the parsed CoNLL-U output.')
     parser.add_argument('--utt_clean', action='store_true', help='Populate the utt_clean column.')
     parser.add_argument('--utt_tagged', action='store_true', help='Populate the utt_tagged column.')
-    
+
     args = parser.parse_args()
+    # --pos_utterance defaults to --pos_output's value unless given explicitly, so the
+    # common "restrict to POS X" case doesn't require passing the same regex twice.
+    if args.pos_utterance is None:
+        args.pos_utterance = args.pos_output
     processor = ChatProcessor(args)
     processor.run()

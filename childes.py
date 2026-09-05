@@ -543,14 +543,19 @@ class ChatProcessor:
         uttID = f"{self.pid}_u{self.sNr}"
         
         splitUtt = self.strip_transcription_noise(cleanUtt(utt))
-        if self.args.parameters is not None:
+        # --tag_ud_tokens (requires --parameters and --api_model together): parse first,
+        # UD-tokenised, then tag those tokens afterward (run_tagger_on_ud_tokens()) for
+        # an additional tagger pos/lemma - so tokenisation defers to UDPipe here too,
+        # same as the plain --api_model-only case.
+        use_tag_ud_tokens = self.args.tag_ud_tokens and self.args.parameters and self.args.api_model
+        if self.args.parameters is not None and not use_tag_ud_tokens:
             self.tagger_input_file.write(f"<s_{uttID}> {self.tokenise(splitUtt)}\n")
             self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
         elif self.args.api_model:
-            # No tagger: defer tokenisation to UDPipe's own tokenizer (UD-compliant),
-            # instead of pre-splitting with tokenise()'s tagger-oriented rules. The
-            # per-word outRows grid for this utterance is built later, from the
-            # returned CoNLL-U, by restamp_presegmented_output().
+            # No tagger, or --tag_ud_tokens: defer tokenisation to UDPipe's own
+            # tokenizer (UD-compliant), instead of pre-splitting with tokenise()'s
+            # tagger-oriented rules. The per-word outRows grid for this utterance is
+            # built later, from the returned CoNLL-U, by restamp_presegmented_output().
             self.record_utterance_for_parsing(splitUtt, utt.strip(), speaker, uttID, timeCode)
         else:
             self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
@@ -753,14 +758,20 @@ class ChatProcessor:
         Returns the POS value that --pos_output/--pos_utterance should match against.
         Default: the parser's universal POS (UPOS, CoNLL-U column 4 / 'conll_4') when
         --api_model was used - portable across corpora/tagger models, unlike the
-        tagger's own tag. Falls back to the tagger's tag ('pos') when --use_tagger_pos
-        is given, or when no parser UPOS is available (no --api_model, or this row has
-        none, e.g. untagged punctuation-only row).
+        tagger's own tag. Falls back to the tagger's tag when --use_tagger_pos is
+        given: 'tagger_pos' if present (--tag_ud_tokens combined mode), else 'pos'
+        (plain --parameters mode, where 'pos' itself is the tagger's tag). Also
+        falls back to 'pos' when no parser UPOS is available at all (no --api_model,
+        or this row has none, e.g. untagged punctuation-only row).
         """
         if not self.args.use_tagger_pos:
             upos = row.get('conll_4')
             if upos and upos != '_':
                 return upos
+        else:
+            tagger_pos = row.get('tagger_pos')
+            if tagger_pos and tagger_pos != '_':
+                return tagger_pos
         return row.get('pos', '')
 
     def finalize_output(self, *args, **kwargs):
@@ -770,29 +781,43 @@ class ChatProcessor:
             return
 
         itemPOS, itemLemmas, itemTagged = {}, {}, {}
+        tagUdPOS, tagUdLemmas = {}, {}
         parsed_conllu_str = None
-        
-        if self.args.parameters:
+
+        # --tag_ud_tokens: parse first (UD tokenisation), tag those tokens afterward
+        # for an additional pos/lemma. Requires both --parameters and --api_model;
+        # silently has no effect otherwise (matches --utt_tagged/--use_tagger_pos style).
+        use_tag_ud_tokens = self.args.tag_ud_tokens and self.args.parameters and self.args.api_model
+        if self.args.tag_ud_tokens and not use_tag_ud_tokens:
+            sys.stderr.write("  [INFO] --tag_ud_tokens has no effect without both --parameters and --api_model.\n")
+
+        if self.args.parameters and not use_tag_ud_tokens:
             self.tagger_input_file.seek(0)
             taggerInput = self.tagger_input_file.read()
             if taggerInput:
                 _, itemPOS, itemLemmas, itemTagged = self.run_treetagger(taggerInput)
 
         if self.args.api_model:
-            if self.args.parameters:
+            if self.args.parameters and not use_tag_ud_tokens:
                 # Tagger active: run_treetagger() already built self.conllu_input_file
                 # (tagged2conllu()), pre-tokenised by the tagger. UDPipe respects those
                 # exact tokens (input=conllu, no tokenizer) and only re-tags/re-parses.
                 if self.conllu_input_file and os.path.exists(self.conllu_input_file):
                     parsed_conllu_str = self.run_udpipe_api(self.conllu_input_file, self.args.api_model, chunk_size=self.args.chunk_parse)
             else:
-                # No tagger: submit untokenised, CHAT-cleaned utterance text and let
-                # UDPipe's own tokenizer produce genuinely UD-compliant tokens.
+                # No tagger, or --tag_ud_tokens: submit untokenised, CHAT-cleaned
+                # utterance text and let UDPipe's own tokenizer produce genuinely
+                # UD-compliant tokens.
                 ordered_ids = self.build_presegmented_input()
                 if ordered_ids:
                     raw_parsed = self.run_udpipe_api(self.presegmented_input_file, self.args.api_model, chunk_size=self.args.chunk_parse, presegmented=True)
                     if raw_parsed:
                         parsed_conllu_str = self.restamp_presegmented_output(raw_parsed, ordered_ids)
+
+                if use_tag_ud_tokens and self.outRows:
+                    # Now that self.outRows holds the real UD tokens, tag them with
+                    # TreeTagger for an additional pos/lemma (does not affect FORM).
+                    tagUdPOS, tagUdLemmas = self.run_tagger_on_ud_tokens()
 
         if not self.args.parameters and not self.args.api_model:
             final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.chat_file) + '.csv'
@@ -829,9 +854,9 @@ class ChatProcessor:
         parsed_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.chat_file) + '.parsed.csv'
         light_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.chat_file) + '.light.csv' # Define light path here
 
-        header_parsed = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'language', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged']
+        header_parsed = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'language', 'child_other', 'age', 'age_days', 'time_code', 'word', 'lemma', 'pos', 'tagger_lemma', 'tagger_pos', 'utterance', 'utt_clean', 'utt_tagged']
         header_parsed.extend([f'conll_{i}' for i in range(1, 11)])
-        header_light = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'language', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'utterance', 'utt_clean', 'utt_tagged'] # Define light header
+        header_light = ['utt_id', 'utt_nr', 'w_nr', 'URLwww', 'URLloc', 'speaker', 'child_project', 'language', 'child_other', 'age', 'age_days', 'word', 'lemma', 'pos', 'tagger_lemma', 'tagger_pos', 'utterance', 'utt_clean', 'utt_tagged'] # Define light header
 
         processed_rows_for_initial_write = [] # Store processed rows temporarily
 
@@ -848,14 +873,25 @@ class ChatProcessor:
                 row['pos'] = '_'
                 row['lemma'] = '_'
 
+            # --tag_ud_tokens: additional tagger pos/lemma alongside the parser's own
+            # UPOS/lemma (added to 'tagger_pos'/'tagger_lemma', 'pos'/'lemma' stay UD-based)
+            if use_tag_ud_tokens:
+                try:
+                    if tagUdPOS: row['tagger_pos'] = tagUdPOS.get(uID, ['_'] * wID)[wID - 1]
+                    if tagUdLemmas: row['tagger_lemma'] = tagUdLemmas.get(uID, ['_'] * wID)[wID - 1]
+                except IndexError:
+                    row['tagger_pos'] = '_'
+                    row['tagger_lemma'] = '_'
+
             if self.args.utt_tagged and itemTagged: row['utt_tagged'] = itemTagged.get(uID, '')
 
             # Add CoNLL-U data
             conll_row = conllu_data.get(row['utt_id'], [])
             for i, col_val in enumerate(conll_row): row[f'conll_{i+1}'] = col_val
 
-            # Use CoNLL-U pos/lemma if tagger wasn't used
-            if not self.args.parameters and self.args.api_model and len(conll_row) > 3:
+            # Use CoNLL-U pos/lemma when tokenisation was UD-based: either no tagger
+            # was used at all, or --tag_ud_tokens deferred tokenisation to the parser
+            if (not self.args.parameters or use_tag_ud_tokens) and self.args.api_model and len(conll_row) > 3:
                 row['pos'] = conll_row[3] if len(conll_row) > 3 and conll_row[3] else '_'
                 row['lemma'] = conll_row[2] if len(conll_row) > 2 and conll_row[2] else '_'
 
@@ -953,7 +989,13 @@ class ChatProcessor:
                     conllu_data[unique_id] = cols
         return conllu_data
 
-    def run_treetagger(self, tagger_input):
+    def run_treetagger(self, tagger_input, build_conllu_input=True):
+        """
+        build_conllu_input=False skips the (redundant) step of also building a
+        CoNLL-U-for-parsing from the tagger's output - used by
+        run_tagger_on_ud_tokens() (--tag_ud_tokens), where parsing has already
+        happened and this call is only for an additional tagger pos/lemma.
+        """
         sys.stderr.write("Calling TreeTagger...\n")
         tagger_bin, param_file = './tree-tagger', self.args.parameters
         if not all(map(os.path.exists, [tagger_bin, param_file])): sys.exit(f"Tagger binary or param file not found. Checked: {tagger_bin}, {param_file}")
@@ -962,7 +1004,7 @@ class ChatProcessor:
         with open(self.tagged_temp_file.name, 'r') as f_in:
             tagged = subprocess.check_output([tagger_bin, param_file, '-token', '-lemma', '-sgml'], stdin=f_in).decode('utf8')
         tagged = process_tagged_data(tagged)
-        if self.args.api_model:
+        if build_conllu_input and self.args.api_model:
             with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', delete=False, suffix=".conllu.in") as temp_f:
                 self.conllu_input_file = temp_f.name
 
@@ -993,6 +1035,25 @@ class ChatProcessor:
             content_oneline = self.correct_tagger_output(content_oneline)
             tagged_sents[key] = content_oneline.strip()
         return words, pos, lemmas, tagged_sents
+
+    def run_tagger_on_ud_tokens(self):
+        """
+        --tag_ud_tokens: runs TreeTagger on the already UD-tokenised output
+        (self.outRows, built by restamp_presegmented_output()) to obtain an
+        ADDITIONAL tagger POS/lemma alongside the parser's own UPOS/lemma. Does not
+        touch tokenisation/FORM, which stays UD-compliant; the results are merged
+        into 'tagger_pos'/'tagger_lemma' by the caller, matched by utt_id, exactly
+        like itemPOS/itemLemmas are for plain --parameters.
+        """
+        sys.stderr.write("Running TreeTagger on UD-tokenised output for additional pos/lemma...\n")
+        utterances = {}
+        for row in self.outRows:
+            utt_id_base = re.match(r'(.*)_w\d+', row['utt_id']).group(1)
+            utterances.setdefault(utt_id_base, []).append(row['word'])
+
+        tagger_input = "\n".join(f"<s_{uid}> {' '.join(words)}" for uid, words in utterances.items()) + "\n"
+        _, tagUdPOS, tagUdLemmas, _ = self.run_treetagger(tagger_input, build_conllu_input=False)
+        return tagUdPOS, tagUdLemmas
 
     def tagged2conllu(self, str_in, conllu_out_path, meta_map=None):
         sys.stderr.write(f"Creating temporary CoNLL-U file with lemmas: '{conllu_out_path}'...\n")
@@ -1137,6 +1198,7 @@ if __name__ == "__main__":
     parser.add_argument('--pos_output', default=".*", type=str, help='Regex to match POS tags. The reduced "light" table will only contain matching rows.\nMatches the parser\'s universal POS (UPOS) when --api_model is used; see --use_tagger_pos.')
     parser.add_argument('--pos_utterance', type=str, help='Regex to match POS tags. The full utterance text will only be printed on matching rows.\nMatches the parser\'s universal POS (UPOS) when --api_model is used; see --use_tagger_pos.\nDefaults to --pos_output\'s value when not given explicitly.')
     parser.add_argument('--use_tagger_pos', action='store_true', help='Make --pos_output/--pos_utterance match the tagger\'s own (language/model-specific) POS tag instead of the parser\'s universal POS (UPOS). Has no effect without --parameters; has no effect on rows the tagger did not tag if --api_model is not set (only source of POS in that case).')
+    parser.add_argument('--tag_ud_tokens', action='store_true', help='Requires both --parameters and --api_model. Reverses the default order: parses first with UDPipe\'s own UD-compliant tokenizer, then runs the tagger on those tokens for an ADDITIONAL pos/lemma (columns tagger_pos/tagger_lemma) rather than tagger-tokenising before parsing. \'pos\'/\'lemma\' stay UD-based (parser UPOS/lemma), as in plain --api_model-only mode. No effect if only one of --parameters/--api_model is given.')
     parser.add_argument('--rewrite', type=str, help='Path to a Grew rule file (.grs) to correct the parsed CoNLL-U output.')
     parser.add_argument('--utt_clean', action='store_true', help='Populate the utt_clean column.')
     parser.add_argument('--utt_tagged', action='store_true', help='Populate the utt_tagged column.')

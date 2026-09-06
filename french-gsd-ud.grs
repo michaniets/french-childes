@@ -1,7 +1,7 @@
 % Grew Rules for CHILDES Parser Correction
-% AS Jan 26
+% AS Sep 26
 %
-% Corrections for UDpipe model french-gsd-ud-2.5-191206
+% Corrections for UDpipe model french-gsd-ud-2.17.251125
 %   targeting mainly issues with spoken and incomplete language observed with CHILDES data
 %
 % Status: experimental

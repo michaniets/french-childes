@@ -53,6 +53,100 @@ package oblique {
   }
 }
 
+package amalgames {
+  % ------------------------------------------------------------------
+  % Amalgames du / des / au / aux
+  %
+  % childes.py (>= 5.8) submits du/des to the parser as a SINGLE DET token
+  % (--fuse_contractions), because letting UDPipe split them costs the
+  % obj/obl:arg distinction: in UD_French-GSD a split du/des has an 'obj' head
+  % noun in 1.2% of cases against 41% unsplit, so after a split the parser has
+  % almost no evidence for obj and returns obl:arg. au/aux are the opposite case
+  % (never partitive) and are submitted pre-split as 'à le' / 'à les', because
+  % leaving them fused loses the preposition ('il va au parc' -> parc/obj).
+  %
+  % The rules below restore the UD-conformant surface analysis, using deprel to
+  % decide - which is precisely the information the tokenizer did not have.
+  %   nmod / obl*  -> contraction: expand du/des to de+le / de+les (multiword token)
+  %   obj / nsubj  -> partitive or indefinite determiner: leave as a single DET
+  % Note: these rules log in 'fix' on the node they change (the determiner or the
+  % preposition), not on the verb, since a contraction need not involve a verb.
+  % ------------------------------------------------------------------
+
+  % An intransitive verb has no direct object: a du/des "object" is a de-PP.
+  % Relabelling to obl:arg lets split_du/split_des below apply on the next pass.
+  % Verbs are taken from the same lexicon as the dislocation rules.
+  rule de_verb_complement (verbs from "french-verbs.grewlex.tsv") {
+    pattern {
+      V [upos=VERB, lemma=verbs.lemma];
+      N []; D [form=du|des, upos=DET];
+      N -[det]-> D;
+      e: V -[obj]-> N;
+    }
+    without { N -[1=case]-> C; }   % already marked by another preposition
+    commands {
+      del_edge e;
+      add_edge V -[obl:arg]-> N;
+      V.fix = V.fix + de_verb_complement + ",";
+    }
+  }
+
+  % du = de + le
+  rule split_du {
+    pattern {
+      D [form="du", upos=DET];
+      N []; N -[det]-> D;
+      X -[1=nmod|obl]-> N;         % PP or genitive: contraction reading
+    }
+    without { N -[1=case]-> C; }   % avec des amis: des is a plain determiner
+    commands {
+      add_node P :< D;
+      P.form = "de"; P.lemma = "de"; P.upos = ADP; P.textform = "du"; P.wordform = "de";
+      D.form = "le"; D.lemma = "le"; D.textform = "_"; D.wordform = "le"; D.Definite = "Def";
+      add_edge N -[case]-> P;
+      D.fix = split_du;
+    }
+  }
+
+  % des = de + les
+  rule split_des {
+    pattern {
+      D [form="des", upos=DET];
+      N []; N -[det]-> D;
+      X -[1=nmod|obl]-> N;
+    }
+    without { N -[1=case]-> C; }
+    commands {
+      add_node P :< D;
+      P.form = "de"; P.lemma = "de"; P.upos = ADP; P.textform = "des"; P.wordform = "de";
+      D.form = "les"; D.lemma = "le"; D.textform = "_"; D.wordform = "les"; D.Definite = "Def";
+      add_edge N -[case]-> P;
+      D.fix = split_des;
+    }
+  }
+
+  % au / aux were pre-split for the parser: restore the fused surface form as a
+  % UD multiword token (the analysis is already correct, only the surface differs)
+  rule fuse_au {
+    pattern {
+      P [form="à", upos=ADP]; D [form="le", upos=DET]; P < D;
+      N []; N -[case]-> P; N -[det]-> D;
+    }
+    without { P [textform="au"]; }
+    commands { P.textform = "au"; D.textform = "_"; P.fix = fuse_au; }
+  }
+
+  rule fuse_aux {
+    pattern {
+      P [form="à", upos=ADP]; D [form="les", upos=DET]; P < D;
+      N []; N -[case]-> P; N -[det]-> D;
+    }
+    without { P [textform="aux"]; }
+    commands { P.textform = "aux"; D.textform = "_"; P.fix = fuse_aux; }
+  }
+}
+
+
 package dislocation {
   % Marie je tiens seulement le livre
   rule double_subject_pre {
@@ -135,6 +229,10 @@ package dislocation {
     without {
       COMMA [form=","];
       N1 << V; V << COMMA; COMMA << N2;
+    }
+    without {                        % il parle des enfants: de-PP, not a dislocation
+      D [form=du|des, upos=DET];     % handled by amalgames.de_verb_complement
+      N2 -[det]-> D;
     }
     commands {
       del_edge e2;
@@ -238,6 +336,7 @@ strat main {
     init_fix_misc,
     duplicate_complements,
     oblique,
+    amalgames,
     dislocation,
   ))
 }

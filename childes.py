@@ -339,13 +339,26 @@ class ChatProcessor:
             s = re.sub(r'\s+', ' ', s).strip()
         return s
 
-    def tokenise(self, s):
+    def tokenise(self, s, split_contractions=False):
         """
         Tokenises a string, with language-specific rules.
         Normally, in CHAT format punctuation should be separated by spaces already. (BeginChar/EndChar)
         German clitics can't be handled: habs, gehts, etc.
+
+        split_contractions: only set when the result is submitted to the parser with
+        fixed tokens (fuse_contractions()). French au/aux are then pre-split into
+        'à le' / 'à les'. Unlike du/des they have no partitive reading, so they are
+        always the preposition à + article; leaving them fused loses the preposition
+        and the parser reads the noun as a direct object ('il va au parc' -> parc/obj
+        instead of obl:arg). Not applied for tagger input, where the token grid must
+        stay aligned with TreeTagger's own tokenisation.
         """
         if hasattr(self, 'language') and re.search(r'fra|french', self.language):
+            if split_contractions:
+                s = re.sub(r'\bAux\b', 'À les', s)
+                s = re.sub(r'\baux\b', 'à les', s)
+                s = re.sub(r'\bAu\b', 'À le', s)
+                s = re.sub(r'\bau\b', 'à le', s)
             reBeginChar = re.compile(r'([\|\{\(\/\´\`"»«°<])') 
             reEndChar = re.compile(r'([\]\|\}\/\`\"\),\;\:\!\?\.\%»«>])(?=\s|$)')   # also if followed by end of line
             reBeginString = re.compile(r'([dcjlmnstDCJLNMST]\'|[Qq]u\'|[Jj]usqu\'|[Ll]orsqu\')') 
@@ -622,13 +635,15 @@ class ChatProcessor:
             # built later, from the returned CoNLL-U, by restamp_presegmented_output().
             self.record_utterance_for_parsing(splitUtt, utt.strip(), speaker, uttID, timeCode)
         else:
-            # Tokenise here: either no parser at all, or fuse_contractions() applies
-            # (French du/des/au/aux must stay fused - see that method).
-            self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
+            # Tokenise here: either no parser at all, or fuse_contractions() applies.
+            # Contractions are pre-split only when this feeds the parser: du/des stay
+            # fused (ambiguous), au/aux are split (never partitive) - see tokenise().
+            self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode,
+                                           split_contractions=bool(self.args.api_model))
 
-    def generate_rows_from_tagger(self, splitUtt, raw_utt, speaker, uttID, timeCode):
+    def generate_rows_from_tagger(self, splitUtt, raw_utt, speaker, uttID, timeCode, split_contractions=False):
         clean_val = splitUtt if self.args.utt_clean else ''
-        words = self.tokenise(splitUtt).split(' ')
+        words = self.tokenise(splitUtt, split_contractions=split_contractions).split(' ')
         
         age, age_days, child_other, child_project_id, child_name = self.get_speaker_age(speaker)
 

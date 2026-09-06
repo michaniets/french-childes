@@ -78,7 +78,10 @@ def cleanUtt(s):
     s = re.sub(r'\+[<,]? ?', '', s)               # Remove +< and +,
     s = re.sub(r'(0|www|xxx|yyy)\s', '', s)          # Remove unintelligible words
     s = re.sub(r'\[.*?\] ?', '', s)               # Remove all other bracketed content [...]
-    s = re.sub(r'\(([A-Za-z]+)\)', r'\1', s)      # Keep text inside parentheses (word) -> word
+    # Keep text inside parentheses: (be)cause -> because, (d'ac)cord -> d'accord.
+    # Letters incl. accented, apostrophe and hyphen; digits/dots stay excluded so
+    # that timed pauses like (5.) or (2.5) are not swallowed here.
+    s = re.sub(r"\(([A-Za-zÀ-ÿ'’\-]+)\)", r'\1', s)
     s = re.sub(r' \+/+', ' ', s)                  # Remove +/
     # added v4.4
     s = re.sub(r'@[a-z:0-9]+', '', s)             # Remove special CHAT suffixes like @c, @s:eng

@@ -10,8 +10,8 @@
 # ///
 
 __author__ = "Achim Stein"
-__version__ = "5.7"
-__status__ = "5.9.26"
+__version__ = "5.8"
+__status__ = "6.9.26"
 __license__ = "GPL"
 
 import sys
@@ -293,6 +293,29 @@ class ChatProcessor:
             file_basename = os.path.splitext(file_basename)[0]
             self.html_exporter = HtmlExporter(args.html_dir, file_basename, chunk_size=args.chunk_html)
 
+    def fuse_contractions(self):
+        """
+        Whether preposition+determiner contractions must be kept fused as a single
+        token (French du/des/au/aux) by tokenising here, instead of letting UDPipe's
+        own tokenizer decide whether to split them.
+
+        Splitting them costs dependency accuracy, because the split representation
+        and the 'obj' relation are near-disjoint in the training data: in
+        UD_French-GSD (train), a split du/des has an 'obj' head noun in 81 of 6795
+        cases (1.2%), an unsplit one in 680 of 1675 (41%). Once the tokenizer has
+        split, the parser has almost no evidence for 'obj' and returns 'obl:arg'
+        instead - which silently destroys the obj/obl:arg distinction. Verified
+        against the API for french-gsd/-sequoia/-partut/-spoken: none of them
+        analyses a partitive direct object ('Max mange du sucre') as 'obj'.
+
+        Only relevant where the tokenizer's decision is context-dependent AND
+        entails a change of deprel. English 'gonna' -> 'gon'+'na' is unconditional
+        and deprel-neutral, so UD tokenisation is kept there.
+        """
+        if self.args.fuse_contractions == 'yes': return True
+        if self.args.fuse_contractions == 'no': return False
+        return bool(getattr(self, 'language', '') and re.search(r'fra|french', self.language))
+
     def strip_transcription_noise(self, s):
         """
         Removes language/corpus-specific transcription noise (timed pauses,
@@ -352,6 +375,47 @@ class ChatProcessor:
             s = re.sub(r'([,;?.!])(?=\s|$)', r' \1', s)
             s = re.sub(r'\s+', ' ', s)
         return s
+
+    def tokens2conllu(self):
+        """Creates a basic CoNLL-U file from tokens when TreeTagger is not used."""
+        sys.stderr.write("Creating temporary CoNLL-U file from tokens for parsing...\n")
+        
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', delete=False, suffix=".conllu.in") as temp_f:
+            self.conllu_input_file = temp_f.name
+
+        # Group words by utterance ID to reconstruct sentences, storing metadata safely
+        utterances = {}
+        for row in self.outRows:
+            utt_id_base = re.match(r'(.*)_w\d+', row['utt_id']).group(1)
+            if utt_id_base not in utterances:
+                utterances[utt_id_base] = {
+                    'tokens': [],
+                    'speaker': row.get('speaker') or '_',
+                    'age': row.get('age') or '_',
+                    'child': row.get('child') or '_',
+                    'project': row.get('project') or '_',
+                    'text': row.get('utt_text') or '',
+                    'chat': row.get('utterance') or ''
+                }
+            utterances[utt_id_base]['tokens'].append(row['word'])
+
+        with open(self.conllu_input_file, 'w', encoding='utf8') as f:
+            for utt_id, data in utterances.items():
+                f.write(f"# item_id = {utt_id}\n")
+                f.write(f"# speaker = {data['speaker']}\n")
+                f.write(f"# age = {data['age']}\n")
+                f.write(f"# child = {data['child']}\n")
+                f.write(f"# project = {data['project']}\n")
+                # omitted rather than '_' when empty: both are reserved/parsed fields
+                if data['text']:
+                    f.write(f"# text = {data['text']}\n")
+                if data['chat']:
+                    f.write(f"# chat = {data['chat']}\n")
+                for idx, token in enumerate(data['tokens'], 1):
+                    # Basic CoNLL-U: ID, FORM, and underscores for the rest
+                    line = f"{idx}\t{token}\t_\t_\t_\t_\t_\t_\t_\t_\n"
+                    f.write(line)
+                f.write("\n")   # blank line: CoNLL-U sentence separator
 
     def build_presegmented_input(self):
         """
@@ -551,13 +615,15 @@ class ChatProcessor:
         if self.args.parameters is not None and not use_tag_ud_tokens:
             self.tagger_input_file.write(f"<s_{uttID}> {self.tokenise(splitUtt)}\n")
             self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
-        elif self.args.api_model:
+        elif self.args.api_model and not self.fuse_contractions():
             # No tagger, or --tag_ud_tokens: defer tokenisation to UDPipe's own
             # tokenizer (UD-compliant), instead of pre-splitting with tokenise()'s
             # tagger-oriented rules. The per-word outRows grid for this utterance is
             # built later, from the returned CoNLL-U, by restamp_presegmented_output().
             self.record_utterance_for_parsing(splitUtt, utt.strip(), speaker, uttID, timeCode)
         else:
+            # Tokenise here: either no parser at all, or fuse_contractions() applies
+            # (French du/des/au/aux must stay fused - see that method).
             self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
 
     def generate_rows_from_tagger(self, splitUtt, raw_utt, speaker, uttID, timeCode):
@@ -798,26 +864,45 @@ class ChatProcessor:
                 _, itemPOS, itemLemmas, itemTagged = self.run_treetagger(taggerInput)
 
         if self.args.api_model:
+            # Two possible parser inputs; a file may need both, since fuse_contractions()
+            # is evaluated per session and a concatenated file can mix languages.
+            # Fixed-token input (input=conllu) covers: tagger-tokenised utterances, and
+            # utterances we tokenised ourselves because contractions must stay fused.
+            # Presegmented input covers utterances whose tokenisation was left to UDPipe.
+            parsed_parts = []
+
             if self.args.parameters and not use_tag_ud_tokens:
                 # Tagger active: run_treetagger() already built self.conllu_input_file
                 # (tagged2conllu()), pre-tokenised by the tagger. UDPipe respects those
                 # exact tokens (input=conllu, no tokenizer) and only re-tags/re-parses.
                 if self.conllu_input_file and os.path.exists(self.conllu_input_file):
-                    parsed_conllu_str = self.run_udpipe_api(self.conllu_input_file, self.args.api_model, chunk_size=self.args.chunk_parse)
+                    part = self.run_udpipe_api(self.conllu_input_file, self.args.api_model, chunk_size=self.args.chunk_parse)
+                    if part: parsed_parts.append(part)
             else:
-                # No tagger, or --tag_ud_tokens: submit untokenised, CHAT-cleaned
-                # utterance text and let UDPipe's own tokenizer produce genuinely
-                # UD-compliant tokens.
-                ordered_ids = self.build_presegmented_input()
-                if ordered_ids:
-                    raw_parsed = self.run_udpipe_api(self.presegmented_input_file, self.args.api_model, chunk_size=self.args.chunk_parse, presegmented=True)
-                    if raw_parsed:
-                        parsed_conllu_str = self.restamp_presegmented_output(raw_parsed, ordered_ids)
+                if self.outRows:
+                    # Tokenised here (fused contractions): submit those exact tokens,
+                    # so the tokenizer cannot split e.g. French du/des and cost us the
+                    # obj/obl:arg distinction. See fuse_contractions().
+                    self.tokens2conllu()
+                    if self.conllu_input_file and os.path.exists(self.conllu_input_file):
+                        part = self.run_udpipe_api(self.conllu_input_file, self.args.api_model, chunk_size=self.args.chunk_parse)
+                        if part: parsed_parts.append(part)
+
+                if self.pendingUtterances:
+                    # Tokenisation deferred: submit untokenised, CHAT-cleaned utterance
+                    # text and let UDPipe's own tokenizer produce UD-compliant tokens.
+                    ordered_ids = self.build_presegmented_input()
+                    if ordered_ids:
+                        raw_parsed = self.run_udpipe_api(self.presegmented_input_file, self.args.api_model, chunk_size=self.args.chunk_parse, presegmented=True)
+                        if raw_parsed:
+                            parsed_parts.append(self.restamp_presegmented_output(raw_parsed, ordered_ids))
 
                 if use_tag_ud_tokens and self.outRows:
-                    # Now that self.outRows holds the real UD tokens, tag them with
+                    # Now that self.outRows holds the parser's token set, tag it with
                     # TreeTagger for an additional pos/lemma (does not affect FORM).
                     tagUdPOS, tagUdLemmas = self.run_tagger_on_ud_tokens()
+
+            parsed_conllu_str = "".join(parsed_parts) if parsed_parts else None
 
         if not self.args.parameters and not self.args.api_model:
             final_csv_path = re.sub(r'\.cha(\.gz)?$', '', self.args.chat_file) + '.csv'
@@ -1199,6 +1284,12 @@ if __name__ == "__main__":
     parser.add_argument('--pos_utterance', type=str, help='Regex to match POS tags. The full utterance text will only be printed on matching rows.\nMatches the parser\'s universal POS (UPOS) when --api_model is used; see --use_tagger_pos.\nDefaults to --pos_output\'s value when not given explicitly.')
     parser.add_argument('--use_tagger_pos', action='store_true', help='Make --pos_output/--pos_utterance match the tagger\'s own (language/model-specific) POS tag instead of the parser\'s universal POS (UPOS). Has no effect without --parameters; has no effect on rows the tagger did not tag if --api_model is not set (only source of POS in that case).')
     parser.add_argument('--tag_ud_tokens', action='store_true', help='Requires both --parameters and --api_model. Reverses the default order: parses first with UDPipe\'s own UD-compliant tokenizer, then runs the tagger on those tokens for an ADDITIONAL pos/lemma (columns tagger_pos/tagger_lemma) rather than tagger-tokenising before parsing. \'pos\'/\'lemma\' stay UD-based (parser UPOS/lemma), as in plain --api_model-only mode. No effect if only one of --parameters/--api_model is given.')
+    parser.add_argument('--fuse_contractions', choices=['auto','yes','no'], default='auto', help="Keep preposition+determiner contractions (French du/des/au/aux) fused as one token by\n"
+                        "tokenising in childes.py, instead of letting UDPipe's tokenizer split them.\n"
+                        "Splitting them costs the obj/obl:arg distinction: in UD_French-GSD a split du/des has an\n"
+                        "'obj' head noun in 1.2%% of cases vs 41%% unsplit, so the parser returns obl:arg instead of obj.\n"
+                        "'auto' (default) applies this to French only; 'yes'/'no' force it for any language.\n"
+                        "Only affects runs without --parameters (with a tagger, tokens are fixed by the tagger anyway).")
     parser.add_argument('--rewrite', type=str, help='Path to a Grew rule file (.grs) to correct the parsed CoNLL-U output.')
     parser.add_argument('--utt_clean', action='store_true', help='Populate the utt_clean column.')
     parser.add_argument('--utt_tagged', action='store_true', help='Populate the utt_tagged column.')

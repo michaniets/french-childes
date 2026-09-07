@@ -1,8 +1,7 @@
 #!/bin/bash
 #
 # childes-pipeline.sh
-# Version 2.1
-# Dec 2025
+# Italian Version Sep 2026
 #
 # pipeline to process a CHAT file. It uses childes.py verion>=4.0 to handle
 # conversion, tagging, parsing, and HTML generation in a single step.
@@ -14,16 +13,14 @@
 # --- Configuration ---
 # Path to your scripts and models
 # UDPipe model list: https://lindat.mff.cuni.cz/repository/items/41f05304-629f-4313-b9cf-9eeb0a2ca7c6
-PYCMD="python3.11"  # or python3, adjust to your Python command
+PYCMD="uv run"  # or python3, adjust to your Python command
 DATAPATH="."
 SERVER_IP="julienas.philosophie.uni-stuttgart.de"  # replace with your server IP address or domain name
-PYPATH="$HOME/git/french-childes"  # adjust to your path
+PYPATH="$HOME/git/dygram/french-childes"  # adjust to your path
 TAGGER_PAR="${DATAPATH}/italian.par"   # TreeTagger parameter file
 API_MODEL="italian-isdt-ud-2.5"  # UDPipe model. For German: german-gsd-ud
+GRS_FILE="${PYPATH}/other-languages/italian/italian-isdt-ud.grs"  # GREW rules file for parsing corrections (Option --rewrite))
 HTML_DIR="ch_it"  # subfolder for parsed HTML files (don't precede with './')
-GRS_FILE="italian-isdt-ud.grs"          # GREW rules file for parsing corrections (option --rewrite)
-VERB_LEXICON="italian-verbs.grewlex.tsv"  # verb frames, licenses the enclitic split (--verb_lexicon)
-ENCLITIC_STOPLIST="italian-noclitic.txt"  # forms never to be split (--enclitic_stoplist)
 SERVER_URL="https://${SERVER_IP}/${HTML_DIR}"  # julienas - keep string short to avoid large output files
 # for Step 2: dql.py request file for linguistic codings
 DQL_REQUESTS="childes-italian.query"  
@@ -102,28 +99,24 @@ if [ "$RUN_STEP_1" = true ]; then
     echo "--- Step 1: Running childes.py for conversion, tagging, and parsing ---"
     # Version>=4.0 of childes.py replaces the old multi-step process.
     # converts CHAT to table and calls the UDPipe API
-    # optionally: runs TreeTagger, generates HTML, generates CoNLL-U
+    # optionally: runs TreeTagger, generates HTML
+    # optionally exports a CoNLL-U file (--write_conllu) applies GREW rules for corrections (--rewrite)
+
     # Check if Grew rewrite rules (GRS file) exists and set flag
     REWRITE_FLAG=""
     if [ -f "$GRS_FILE" ]; then
         REWRITE_FLAG="--rewrite ${GRS_FILE}"
-        echo "  (Grew rewriting enabled using ${GRS_FILE})"
+        echo "    (Grew rewriting enabled using ${GRS_FILE})"
     else
-        echo "  WARNING: GRS file '${GRS_FILE}' not found. Skipping rewrite."
+        echo "    WARNING: GRS file '${GRS_FILE}' not found. Skipping rewrite."
     fi
-
-    # Italian enclitics (mettilo -> metti+lo, glielo -> glie+lo) are split by
-    # childes.py, not by UDPipe's tokenizer, whose coverage of them is partial and
-    # correlated with construction type. Both files below are optional: without them
-    # the built-in seed lexicon is used, at a lower recall.
-    ENCLITIC_FLAGS=""
-    [ -f "$VERB_LEXICON" ] && ENCLITIC_FLAGS="--verb_lexicon ${VERB_LEXICON}"
-    [ -f "$ENCLITIC_STOPLIST" ] && ENCLITIC_FLAGS="${ENCLITIC_FLAGS} --enclitic_stoplist ${ENCLITIC_STOPLIST}"
 
     $PYCMD "${PYPATH}/childes.py" "${INPUT_FILE}" \
         --pos_utterance '^(AUX|VER|VV)' --pos_output '(AUX|VER|VV)' \
-        --write_conllu ${REWRITE_FLAG} ${ENCLITIC_FLAGS} --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
-        --api_model "${API_MODEL}" --parameters "${TAGGER_PAR}"   # (un)comment --parameters to (not) use TreeTagger
+        --write_conllu --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
+        --fuse_contractions auto\
+        --verb_lexicon ${PYPATH}/other-languages/italian/italian-verbs.grewlex.tsv \
+        --api_model "${API_MODEL}" --parameters "${TAGGER_PAR}"  --tag_ud_tokens  # (un)comment --parameters to (not) use TreeTagger
 
     echo ""
     echo "--- Step 1 finished successfully ---"

@@ -10,8 +10,8 @@
 # ///
 
 __author__ = "Achim Stein"
-__version__ = "5.8"
-__status__ = "6.9.26"
+__version__ = "5.9"
+__status__ = "7.9.26"
 __license__ = "GPL"
 
 import sys
@@ -104,6 +104,156 @@ def process_tagged_data(tagged):
         processed_lines.append('\t'.join(columns))
     return '\n'.join(processed_lines)
     
+#-------------------------------------------------------
+# Italian enclitics (verb + clitic, clitic + clitic)
+#-------------------------------------------------------
+# UD treats a verb+clitic form as a multiword token with one syntactic word per
+# clitic (sottoporgli -> sottopor + gli, glielo -> glie + lo). Left fused, the
+# clitic has no node and therefore no relation, so every clitic query fails on
+# enclisis - a loss that is not random, because enclisis is licensed only by
+# infinitive, gerund, imperative and 'ecco', i.e. exactly the contexts an
+# acquisition study is interested in. The fused form is also out of vocabulary
+# for tagger and parser, so the verb's own lemma/POS are lost too (dammelo ->
+# lemma 'Dammelare', dagliela -> 'dagliere', checked against the UDPipe API).
+#
+# Unlike French du/des, the decision cannot be deferred to the parser: a fused
+# form carries no evidence, so its analysis comes back arbitrary (lascialo,
+# aiutami, mettici -> NOUN/ADJ; girati -> VerbForm=Part in both the imperative
+# and the participle context). The split must therefore be decided here, and the
+# residual ambiguity recorded rather than silently resolved. Hence two tiers:
+#
+#   Tier A  the string alone identifies a verb+clitic: 'ecco', the geminated
+#           irregular imperatives (dammelo, fammi, vattene), and any host whose
+#           residue is a known infinitive or gerund. Always split.
+#   Tier B  regular imperative + clitic, homographic with participles, nouns and
+#           preposition+article (girati/andati, portale, dagli). Split only when
+#           the host is a known imperative form and, for participle-shaped forms,
+#           no auxiliary precedes. Marked Enclitic=B in MISC; candidates that
+#           fail the test stay fused and are marked Enclitic=Cand, so the
+#           remaining recall loss is measurable rather than invisible.
+
+# Clitic clusters, mapped to their UD sub-tokens (glielo -> glie + lo).
+IT_CLITIC_CLUSTERS = {
+    'melo': ('me', 'lo'), 'mela': ('me', 'la'), 'meli': ('me', 'li'),
+    'mele': ('me', 'le'), 'mene': ('me', 'ne'),
+    'telo': ('te', 'lo'), 'tela': ('te', 'la'), 'teli': ('te', 'li'),
+    'tele': ('te', 'le'), 'tene': ('te', 'ne'),
+    'celo': ('ce', 'lo'), 'cela': ('ce', 'la'), 'celi': ('ce', 'li'),
+    'cele': ('ce', 'le'), 'cene': ('ce', 'ne'),
+    'velo': ('ve', 'lo'), 'vela': ('ve', 'la'), 'veli': ('ve', 'li'),
+    'vele': ('ve', 'le'), 'vene': ('ve', 'ne'),
+    'selo': ('se', 'lo'), 'sela': ('se', 'la'), 'seli': ('se', 'li'),
+    'sele': ('se', 'le'), 'sene': ('se', 'ne'),
+    'glielo': ('glie', 'lo'), 'gliela': ('glie', 'la'), 'glieli': ('glie', 'li'),
+    'gliele': ('glie', 'le'), 'gliene': ('glie', 'ne'),
+}
+IT_CLITIC_SINGLES = ('gli', 'mi', 'ti', 'ci', 'vi', 'si', 'lo', 'la', 'li', 'le', 'ne')
+
+# Hosts truncated by gemination before a SINGLE clitic (gold ISDT/PoSTWITA: dammi ->
+# dam + mi, dicci -> dic + ci). Before a cluster the doubled consonant goes to the
+# clitic instead (vattene -> va + te + ne), which analyse_enclitic() handles separately.
+IT_GEMINATE_HOSTS = {'dam', 'dim', 'fam', 'dac', 'dic', 'fac', 'vac', 'stac'}
+
+# The five monosyllabic irregular imperatives (dare/dire/fare/andare/stare) geminate
+# the clitic's consonant before a SINGLE clitic - dammi not dami, dicci not dici -
+# so the bare stem must never license a Tier B split against a plain single clitic;
+# only the geminated form in IT_GEMINATE_HOSTS above does. 'gli' is the one clitic
+# that never geminates (dagli/digli are the correct gold forms, not *daggli), so it
+# is exempt from this exclusion - see the suffix != 'gli' check in analyse_enclitic().
+#
+# Each bare stem is also a common ordinary word (preposition 'di'/'da', 3sg
+# indicative 'fa'/'va'/'sta'), so without this exclusion, analyse_enclitic() finds a
+# spurious host+clitic reading for many real words. Checked exhaustively (5 stems x
+# 11 clitics = 55 forms) against the LibreOffice it_IT hunspell dictionary with
+# affix expansion; of the 50 non-'gli' combinations, these 20 are real Italian words
+# that would otherwise be mis-split: dici, divi, dati, dine, diti, davi, fasi, fati,
+# favi, vasi, vati, vala, vale, vali, valo, vane, stami, stasi, stati, stavi.
+# (dagli/digli/fagli/vagli/stagli are additionally real words, but stay split: see
+# the 'gli' exemption above. 'stati'/'state' were already in IT_ENCLITIC_STOPLIST for
+# the separate participle-homograph reason and remain there redundantly.)
+IT_MONOSYLLABIC_GEMINATING_IMP = {'da', 'di', 'fa', 'va', 'sta'}
+
+# Seed verb lexicon. Deliberately small and child-language oriented; it exists to
+# license the split, not to describe the language, and is meant to be replaced by
+# a list extracted from the UD Italian treebanks (--verb_lexicon).
+IT_VERBS = """
+accendere aggiustare aiutare alzare andare aprire arrabbiare arrivare asciugare
+ascoltare aspettare attaccare avere baciare bagnare ballare bere buttare cacciare
+cadere cambiare camminare cantare capire cercare chiamare chiedere chiudere
+colorare cominciare comprare contare coprire correre costruire credere dare dire
+disegnare diventare dividere dormire entrare essere fare fermare finire giocare
+girare gonfiare guardare infilare lanciare lasciare lavare legare leggere mangiare
+mettere mostrare muovere nascondere parlare passare pensare perdere pescare
+pettinare piacere piangere piegare portare posare potere prendere preparare
+provare pulire raccontare restare ricordare ridere riempire rimanere rispondere
+rompere rubare salire salutare saltare sapere sbagliare scappare scegliere
+scendere sciogliere scrivere sedere seguire sentire soffiare sognare sorridere
+spegnere spingere sporcare spostare staccare stare stringere studiare svegliare
+tagliare telefonare tenere tirare toccare togliere tornare trovare tuffare usare
+uscire vedere venire versare vestire viaggiare vincere volare volere
+""".split()
+
+# Irregular imperative/2sg forms that the regular pattern below does not generate.
+IT_IRREGULAR_IMP = {
+    'fare': ('fa', 'fai', 'fate', 'facciamo'), 'dare': ('da', 'dai', 'date', 'diamo'),
+    'dire': ('di', 'dite', 'diciamo'), 'andare': ('va', 'vai', 'andate', 'andiamo'),
+    'stare': ('sta', 'stai', 'state', 'stiamo'), 'venire': ('vieni', 'venite'),
+    'tenere': ('tieni', 'tenete'), 'sedere': ('siedi', 'sedete'), 'uscire': ('esci', 'uscite'),
+    'togliere': ('togli', 'togliete'), 'scegliere': ('scegli', 'scegliete'),
+    'spegnere': ('spegni', 'spegnete'), 'rimanere': ('rimani', 'rimanete'),
+    'sapere': ('sappi',), 'essere': ('sii', 'siate'), 'avere': ('abbi', 'abbiate'),
+    'bere': ('bevi', 'bevete'), 'salire': ('sali', 'salite'),
+}
+# Gerunds that are not stem + ando/endo.
+IT_IRREGULAR_GER = {'fare': 'facendo', 'dire': 'dicendo', 'bere': 'bevendo'}
+
+# Forms that survive the lexicon test but are not verb+clitic. Kept short on
+# purpose: the lexicon check below rejects almost all homographs by itself
+# (natale, palline, macchine, chiavi, animali all fail it).
+IT_ENCLITIC_STOPLIST = {'portale', 'portali', 'cantale', 'finale', 'finali', 'natale',
+                        # participles and nouns that are also possible imperative+clitic
+                        # forms; overwhelmingly the former, so never split them
+                        'fatti', 'fatto', 'fatte', 'detti', 'dette', 'stati', 'state'}
+
+# Auxiliaries: a preceding one makes a participle reading of a form like
+# 'girati'/'arrivati' far more likely than an imperative one.
+IT_AUXILIARIES = {
+    'sono', 'sei', 'è', 'e', 'siamo', 'siete', 'era', 'eri', 'ero', 'erano', 'eravamo',
+    'eravate', 'sarà', 'saranno', 'sarei', 'stato', 'stata', 'stati', 'state',
+    'ho', 'hai', 'ha', 'abbiamo', 'avete', 'hanno', 'avevo', 'avevi', 'aveva',
+    'avevamo', 'avevano', 'avrà', 'avranno', 'avrei',
+}
+
+
+def _it_verb_forms(lemmas):
+    """
+    Builds the sets of host forms the splitter accepts, from a list of infinitives:
+    truncated infinitives (mangiare -> mangiar), gerunds (mangiando), and the
+    imperative/2sg forms that can carry an enclitic (guarda, guardate, guardiamo).
+    Returns (infinitives, gerunds, imperatives); 'infinitives' maps the truncated
+    form back to its lemma, which the tagger repair below needs.
+    """
+    inf, ger, imp = {}, set(), set()
+    for lemma in lemmas:
+        if len(lemma) < 4:
+            continue
+        # gold truncation: mangiare -> mangiar, but sottoporre -> sottopor (not -porr)
+        inf[lemma[:-2] if lemma.endswith('rre') else lemma[:-1]] = lemma
+        stem, ending = lemma[:-3], lemma[-3:]
+        if lemma.endswith('orre'):                # imporre -> imponi, imponendo
+            imp.add(lemma[:-3] + 'ni')
+            ger.add(lemma[:-3] + 'nendo')
+        if ending == 'are':
+            ger.add(stem + 'ando')
+            imp.update((stem + 'a', stem + 'ate', stem + 'iamo'))
+        elif ending in ('ere', 'ire'):
+            ger.add(stem + 'endo')
+            imp.update((stem + 'i', stem + ending[0] + 'te', stem + 'iamo'))
+        if lemma in IT_IRREGULAR_GER:
+            ger.add(IT_IRREGULAR_GER[lemma])
+        imp.update(IT_IRREGULAR_IMP.get(lemma, ()))
+    return inf, ger, imp
+
 #-------------------------------------------------------
 # HTML export class for UD parsed data
 #-------------------------------------------------------
@@ -288,6 +438,9 @@ class ChatProcessor:
         self.pendingUtterances = {}
         self.tagger_input_file = None
         self.tagged_temp_file = None
+        self.encliticInfo = {}   # uttID -> {'groups': [...], 'misc': {...}}, see split_italian_enclitics()
+        self._it_hosts = None
+        self._it_stoplist = None
         self.conllu_input_file = None
         self.presegmented_input_file = None
         self.html_exporter = None
@@ -319,6 +472,199 @@ class ChatProcessor:
         if self.args.fuse_contractions == 'no': return False
         return bool(getattr(self, 'language', '') and re.search(r'fra|french', self.language))
 
+    def split_enclitics(self):
+        """
+        Whether Italian verb+clitic forms are split into UD syntactic words here,
+        and how far. Returns 'none', 'A' (unambiguous hosts only) or 'AB'.
+
+        Unlike the French du/des case there is nothing to defer to the parser: a
+        fused enclitic form is out of vocabulary, so its analysis comes back
+        arbitrary and cannot be used to decide the split afterwards. See the
+        module-level comment above IT_CLITIC_CLUSTERS.
+        """
+        mode = self.args.split_enclitics
+        if mode == 'no': return 'none'
+        if mode == 'safe': return 'A'
+        if mode == 'yes': return 'AB'
+        return 'AB' if re.search(r'ita|italian', getattr(self, 'language', '') or '') else 'none'
+
+    def italian_hosts(self):
+        """
+        Host forms the splitter accepts, built once from IT_VERBS plus any lemmas in
+        --verb_lexicon (first tab-separated column, '%' comments and a 'lemma'
+        header ignored - the format of french-verbs.grewlex.tsv).
+        """
+        if self._it_hosts is None:
+            lemmas = list(IT_VERBS)
+            path = getattr(self.args, 'verb_lexicon', None)
+            if path and os.path.exists(path):
+                with open(path, encoding='utf8') as f:
+                    for line in f:
+                        lemma = line.split('\t')[0].strip()
+                        if lemma and lemma != 'lemma' and not lemma.startswith('%'):
+                            lemmas.append(lemma)
+                sys.stderr.write(f"- Enclitic splitting: {len(lemmas)} verb lemmas ({path}).\n")
+            self._it_hosts = _it_verb_forms(lemmas)
+        return self._it_hosts
+
+    def enclitic_stoplist(self):
+        """
+        Forms that must never be split, however well they parse as host + clitic.
+        A verb lexicon raises recall but also creates collisions: 'dici' is a form
+        of dire, yet also parses as the imperative di + ci, and 'animali'/'porti'
+        as anima+li / por+ti once animare and porre are in the lexicon. The list in
+        --enclitic_stoplist vetoes them; the one shipped with this distribution
+        holds every form ending in a clitic string that the UD Italian treebanks
+        annotate as a simple token, i.e. as evidence that it is not enclitic.
+        """
+        if self._it_stoplist is None:
+            self._it_stoplist = set(IT_ENCLITIC_STOPLIST)
+            path = getattr(self.args, 'enclitic_stoplist', None)
+            if path and os.path.exists(path):
+                with open(path, encoding='utf8') as f:
+                    self._it_stoplist.update(w.strip().lower() for w in f
+                                             if w.strip() and not w.startswith('%'))
+                sys.stderr.write(f"- Enclitic splitting: {len(self._it_stoplist)} forms vetoed ({path}).\n")
+        return self._it_stoplist
+
+    def analyse_enclitic(self, token):
+        """
+        Analyses one token as host + clitic(s), or returns None.
+
+        Among the competing analyses the one with the LONGEST licensed host wins.
+        That is what separates guardatelo = guardate + lo from the shorter and
+        wrong guarda + te + lo, and fagli = fa + gli from fag + li (both gold).
+        A cluster whose first element repeats the host's final consonant absorbs
+        the gemination (vattene -> va + te + ne, dammelo -> da + me + lo), while
+        before a single clitic the host keeps it (dammi -> dam + mi) - both
+        conventions taken from UD_Italian-ISDT/PoSTWITA rather than assumed. The
+        one exception is 'gli', which never geminates (dagli/digli are gold, not
+        *daggli) - see IT_MONOSYLLABIC_GEMINATING_IMP for why the exception matters:
+        without it, the bare stem also licenses splits like dici/stavi/vasi, which
+        are ordinary real words, not host+clitic.
+
+        Returns (subtokens, tier): 'A' where the string alone identifies a
+        verb+clitic (ecco, geminated imperative stem, infinitive, gerund, or any
+        clitic cluster), 'B' for a regular imperative host, which is homographic
+        with participles, nouns and preposition+article.
+        """
+        inf, ger, imp = self.italian_hosts()
+        low = token.lower()
+        # a bare cluster: only the glie- series is unambiguous as a free token
+        # (melo, tela, vela are ordinary words), gold glielo -> glie + lo
+        if low in IT_CLITIC_CLUSTERS and low.startswith('glie'):
+            first, second = IT_CLITIC_CLUSTERS[low]
+            return ([token[:len(first)], second], 'A')
+        if len(low) < 4 or low in self.enclitic_stoplist():
+            return None
+
+        def licensed(residue):
+            if residue == 'ecco' or residue in inf or residue in ger:
+                return 'A'
+            return 'B' if residue in imp else None
+
+        best = None      # (host, clitics, tier), longest host wins
+        for suffix in list(IT_CLITIC_CLUSTERS) + list(IT_CLITIC_SINGLES):
+            if not low.endswith(suffix):
+                continue
+            residue = low[:-len(suffix)]
+            if len(residue) < 2:
+                continue
+            cluster = IT_CLITIC_CLUSTERS.get(suffix)
+            if cluster:
+                # a cluster licenses even an imperative host, so tier A throughout;
+                # absorption is tried first, since before a cluster the doubled
+                # consonant belongs to the clitic (vattene -> va + te + ne, gold)
+                if residue[-1] == cluster[0][0] and licensed(residue[:-1]):
+                    residue, tier = residue[:-1], 'A'
+                else:
+                    tier = 'A' if licensed(residue) or residue in IT_GEMINATE_HOSTS else None
+                clitics = list(cluster)
+            else:
+                if residue in IT_GEMINATE_HOSTS:
+                    tier = 'A'
+                elif suffix != 'gli' and residue in IT_MONOSYLLABIC_GEMINATING_IMP:
+                    tier = None   # bare stem + single clitic (not gli): needs gemination, see IT_MONOSYLLABIC_GEMINATING_IMP
+                else:
+                    tier = licensed(residue)
+                clitics = [suffix]
+            if tier is None:
+                continue
+            if best is None or len(residue) > len(best[0]):
+                best = (residue, clitics, tier)
+        if best is None:
+            return None
+        residue, clitics, tier = best
+        return ([token[:len(residue)]] + clitics, tier)   # keep the host's own capitalisation
+
+    def split_italian_enclitics(self, s, mode):
+        """
+        Splits enclitics in an already tokenised string. Returns the new token
+        string, the multiword-token groups (start, end, original form, tier) and a
+        {token index: MISC} map recording what was done, so that both are
+        recoverable when the CoNLL-U for the parser is written.
+
+        Tier B is applied only when the fused form is not participle-shaped
+        (girati/arrivati) or when no auxiliary precedes it in the utterance, which
+        is what distinguishes 'adesso girati' from 'sono arrivati'. A Tier B
+        candidate that fails the test is left fused and marked Enclitic=Cand, so
+        the remaining recall loss can be counted instead of disappearing silently.
+        """
+        tokens = s.split(' ')
+        out, groups, misc = [], [], {}
+        for i, token in enumerate(tokens):
+            analysis = self.analyse_enclitic(token) if token else None
+            if analysis:
+                parts, tier = analysis
+                low = token.lower()
+                # girati/andati: imperative+ti or participle plural. Only the second
+                # takes an auxiliary, so a preceding one blocks the split.
+                ambiguous_with_participle = re.search(r'[aiu]t[ie]$', low) is not None
+                # capivi/soffiavi: imperative+vi or 2sg imperfect, which is far more
+                # frequent. The 2pl imperative (sedetevi) keeps its -ate/-ete/-ite.
+                ambiguous_with_imperfect = (parts[-1] == 'vi' and len(parts) == 2
+                                            and re.search(r'[aei]vi$', low) is not None
+                                            and not re.search(r'(at|et|it)e$', parts[0].lower()))
+                split_it = tier == 'A' or (mode == 'AB' and not ambiguous_with_imperfect and (
+                    not ambiguous_with_participle
+                    or not any(t.lower() in IT_AUXILIARIES for t in tokens[:i])))
+                if split_it:
+                    start = len(out) + 1
+                    groups.append((start, start + len(parts) - 1, token, tier))
+                    misc[start] = 'Enclitic=' + tier
+                    out.extend(parts)
+                    continue
+                misc[len(out) + 1] = 'Enclitic=Cand'
+            out.append(token)
+        return ' '.join(out), groups, misc
+
+    def fix_italian_split_tags(self, tagged):
+        """
+        Repairs the tagger's output for the sub-tokens the splitter created: a
+        truncated infinitive (prender, far) or a geminated imperative stem (dam,
+        fam) is not a word, so TreeTagger returns <unknown> for it. The parser's
+        own UPOS/lemma are unaffected; this only keeps the tagger columns usable
+        (and with them --pos_output/--pos_utterance, which select on them).
+        """
+        inf, _ger, _imp = self.italian_hosts()
+        stems = {'dam': 'dare', 'dac': 'dare', 'dim': 'dire', 'dic': 'dire',
+                 'fam': 'fare', 'fac': 'fare', 'vac': 'andare', 'vat': 'andare',
+                 'stac': 'stare', 'stat': 'stare'}
+        lines = []
+        for line in tagged.split('\n'):
+            cols = line.split('\t')
+            if len(cols) == 3 and (cols[2] == '<unknown>' or cols[2] == ''):
+                form = cols[0].lower()
+                if form in inf:
+                    cols[1], cols[2] = 'VER:infi', inf[form]
+                elif form in stems:
+                    cols[1], cols[2] = 'VER:impe', stems[form]
+                elif form == 'glie':
+                    cols[1], cols[2] = 'PRO:pers', 'gli'
+                line = '\t'.join(cols)
+            lines.append(line)
+        return '\n'.join(lines)
+
     def strip_transcription_noise(self, s):
         """
         Removes language/corpus-specific transcription noise (timed pauses,
@@ -342,7 +688,7 @@ class ChatProcessor:
             s = re.sub(r'\s+', ' ', s).strip()
         return s
 
-    def tokenise(self, s, split_contractions=False):
+    def tokenise(self, s, split_contractions=False, return_mwt=False):
         """
         Tokenises a string, with language-specific rules.
         Normally, in CHAT format punctuation should be separated by spaces already. (BeginChar/EndChar)
@@ -355,7 +701,13 @@ class ChatProcessor:
         and the parser reads the noun as a direct object ('il va au parc' -> parc/obj
         instead of obl:arg). Not applied for tagger input, where the token grid must
         stay aligned with TreeTagger's own tokenisation.
+
+        return_mwt: also return the multiword-token groups and the MISC map produced
+        by Italian enclitic splitting (see split_italian_enclitics()). Unlike the
+        French contractions this applies on both paths, tagger and parser alike,
+        because with a tagger the token grid it produces IS what the parser receives.
         """
+        mwt, misc = [], {}
         if hasattr(self, 'language') and re.search(r'fra|french', self.language):
             if split_contractions:
                 s = re.sub(r'\bAux\b', 'À les', s)
@@ -390,7 +742,13 @@ class ChatProcessor:
             # Default simple tokenization if no language is matched
             s = re.sub(r'([,;?.!])(?=\s|$)', r' \1', s)
             s = re.sub(r'\s+', ' ', s)
-        return s
+        # after tokenisation proper, so that the splitter sees separated punctuation.
+        # Outside the language branches above, so that --split_enclitics yes still
+        # works on a corpus whose @Languages header does not identify it as Italian.
+        mode = self.split_enclitics()
+        if mode != 'none' and s.strip():
+            s, mwt, misc = self.split_italian_enclitics(s.strip(), mode)
+        return (s, mwt, misc) if return_mwt else s
 
     def tokens2conllu(self):
         """Creates a basic CoNLL-U file from tokens when TreeTagger is not used."""
@@ -427,9 +785,18 @@ class ChatProcessor:
                     f.write(f"# text = {data['text']}\n")
                 if data['chat']:
                     f.write(f"# chat = {data['chat']}\n")
+                # Italian enclitics: the sub-tokens are ours, so the multiword-token
+                # line that groups them is ours to write too. UDPipe passes range lines
+                # and MISC through unchanged with input=conllu (verified against the API).
+                info = self.encliticInfo.get(utt_id, {})
+                starts = {g[0]: g for g in info.get('groups', [])}
+                misc = info.get('misc', {})
                 for idx, token in enumerate(data['tokens'], 1):
+                    if idx in starts:
+                        start, end, form, _tier = starts[idx]
+                        f.write(f"{start}-{end}\t{form}\t_\t_\t_\t_\t_\t_\t_\t_\n")
                     # Basic CoNLL-U: ID, FORM, and underscores for the rest
-                    line = f"{idx}\t{token}\t_\t_\t_\t_\t_\t_\t_\t_\n"
+                    line = f"{idx}\t{token}\t_\t_\t_\t_\t_\t_\t_\t{misc.get(idx, '_')}\n"
                     f.write(line)
                 f.write("\n")   # blank line: CoNLL-U sentence separator
 
@@ -631,22 +998,31 @@ class ChatProcessor:
         if self.args.parameters is not None and not use_tag_ud_tokens:
             self.tagger_input_file.write(f"<s_{uttID}> {self.tokenise(splitUtt)}\n")
             self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
-        elif self.args.api_model and not self.fuse_contractions():
+        elif self.args.api_model and not self.fuse_contractions() and self.split_enclitics() == 'none':
             # No tagger, or --tag_ud_tokens: defer tokenisation to UDPipe's own
             # tokenizer (UD-compliant), instead of pre-splitting with tokenise()'s
             # tagger-oriented rules. The per-word outRows grid for this utterance is
             # built later, from the returned CoNLL-U, by restamp_presegmented_output().
             self.record_utterance_for_parsing(splitUtt, utt.strip(), speaker, uttID, timeCode)
         else:
-            # Tokenise here: either no parser at all, or fuse_contractions() applies.
-            # Contractions are pre-split only when this feeds the parser: du/des stay
-            # fused (ambiguous), au/aux are split (never partitive) - see tokenise().
+            # Tokenise here: no parser at all, or fuse_contractions()/split_enclitics()
+            # applies. Contractions are pre-split only when this feeds the parser:
+            # du/des stay fused (ambiguous), au/aux are split (never partitive) - see
+            # tokenise(). Italian enclitics are split on either path, because UDPipe's
+            # own MWT splitter covers only about a third of them and its coverage is
+            # correlated with construction type (infinitives yes, imperatives largely
+            # not), which would bias the very distinction being counted.
             self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode,
                                            split_contractions=bool(self.args.api_model))
 
     def generate_rows_from_tagger(self, splitUtt, raw_utt, speaker, uttID, timeCode, split_contractions=False):
         clean_val = splitUtt if self.args.utt_clean else ''
-        words = self.tokenise(splitUtt, split_contractions=split_contractions).split(' ')
+        tokenised, mwt, misc = self.tokenise(splitUtt, split_contractions=split_contractions, return_mwt=True)
+        words = tokenised.split(' ')
+        if mwt or misc:
+            # keyed by utterance, so tagged2conllu()/tokens2conllu() can restore the
+            # multiword-token lines the split implies when they write the parser input
+            self.encliticInfo[uttID] = {'groups': mwt, 'misc': misc}
         
         age, age_days, child_other, child_project_id, child_name = self.get_speaker_age(speaker)
 
@@ -1107,6 +1483,8 @@ class ChatProcessor:
         with open(self.tagged_temp_file.name, 'r') as f_in:
             tagged = subprocess.check_output([tagger_bin, param_file, '-token', '-lemma', '-sgml'], stdin=f_in).decode('utf8')
         tagged = process_tagged_data(tagged)
+        if self.split_enclitics() != 'none':
+            tagged = self.fix_italian_split_tags(tagged)
         if build_conllu_input and self.args.api_model:
             with tempfile.NamedTemporaryFile(mode='w', encoding='utf8', delete=False, suffix=".conllu.in") as temp_f:
                 self.conllu_input_file = temp_f.name
@@ -1178,6 +1556,11 @@ class ChatProcessor:
                     f.write(f"# text = {meta['text']}\n")
                 if meta.get('chat'):
                     f.write(f"# chat = {meta['chat']}\n")
+                # Italian enclitics: see tokens2conllu() for why the multiword-token
+                # lines are written here rather than left to UDPipe's tokenizer.
+                info = self.encliticInfo.get(sent_id, {})
+                starts = {g[0]: g for g in info.get('groups', [])}
+                enclitic_misc = info.get('misc', {})
                 tokens = [line.split('\t') for line in body.split('\n') if line]
                 for idx, token_parts in enumerate(tokens):
                     if len(token_parts) != 3: continue
@@ -1185,7 +1568,10 @@ class ChatProcessor:
                     # for robustness, replace empty or <unknown> lemmas/pos with '_'
                     if tt_lemma == '<unknown>' or tt_lemma == '': tt_lemma = '_'
                     if tt_pos == '': tt_pos = '_'
-                    line = f"{idx+1}\t{word}\t{tt_lemma}\t_\t{tt_pos}\t_\t_\t_\t_\t_\n"
+                    if idx + 1 in starts:
+                        start, end, form, _tier = starts[idx + 1]
+                        f.write(f"{start}-{end}\t{form}\t_\t_\t_\t_\t_\t_\t_\t_\n")
+                    line = f"{idx+1}\t{word}\t{tt_lemma}\t_\t{tt_pos}\t_\t_\t_\t_\t{enclitic_misc.get(idx+1, '_')}\n"
                     f.write(line)
                 f.write("\n")
 
@@ -1308,6 +1694,20 @@ if __name__ == "__main__":
                         "'obj' head noun in 1.2%% of cases vs 41%% unsplit, so the parser returns obl:arg instead of obj.\n"
                         "'auto' (default) applies this to French only; 'yes'/'no' force it for any language.\n"
                         "Only affects runs without --parameters (with a tagger, tokens are fixed by the tagger anyway).")
+    parser.add_argument('--split_enclitics', choices=['auto','safe','yes','no'], default='auto', help=
+                        "Split Italian verb+clitic forms into UD syntactic words (mettilo -> metti+lo,\n"
+                        "glielo -> glie+lo) and write the multiword-token line for them.\n"
+                        "Left fused, the clitic has no node and therefore no relation, so every clitic\n"
+                        "query fails on enclisis; the verb's own lemma is lost as well (dammelo ->\n"
+                        "'Dammelare'). The decision cannot be deferred to the parser as it is for French\n"
+                        "du/des, because a fused enclitic form is out of vocabulary.\n"
+                        "'auto' (default) applies tiers A and B to Italian only; 'safe' restricts this to\n"
+                        "tier A (hosts the string alone identifies: ecco, dammelo, prenderlo), leaving the\n"
+                        "ambiguous tier B (mettilo, girati) fused but marked Enclitic=Cand in MISC;\n"
+                        "'yes' applies the Italian rules whatever the detected language (for corpora whose\n"
+                        "@Languages header does not identify them), 'no' disables them.")
+    parser.add_argument('--enclitic_stoplist', type=str, help='Path to a list of forms (one per line) that must never be split as Italian\nverb+clitic, however well they parse as one. See --split_enclitics.')
+    parser.add_argument('--verb_lexicon', type=str, help='Path to a verb lexicon (TSV, lemma in the first column) extending the built-in\nlist used to license Italian enclitic splitting. See --split_enclitics.')
     parser.add_argument('--rewrite', type=str, help='Path to a Grew rule file (.grs) to correct the parsed CoNLL-U output.')
     parser.add_argument('--utt_clean', action='store_true', help='Populate the utt_clean column.')
     parser.add_argument('--utt_tagged', action='store_true', help='Populate the utt_tagged column.')

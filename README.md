@@ -1,7 +1,7 @@
 This repository was previously hosted at [https://github.com/french-childes](https://github.com/french-childes). The pre-transfer release
 (version 3.1) is archived at https://doi.org/10.5281/zenodo.22112353.
 
-From realease version 3.1 (childes.py 5.6) onward, this repository's code was developed with AI assistance: Claude (Anthropic), Gemini (Google), and local coding models. AI-assisted contributions were reviewed by the author(s) to the extent of their technical competence; this review does not guarantee the absence of undetected errors.
+_From realease version 3.2 (childes.py 5.6) onward, this repository's code was developed with AI assistance: Claude (Anthropic), Gemini (Google), and local coding models. AI-assisted contributions were reviewed by the author(s) to the extent of their technical competence; this review does not guarantee the absence of undetected errors._
 
 # Processing French CHILDES data
 

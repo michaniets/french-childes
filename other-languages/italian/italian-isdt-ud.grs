@@ -20,6 +20,17 @@
 % Enclitic=B in MISC, so the group is identifiable here: the clitics are the
 % nodes that directly follow that mark, at most two of them.
 %
+% Every clitic pattern below also requires textform="_" on C/C1/C2: linear
+% adjacency (H < C, C1 < C2) alone is not enough to tell a genuine clitic from
+% an ordinary word that happens to look like one right after a single-clitic
+% host (dammi la casetta: "la" is casetta's article, not dammi's second
+% clitic, but is adjacent and clitic-shaped). textform="_" is reliably true
+% only for a non-initial member of an actual multiword split - childes.py's
+% own clitic sub-tokens, and no ordinary standalone word - so it is what
+% textform means here, not an incidental feature to leave out. Confirmed
+% against grewpy: an unrelated adjacent "la" was being reassigned as a second
+% clitic before this constraint was added.
+%
 % Why the split does not happen here, unlike French du/des: a fused enclitic form
 % is out of vocabulary, so the parser returns an arbitrary analysis for it
 % (lascialo, aiutami, mettici come back NOUN/ADJ; girati gets VerbForm=Part in
@@ -63,7 +74,7 @@ package clitici {
   rule clitic_features {
     pattern {
       H [Enclitic]; H < C;
-      C [form=re"^([Mm]e|[Tt]e|[Cc]e|[Vv]e|[Ss]e|[Gg]lie|[Mm]i|[Tt]i|[Cc]i|[Vv]i|[Ss]i|[Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e|[Gg]li)$"];
+      C [form=re"^\([Mm]e\|[Tt]e\|[Cc]e\|[Vv]e\|[Ss]e\|[Gg]lie\|[Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ss]i\|[Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\|[Gg]li\)$", textform="_"];
     }
     without { C [Clitic="Yes", upos=PRON]; }
     commands {
@@ -75,8 +86,8 @@ package clitici {
   rule clitic_features_second {
     pattern {
       H [Enclitic]; H < C1; C1 < C2;
-      C1 [form=re"^([Mm]e|[Tt]e|[Cc]e|[Vv]e|[Ss]e|[Gg]lie|[Mm]i|[Tt]i|[Cc]i|[Vv]i|[Ss]i)$"];
-      C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e)$"];
+      C1 [form=re"^\([Mm]e\|[Tt]e\|[Cc]e\|[Vv]e\|[Ss]e\|[Gg]lie\|[Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ss]i\)$", textform="_"];
+      C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"];
     }
     without { C2 [Clitic="Yes", upos=PRON]; }
     commands {
@@ -93,8 +104,8 @@ package clitici {
   rule cluster_second_obj {
     pattern {
       H [Enclitic]; H < C1; C1 < C2;
-      C1 [form=re"^([Mm]e|[Tt]e|[Cc]e|[Vv]e|[Ss]e|[Gg]lie|[Mm]i|[Tt]i|[Cc]i|[Vv]i|[Ss]i)$"];
-      C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e)$"];
+      C1 [form=re"^\([Mm]e\|[Tt]e\|[Cc]e\|[Vv]e\|[Ss]e\|[Gg]lie\|[Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ss]i\)$", textform="_"];
+      C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\)$", textform="_"];
       e: X -> C2;
     }
     without { H -[obj]-> C2; }
@@ -104,8 +115,8 @@ package clitici {
   rule cluster_second_ne {
     pattern {
       H [Enclitic]; H < C1; C1 < C2;
-      C1 [form=re"^([Mm]e|[Tt]e|[Cc]e|[Vv]e|[Ss]e|[Gg]lie|[Mm]i|[Tt]i|[Cc]i|[Vv]i|[Ss]i)$"];
-      C2 [form=re"^[Nn]e$"];
+      C1 [form=re"^\([Mm]e\|[Tt]e\|[Cc]e\|[Vv]e\|[Ss]e\|[Gg]lie\|[Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ss]i\)$", textform="_"];
+      C2 [form=re"^[Nn]e$", textform="_"];
       e: X -> C2;
     }
     without { H -[iobj]-> C2; }
@@ -116,8 +127,8 @@ package clitici {
   rule cluster_first_refl {
     pattern {
       H [Enclitic]; H < C1; C1 < C2;
-      C1 [form=re"^[Ss][ie]$"];
-      C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e)$"];
+      C1 [form=re"^[Ss][ie]$", textform="_"];
+      C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"];
       e: X -> C1;
     }
     without { H -[expl]-> C1; }
@@ -127,8 +138,8 @@ package clitici {
   rule cluster_first_dat {
     pattern {
       H [Enclitic]; H < C1; C1 < C2;
-      C1 [form=re"^([Mm]e|[Tt]e|[Cc]e|[Vv]e|[Gg]lie|[Mm]i|[Tt]i|[Cc]i|[Vv]i)$"];
-      C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e)$"];
+      C1 [form=re"^\([Mm]e\|[Tt]e\|[Cc]e\|[Vv]e\|[Gg]lie\|[Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\)$", textform="_"];
+      C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"];
       e: X -> C1;
     }
     without { H -[iobj]-> C1; }
@@ -142,25 +153,25 @@ package clitici {
   % ------------------------------------------------------------------
   rule single_acc {
     pattern {
-      H [Enclitic]; H < C; C [form=re"^([Ll]o|[Ll]a|[Ll]i)$"]; e: X -> C;
+      H [Enclitic]; H < C; C [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\)$", textform="_"]; e: X -> C;
     }
-    without { C < C2; C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e)$"]; }
+    without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[obj]-> C; }
     commands { del_edge e; add_edge H -[obj]-> C; C.fix = single_acc; }
   }
 
   rule single_dat_gli {
     pattern {
-      H [Enclitic]; H < C; C [form=re"^([Gg]li|[Gg]lie)$"]; e: X -> C;
+      H [Enclitic]; H < C; C [form=re"^\([Gg]li\|[Gg]lie\)$", textform="_"]; e: X -> C;
     }
-    without { C < C2; C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e)$"]; }
+    without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[iobj]-> C; }
     commands { del_edge e; add_edge H -[iobj]-> C; C.fix = single_dat_gli; }
   }
 
   rule single_ne {
     pattern {
-      H [Enclitic]; H < C; C [form=re"^[Nn]e$"]; e: X -> C;
+      H [Enclitic]; H < C; C [form=re"^[Nn]e$", textform="_"]; e: X -> C;
     }
     without { H -[iobj]-> C; }
     commands { del_edge e; add_edge H -[iobj]-> C; C.fix = single_ne; }
@@ -168,9 +179,9 @@ package clitici {
 
   rule single_refl_si {
     pattern {
-      H [Enclitic]; H < C; C [form=re"^[Ss]i$"]; e: X -> C;
+      H [Enclitic]; H < C; C [form=re"^[Ss]i$", textform="_"]; e: X -> C;
     }
-    without { C < C2; C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e)$"]; }
+    without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[1=expl]-> C; }
     commands { del_edge e; add_edge H -[expl]-> C; C.fix = single_refl_si; }
   }
@@ -185,10 +196,10 @@ package clitici {
   rule single_12_iobj_with_object {
     pattern {
       H [Enclitic, upos=VERB|AUX]; H < C; H -[obj]-> O;
-      C [form=re"^([Mm]i|[Tt]i|[Cc]i|[Vv]i|[Ll]e)$"];
+      C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"];
       e: X -> C;
     }
-    without { C < C2; C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e)$"]; }
+    without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[iobj]-> C; }
     commands { del_edge e; add_edge H -[iobj]-> C; C.fix = single_12_iobj_with_object; }
   }
@@ -196,9 +207,9 @@ package clitici {
   rule single_12_dative_verb (verbs from "italian-verbs.grewlex.tsv") {
     pattern {
       H [Enclitic, upos=VERB|AUX, lemma=verbs.lemma]; verbs.Iobj = "yes"; verbs.Obj = "no";
-      H < C; C [form=re"^([Mm]i|[Tt]i|[Cc]i|[Vv]i|[Ll]e)$"]; e: X -> C;
+      H < C; C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"]; e: X -> C;
     }
-    without { C < C2; C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e)$"]; }
+    without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[iobj]-> C; }
     commands { del_edge e; add_edge H -[iobj]-> C; C.fix = single_12_dative_verb; }
   }
@@ -206,9 +217,9 @@ package clitici {
   rule single_12_transitive_verb (verbs from "italian-verbs.grewlex.tsv") {
     pattern {
       H [Enclitic, upos=VERB|AUX, lemma=verbs.lemma]; verbs.Obj = "yes"; verbs.Iobj = "no";
-      H < C; C [form=re"^([Mm]i|[Tt]i|[Cc]i|[Vv]i|[Ll]e)$"]; e: X -> C;
+      H < C; C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"]; e: X -> C;
     }
-    without { C < C2; C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e)$"]; }
+    without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[obj]-> C; }
     commands { del_edge e; add_edge H -[obj]-> C; C.fix = single_12_transitive_verb; }
   }
@@ -219,9 +230,9 @@ package clitici {
   rule single_12_undecided {
     pattern {
       H [Enclitic, upos=VERB|AUX]; H < C;
-      C [form=re"^([Mm]i|[Tt]i|[Cc]i|[Vv]i|[Ll]e)$"]; e: X -> C;
+      C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"]; e: X -> C;
     }
-    without { C < C2; C2 [form=re"^([Ll]o|[Ll]a|[Ll]i|[Ll]e|[Nn]e)$"]; }
+    without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { C [todo]; }
     without { H -[obj]-> O; }
     commands {
@@ -232,16 +243,139 @@ package clitici {
 }
 
 % ============================================================
+% Enclitic host repair
+% ============================================================
+%
+% childes.py's Tier A/B split correctly identifies the host, but the parser
+% frequently mistags it - a fused enclitic form is out of vocabulary, and even
+% split, some hosts (the geminated Tier A stems dam/dim/fam/dac/dic/fac/vac/stac,
+% and short/rare regular imperatives) get too little training signal for the
+% ISDT model to tag correctly (e.g. spegni -> DET, fate -> NOUN, dam -> NOUN).
+% This package forces upos/xpos/FEATS from the host's own shape - the same
+% information childes.py used to license the split in the first place - rather
+% than leaving whatever wrong category the tagger guessed. Only touches hosts
+% not already correctly tagged (guarded by upos=VERB, except ecco by upos=ADV),
+% so already-correct parser output is never overwritten.
+%
+% Shape-based classification, each checked against gold ISDT/PoSTWITA/MarkIT/VIT/
+% TWITTIRO/Old/ParTUT (7 treebanks):
+%   ecco          -> ADV (never VERB; checked, 6/6 gold hits are ADV/INTJ)
+%   ends in r     -> VERB, VerbForm=Inf (infinitive truncation: far/dar/dir/...)
+%   ends in ando/endo -> VERB, VerbForm=Ger (full gerund, not truncated; 199 Ger
+%                      vs 27 Conv in one other treebank's convention - using Ger,
+%                      matching ISDT/PoSTWITA, which the rest of this file follows)
+%   ends in [aei]te   -> VERB, Mood=Imp|Tense=Pres|Person=2|Number=Plur (2pl imperative)
+%   ends in iamo      -> VERB, Mood=Imp|Tense=Pres|Person=1|Number=Plur (1pl imperative)
+%   everything else   -> VERB, Mood=Imp|Tense=Pres|Person=2|Number=Sing (2sg imperative -
+%                      Tier B is only ever imperative by childes.py's own construction;
+%                      the other Tier A shapes, ecco/infinitive/gerund, are excluded above)
+%
+% Lemma is corrected only for the closed set of geminated/monosyllabic Tier A
+% hosts (5 source verbs, unambiguous from the host string alone). Open-vocabulary
+% Tier B hosts (spegni, metti, fate, ...) keep whatever lemma the tagger guessed -
+% not recoverable here without a form->lemma dictionary, which this pipeline does
+% not have.
+%
+% Runs before 'clitici' (see strat below): single_12_dative_verb/
+% single_12_transitive_verb match H's lemma against the verb lexicon, which only
+% works once H's lemma is corrected here.
+
+package enclitic_host_repair {
+  rule ecco_host {
+    pattern { H [Enclitic, form=re"^[Ee]cco$"]; }
+    without { H [upos=ADV] }
+    commands {
+      del_feat H.Mood; del_feat H.Gender; del_feat H.Number; del_feat H.PronType;
+      del_feat H.Definite; del_feat H.Degree; del_feat H.Tense; del_feat H.Person; del_feat H.VerbForm;
+      H.upos = ADV; H.xpos = "B"; H.fix = ecco_host;
+    }
+  }
+
+  rule infinitive_host {
+    pattern { H [Enclitic, form=re".*r$"]; }
+    without { H [upos=VERB] }
+    without { H [fix]; }
+    commands {
+      del_feat H.Gender; del_feat H.Number; del_feat H.PronType; del_feat H.Definite; del_feat H.Degree;
+      H.upos = VERB; H.xpos = "V"; H.VerbForm = "Inf"; H.fix = infinitive_host;
+    }
+  }
+
+  rule gerund_host {
+    pattern { H [Enclitic, form=re".*[ae]ndo$"]; }
+    without { H [upos=VERB] }
+    without { H [fix]; }
+    commands {
+      del_feat H.Gender; del_feat H.Number; del_feat H.PronType; del_feat H.Definite; del_feat H.Degree;
+      H.upos = VERB; H.xpos = "V"; H.VerbForm = "Ger"; H.fix = gerund_host;
+    }
+  }
+
+  rule imperative_host_plural2 {
+    pattern { H [Enclitic, form=re".*[aei]te$"]; }
+    without { H [upos=VERB] }
+    without { H [fix]; }
+    commands {
+      del_feat H.Gender; del_feat H.PronType; del_feat H.Definite; del_feat H.Degree;
+      H.upos = VERB; H.xpos = "V"; H.Mood = "Imp"; H.VerbForm = "Fin"; H.Tense = "Pres";
+      H.Person = "2"; H.Number = "Plur"; H.fix = imperative_host_plural2;
+    }
+  }
+
+  rule imperative_host_plural1 {
+    pattern { H [Enclitic, form=re".*iamo$"]; }
+    without { H [upos=VERB] }
+    without { H [fix]; }
+    commands {
+      del_feat H.Gender; del_feat H.PronType; del_feat H.Definite; del_feat H.Degree;
+      H.upos = VERB; H.xpos = "V"; H.Mood = "Imp"; H.VerbForm = "Fin"; H.Tense = "Pres";
+      H.Person = "1"; H.Number = "Plur"; H.fix = imperative_host_plural1;
+    }
+  }
+
+  % Catch-all: by the time this runs (last in the sequence, see strat), every host
+  % matching a more specific shape has already been converted to upos=VERB and is
+  % therefore excluded by this same guard - no risk of misfiring on those.
+  rule imperative_host_singular {
+    pattern { H [Enclitic]; }
+    without { H [upos=VERB] }
+    without { H [fix]; }
+    commands {
+      del_feat H.Gender; del_feat H.PronType; del_feat H.Definite; del_feat H.Degree;
+      H.upos = VERB; H.xpos = "V"; H.Mood = "Imp"; H.VerbForm = "Fin"; H.Tense = "Pres";
+      H.Person = "2"; H.Number = "Sing"; H.fix = imperative_host_singular;
+    }
+  }
+
+  rule lemma_dare  { pattern { H [Enclitic, form=re"^\([Dd]am\|[Dd]ac\|[Dd]a\)$"]; } without { H [lemma="dare"]; } commands { H.lemma = "dare"; } }
+  rule lemma_dire  { pattern { H [Enclitic, form=re"^\([Dd]im\|[Dd]ic\|[Dd]i\)$"]; } without { H [lemma="dire"]; } commands { H.lemma = "dire"; } }
+  rule lemma_fare  { pattern { H [Enclitic, form=re"^\([Ff]am\|[Ff]ac\|[Ff]a\)$"]; } without { H [lemma="fare"]; } commands { H.lemma = "fare"; } }
+  rule lemma_andare{ pattern { H [Enclitic, form=re"^\([Vv]ac\|[Vv]a\)$"]; } without { H [lemma="andare"]; } commands { H.lemma = "andare"; } }
+  rule lemma_stare { pattern { H [Enclitic, form=re"^\([Ss]tac\|[Ss]ta\)$"]; } without { H [lemma="stare"]; } commands { H.lemma = "stare"; } }
+}
+
+% ============================================================
 % strategy
 % ============================================================
 
 % Onf = One normal form (Apply rules repeatedly until stable)
 % Alt = Try all rules in the list
 strat main {
-  Onf (Alt (
-    init_fix_misc,
-    clitici,
-  ))
+  Seq (
+    Onf (enclitic_host_repair.ecco_host),
+    Onf (enclitic_host_repair.infinitive_host),
+    Onf (enclitic_host_repair.gerund_host),
+    Onf (enclitic_host_repair.imperative_host_plural2),
+    Onf (enclitic_host_repair.imperative_host_plural1),
+    Onf (enclitic_host_repair.imperative_host_singular),
+    Onf (Alt (enclitic_host_repair.lemma_dare, enclitic_host_repair.lemma_dire,
+              enclitic_host_repair.lemma_fare, enclitic_host_repair.lemma_andare,
+              enclitic_host_repair.lemma_stare)),
+    Onf (Alt (
+      init_fix_misc,
+      clitici,
+    ))
+  )
 }
 
 % ============================================================

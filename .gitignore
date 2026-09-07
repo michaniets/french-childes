@@ -26,6 +26,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Claude's memory
+CLAUDE.md
+
 # TreeTagger
 tagger/
 *.par

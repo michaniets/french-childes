@@ -115,7 +115,9 @@ if [ "$RUN_STEP_1" = true ]; then
         --pos_utterance '^(AUX|VER|VV)' --pos_output '(AUX|VER|VV)' \
         --write_conllu --html_dir "${HTML_DIR}" --server_url "${SERVER_URL}" \
         --fuse_contractions auto\
+        ${REWRITE_FLAG} \
         --verb_lexicon ${PYPATH}/other-languages/italian/italian-verbs.grewlex.tsv \
+        --enclitic_stoplist ${PYPATH}/other-languages/italian/italian-noclitic.txt \
         --api_model "${API_MODEL}" --parameters "${TAGGER_PAR}"  --tag_ud_tokens  # (un)comment --parameters to (not) use TreeTagger
 
     echo ""

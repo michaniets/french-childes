@@ -305,28 +305,53 @@ class HtmlExporter:
   <head>
     <title>CHILDES Parse: %s</title>
     <style>
-      body { font-family: sans-serif; }
+      :root {
+        --fg:#1a1a1a; --bg:#fff; --mut:#666; --line:#ddd; --code-bg:#f6f6f6;
+        --chi:#0a5c2e; --lem:#a0369a; --upos:#0a6; --xpos:#8a7a00; --dep:#06c;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg:#e0e0e0; --bg:#17191d; --mut:#9aa; --line:#333; --code-bg:#22252a;
+          --chi:#4cc38a; --lem:#d68fd0; --upos:#4cc9a0; --xpos:#d0bd5a; --dep:#6aa9ff;
+        }
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--fg); background: var(--bg);
+        margin: 0 auto; padding: 0 16px; max-width: 1100px; line-height: 1.5;
+      }
+      h3 { font-size: 13px; font-weight: 400; color: var(--mut); margin: 0 0 4px; }
+      hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0 10px; }
       .parse p {
-        font-family: monospace;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
         white-space: pre;
         margin: 0;
-        letter-spacing: 0;
+        font-size: 13px;
+        overflow-x: auto;
       }
       .coding {
-        background: #f0f0f0; color: black; font-family: "Courier New", Courier, monospace;
-        font-size: 12px; padding: 5px; border-left: 3px solid blue; margin-bottom: 1em;
+        background: var(--code-bg); color: var(--fg);
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 12px; padding: 6px 10px; border-left: 3px solid var(--dep);
+        border-radius: 3px; margin: 0 0 10px; overflow-x: auto;
       }
-      .nav-header { margin-bottom: 2em; text-align: center; }
+      .nav-header {
+        position: sticky; top: 0; z-index: 9;
+        background: var(--bg); border-bottom: 1px solid var(--line);
+        margin: 0 0 1.5em; padding: 10px 0; text-align: center;
+      }
       .nav-footer { margin-top: 2em; text-align: center; }
-      .a { color:black; font-weight: bold; }
-      .v { background-color:yellow; }
-      .l { color:magenta; }
-      .r { color:red; }
-      .u { color:DarkGreen; }
-      .x { color:Olive; }
-      .d { color:blue; }
-      .m { color:gray; }
-      .err { color:red; font-style:italic; }
+      .nav-header a, .nav-footer a { color: var(--dep); }
+      .a { color: var(--fg); font-weight: bold; }
+      .v { background-color: #ffe89a; color: #000; border-radius: 2px; }
+      .l { color: var(--lem); }
+      /* child production: must stand out from adult speech */
+      .r { color: var(--chi); font-weight: bold; }
+      .u { color: var(--upos); }
+      .x { color: var(--xpos); }
+      .d { color: var(--dep); }
+      .m { color: var(--mut); }
+      .err { color:#c33; font-style:italic; }
     </style>
   </head>
   <body>
@@ -364,7 +389,7 @@ class HtmlExporter:
         
         html_tree = re.sub(
             r'(\.*)\(deprel:(.*?)\)(.*?)\[(\d+):(\d+)\]',
-            lambda m: f"{int(m.group(4)):02d}{m.group(1)}{m.group(3)} <span class=d>{m.group(2)}</span>&#8594;{m.group(5)}",
+            lambda m: f"{int(m.group(4)):02d}{m.group(1)}{m.group(3)} <span class=d>{m.group(2)}</span>→{m.group(5)}",
             html_tree,
             flags=re.MULTILINE
         )
@@ -1796,7 +1821,7 @@ if __name__ == "__main__":
     parser.add_argument('--server_url', type=str, help='(Optional) Base URL for server links in the final CSV.')
     parser.add_argument('--write_conllu', action='store_true', help='(Optional) Write the final parsed CoNLL-U data to a standalone file. Requires --api_model.')
     parser.add_argument('--chunk_parse', type=int, default=10000, help='Number of utterances per API parsing chunk. Default: 10000.')
-    parser.add_argument('--chunk_html', type=int, default=5000, help='Number of utterances per HTML output file. Default: 5000.')
+    parser.add_argument('--chunk_html', type=int, default=1000, help='Number of utterances per HTML output file. Default: 1000.')
     parser.add_argument('--pos_output', default=".*", type=str, help='Regex to match POS tags. The reduced "light" table will only contain matching rows.\nMatches the parser\'s universal POS (UPOS) when --api_model is used; see --use_tagger_pos.')
     parser.add_argument('--pos_utterance', type=str, help='Regex to match POS tags. The full utterance text will only be printed on matching rows.\nMatches the parser\'s universal POS (UPOS) when --api_model is used; see --use_tagger_pos.\nDefaults to --pos_output\'s value when not given explicitly.')
     parser.add_argument('--use_tagger_pos', action='store_true', help='Make --pos_output/--pos_utterance match the tagger\'s own (language/model-specific) POS tag instead of the parser\'s universal POS (UPOS). Has no effect without --parameters; has no effect on rows the tagger did not tag if --api_model is not set (only source of POS in that case).')

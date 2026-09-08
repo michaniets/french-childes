@@ -231,6 +231,12 @@ package clitici {
     without { H -[obj]-> C; }
     % keep an expl the parser asserted: ti/ci/vi of a pronominal verb
     without { H -[expl]-> C; }
+    % A competing object settles the case syntactically, so single_12_iobj_with_object
+    % above decides it and this rule must stand back. Without this guard the two
+    % alternate forever - each only checks the relation it assigns itself, so iobj
+    % re-enables obj and obj re-enables iobj (10000-step abort on Antelmi,
+    % Calambrone). Same guard as single_12_undecided.
+    without { H -[obj]-> O; O [upos=NOUN|PROPN]; }
     commands { del_edge e; add_edge H -[obj]-> C; C.fix = single_12_transitive_verb; }
   }
 

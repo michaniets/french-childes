@@ -555,7 +555,7 @@ class ChatProcessor:
                         lemma = line.split('\t')[0].strip()
                         if lemma and lemma != 'lemma' and not lemma.startswith('%'):
                             lemmas.append(lemma)
-                sys.stderr.write(f"\n   - Enclitic splitting: {len(lemmas)} verb lemmas ({path}).\n")
+                sys.stderr.write(f"\n- Enclitic splitting: {len(lemmas)} verb lemmas ({path}).\n")
             self._it_hosts = _it_verb_forms(lemmas)
         return self._it_hosts
 

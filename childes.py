@@ -1393,10 +1393,6 @@ class ChatProcessor:
                         if raw_parsed:
                             parsed_parts.append(self.restamp_presegmented_output(raw_parsed, ordered_ids))
 
-                if use_tag_ud_tokens and self.outRows:
-                    # Now that self.outRows holds the parser's token set, tag it with
-                    # TreeTagger for an additional pos/lemma (does not affect FORM).
-                    tagUdPOS, tagUdLemmas = self.run_tagger_on_ud_tokens()
 
             parsed_conllu_str = "".join(parsed_parts) if parsed_parts else None
 
@@ -1429,6 +1425,14 @@ class ChatProcessor:
                     # a rule may have changed the token count, which would shift
                     # every column joined on '<utt>_w<n>' from that point on
                     self.realign_rows_to_conllu(parsed_conllu_str)
+
+            # After the rewrite and the re-gridding, so the tagger sees the final
+            # tokenisation: a rule that splits a contraction turns 'della' into
+            # 'di' + 'la', and the results are consumed by word index, so tagging
+            # the pre-rewrite tokens would both mis-tag the group and shift every
+            # tagger_pos/tagger_lemma after it.
+            if use_tag_ud_tokens and self.outRows:
+                tagUdPOS, tagUdLemmas = self.run_tagger_on_ud_tokens()
 
             # After the rewrite, so the trees show the corrected analysis and their
             # token numbering matches the final CoNLL-U (a rule that splits a

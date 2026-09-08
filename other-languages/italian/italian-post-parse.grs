@@ -417,6 +417,7 @@ package enclitic_host_repair {
 package clitic_reattach {
   rule reattach_single {
     pattern { H [Enclitic]; C [textform="_"]; H < C; e: X -> C; }
+    without { X -[root]-> C; }
     commands { del_edge e; add_edge H -[dep]-> C; }
   }
   rule reattach_second {
@@ -435,18 +436,43 @@ package clitic_reattach {
   % at all. Guarding on 'H -> C' alone is not enough: a clitic governed by another
   % node gets a second head, and a 'head=2|3' row makes the CoNLL-U unreadable for
   % anything that parses it strictly (it aborted the HTML export on three corpora).
+  % When the clitic has no governor it IS the sentence root - the parser does
+  % that surprisingly often (ecco , ora dammela: 'la' is root and the host hangs
+  % off the other clitic). Attaching it under the host would destroy the root and
+  % usually close a cycle, because the host's own governor is then inside the
+  % group's subtree. So detach the host first and let it inherit the root below.
+  % The parser often makes a CLITIC the sentence root: in 'ecco , ora dammela'
+  % the root is 'la', with the host hanging off the other clitic. Grew represents
+  % the root as an ordinary edge from a matchable node, so it can be MOVED rather
+  % than destroyed - which is what the generic rules below were doing, leaving the
+  % sentence rootless and usually cyclic, because the host's own governor then
+  % sits inside the group's own subtree.
+  rule root_clitic_promote {
+    pattern { H [Enclitic]; C [textform="_"]; H << C; r: R -[root]-> C; e: G -> H; }
+    commands { del_edge e; del_edge r; add_edge R -[root]-> H; }
+  }
+
+  rule root_clitic_promote_orphan {
+    pattern { H [Enclitic]; C [textform="_"]; H << C; r: R -[root]-> C; }
+    without { G -> H; }
+    commands { del_edge r; add_edge R -[root]-> H; }
+  }
+
+  % shift_in carries the root edge over, so the host becomes the root instead of
+  % the group losing it. Grew models the root as a real edge and offers no way to
+  % create one, so this cannot be repaired later - it has to happen here.
   rule reattach_root_single {
     pattern { H [Enclitic]; C [textform="_"]; H < C; }
     without { H -> C; }
     without { X -> C; }
-    commands { add_edge H -[dep]-> C; }
+    commands { shift_in C ==> H; add_edge H -[dep]-> C; }
   }
   rule reattach_root_second {
     pattern { H [Enclitic]; C1 [textform="_"]; C2 [textform="_"]; H < C1; C1 < C2; }
     without { H -> C2; }
     without { C1 -> C2; }
     without { X -> C2; }
-    commands { add_edge H -[dep]-> C2; }
+    commands { shift_in C2 ==> H; add_edge H -[dep]-> C2; }
   }
 }
 
@@ -650,9 +676,12 @@ strat main {
     % slot when they are hung off it
     Onf (Alt (cycle_repair.break_cycle, cycle_repair.break_cycle_second,
               cycle_repair.host_promote, cycle_repair.host_promote_second)),
+    Onf (clitic_reattach.root_clitic_promote),
+    Onf (clitic_reattach.root_clitic_promote_orphan),
     Onf (clitic_reattach.reattach_single),
     Onf (clitic_reattach.reattach_second),
     Onf (clitic_reattach.reattach_second_from_first),
+
     Onf (clitic_reattach.reattach_root_single),
     Onf (clitic_reattach.reattach_root_second),
     % single_12_undecided is a catch-all: it must run only after every deciding

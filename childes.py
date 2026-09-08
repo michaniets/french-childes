@@ -1426,6 +1426,13 @@ class ChatProcessor:
                     # every column joined on '<utt>_w<n>' from that point on
                     self.realign_rows_to_conllu(parsed_conllu_str)
 
+                # SpaceAfter last, on the final tokens, and written back so the
+                # file on disk carries it too
+                parsed_conllu_str = self.add_space_after(parsed_conllu_str)
+                conllu_data = self._parse_conllu_output(parsed_conllu_str)
+                with open(conllu_output_path, 'w', encoding='utf8') as f_conllu:
+                    f_conllu.write(parsed_conllu_str)
+
             # After the rewrite and the re-gridding, so the tagger sees the final
             # tokenisation: a rule that splits a contraction turns 'della' into
             # 'di' + 'la', and the results are consumed by word index, so tagging
@@ -1565,6 +1572,82 @@ class ChatProcessor:
         sys.stderr.write(f"- Full table (one row per token): {parsed_csv_path}\n")
         sys.stderr.write(f"- Light table (selected columns and filtered tokens): {light_csv_path}\n")
         os.unlink(tmp_file)  # delete temp file after writing
+
+    def add_space_after(self, conllu_str):
+        """
+        Sets SpaceAfter=No wherever '# text' has no space between two tokens.
+
+        UD reconstructs the raw text from the tokens, so a token not followed by a
+        space must say so. CHAT writes 'storia?', 'bimbo.', "l'hai" without spaces
+        while the tokeniser separates them, and the validator rejects the file at
+        level 2 (missing-spaceafter) - 11272 times over the Italian corpora, which
+        is the whole of that gate's failures apart from 30 non-tree sentences.
+
+        The surface unit is the multiword token where there is one (its range line
+        carries the form and the space information), otherwise the word. Tokens are
+        walked against '# text'; a sentence whose tokens do not reconstruct it is
+        left untouched rather than guessed at. Measured over 103370 sentences of
+        Italian output, all of them reconstruct.
+        """
+        out, changed, skipped = [], 0, 0
+        for block in conllu_str.split('\n\n'):
+            if not block.strip():
+                continue
+            lines = block.split('\n')
+            text = None
+            for l in lines:
+                if l.startswith('# text ='):
+                    text = l.split('=', 1)[1].strip()
+            rows = [l.split('\t') for l in lines if l and not l.startswith('#')]
+            rows = [r for r in rows if len(r) == 10]
+            if text is None or not rows:
+                out.append(block)
+                continue
+
+            # surface units: a range line, else a word not covered by one
+            units, skip = [], 0
+            for i, r in enumerate(rows):
+                if '-' in r[0]:
+                    lo, hi = (int(x) for x in r[0].split('-'))
+                    units.append(i); skip = hi - lo + 1
+                elif skip:
+                    skip -= 1
+                elif '.' not in r[0]:
+                    units.append(i)
+
+            pos, nospace, ok = 0, [], True
+            for i in units:
+                while pos < len(text) and text[pos] == ' ':
+                    pos += 1
+                form = rows[i][1]
+                if not text.startswith(form, pos):
+                    ok = False
+                    break
+                pos += len(form)
+                if pos < len(text) and text[pos] != ' ':
+                    nospace.append(i)
+            if not ok or pos < len(text.rstrip()):
+                skipped += 1
+                out.append(block)
+                continue
+
+            for i in nospace:
+                misc = rows[i][9]
+                if 'SpaceAfter=' in misc:
+                    continue
+                rows[i][9] = 'SpaceAfter=No' if misc == '_' else misc + '|SpaceAfter=No'
+                changed += 1
+
+            body = ['\t'.join(r) for r in rows]
+            head = [l for l in lines if l.startswith('#')]
+            out.append('\n'.join(head + body))
+
+        if changed:
+            sys.stderr.write(f"- Marked {changed} token(s) SpaceAfter=No from '# text'.\n")
+        if skipped:
+            sys.stderr.write(f"  [WARNING] {skipped} sentence(s) whose tokens do not "
+                             f"reconstruct '# text' were left without SpaceAfter.\n")
+        return '\n\n'.join(out) + '\n\n'
 
     def realign_rows_to_conllu(self, conllu_str):
         """

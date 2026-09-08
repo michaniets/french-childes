@@ -13,7 +13,7 @@
 
 rule init_fix_misc {
   pattern { V [upos=VERB|AUX, !fix]; }
-  commands { V.fix = ""; }
+  commands { V.fix = "none"; }
 }
 
 package duplicate_complements {
@@ -46,9 +46,11 @@ package oblique {
       N -[1=case]-> P;  % case:det also exists
       e:V -[obl:arg]-> N;
     }
+    % the relation is unchanged, so without this the rule would re-match itself
+    without { V [fix=re".*aller_a.*"]; }
     commands {
       del_edge e;
-      add_edge V -[obl:loc]-> N;
+      add_edge V -[obl:arg]-> N;   % NOT obl:loc: French UD documents no such subtype (validator level 4 rejects it), so the locative reading is recorded in fix= instead
       V.fix = V.fix + aller_a + ",";
     }
   }

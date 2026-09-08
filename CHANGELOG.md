@@ -5,6 +5,68 @@ summary per version; this file has the full reasoning, evidence, and examples
 behind each design decision, for anyone who needs to know *why* something works
 the way it does before changing it.
 
+## Unreleased - Italian clitic rules made reachable
+
+Two defects meant most of the `clitici` package still never applied, even after
+the regex-escaping fix recorded under v5.9 below.
+
+**The rules were structurally unreachable.** Grew matches *injectively*: two
+distinct pattern identifiers can never bind the same node. All 12
+deprel-reassigning rules identified the clitic's incoming edge as `e: X -> C`,
+so `X` could never bind to `H` - which made every one of them inert precisely
+when the parser attached the clitic to its own host. Measured over the 124 split
+enclitic clitics of Roma: 47.6% were attached to the host (unreachable), 17.7%
+were the sentence root, so had no governor node to bind at all (also
+unreachable), and only 34.7% were in the one configuration the rules could see.
+The symptom is silence - a rule that is plainly correct simply never fires. A
+new `clitic_reattach` package now normalises every clitic of a split multiword
+token onto its host first, after which the rules bind `e: H -> C` and reach
+every case. It only touches wrong attachments: reattachment needs a governor
+other than the host (injectivity again), or no host edge at all for the root
+case, so a clitic already hanging off its host keeps its label untouched - which
+is what preserves a reflexive `expl` the parser asserted.
+
+**Empty MISC values destroyed the whole field.** `init_fix_misc` wrote `fix=`
+with an empty value. When Grew reads such a file back, *every* feature on that
+node is dropped, `Enclitic=` included, so all the rules silently stop matching.
+It is harmless in memory within one pass, so a normal production run was
+unaffected and the bug stayed invisible; it bit on any second pass over
+already-rewritten output. Now `fix=none`. Note this changes the written value on
+every VERB/AUX, so any `dql.py` query filtering that field needs updating; any
+CoNLL-U produced before 2026-09-08 still carries the empty form.
+
+**Three further defects, exposed only once the rules became reachable:**
+
+- The `single_12_*` rules overwrote an `expl` the parser had already asserted,
+  destroying the reflexive reading of pronominal verbs (*vuoi metterti seduto*:
+  `ti` `expl` -> `obj`). They now leave an existing `expl` alone.
+- `single_12_iobj_with_object` treated *any* `obj` as the competing object that
+  settles the case syntactically, so a misparsed subject pronoun (*mettile tu
+  là*, where `tu` is wrongly an object) forced the clitic to `iobj`. The
+  competing object must now be a real NP (`NOUN`/`PROPN`), and
+  `single_12_undecided` mirrors that guard exactly, so no clitic falls between
+  the two rules and keeps the `dep` placeholder.
+- `single_12_undecided` is a catch-all, but `Alt` gives no try-order, so it
+  claimed cases the lexicon or the syntax could have decided and stamped them
+  `todo=` - output showed `fix=single_12_dative_verb` and `todo=obj_or_iobj` on
+  the same token. It now runs after the deciding rules have converged, and never
+  overwrites a relation they assigned.
+
+Measured on the 112 real enclitic sentences of Roma, with stale `fix=` markers
+stripped so the MISC bug does not mask the result: clitics with a wrong analysis
+go from 49 (raw parser output) to 7 (rules as they stood) to 0. Nine tokens
+change relative to the previous rules - seven clear improvements, none worse. No
+clitic is left with the `dep` placeholder and no empty MISC value is written,
+both verified by a read-back pass.
+
+Still not working, and not caused by any of the above:
+`single_12_dative_verb`/`single_12_transitive_verb` fire correctly in controlled
+tests but never once on real data, because the lexicon keys on the host's lemma
+and the tagger supplies lemmas it does not contain (`metti` -> `metto`). Every
+1st/2nd-person clitic therefore falls through to `single_12_undecided`. The
+obj/iobj split over `mi`/`ti`/`ci`/`vi`/`le` should be treated as undecided
+rather than measured until host lemmas are corrected.
+
 ## v5.9 - Italian enclitics
 
 **Italian enclitics are split into UD syntactic words** (`--split_enclitics
@@ -109,9 +171,16 @@ where `( ) |` are literal characters unless backslash-escaped - confirmed
 empirically (0 matches with bare `(a|b|c)`, 1 match with `\(a\|b\|c\)`; Grew's
 own documentation page's example, `re"(make|create)"`, also fails to match on
 this backend). This meant `clitic_features`, `single_acc`, and every other rule
-using this pattern had never fired, in production or otherwise - confirmed
-against the corpus itself: 0 `fix=` occurrences anywhere before this fix, 2301
-after. All 26 occurrences corrected. See `CLAUDE.md` for the general gotcha.
+using this pattern had never fired, in production or otherwise. All 26
+occurrences corrected. See `CLAUDE.md` for the general gotcha.
+
+A correction to what was originally recorded here: this fix was reported as
+"confirmed firing, 0 `fix=` occurrences before and 2301 after". That figure does
+not show what it appeared to. `init_fix_misc` stamps an (empty) `fix=` on every
+VERB/AUX and was added in the same session, so the count measured only that the
+GRS was being loaded at all - the clitic rules themselves still fired zero times
+in production. Escaping the regexes was necessary but not sufficient; see the
+next section.
 
 ### `enclitic_host_repair` package (new)
 

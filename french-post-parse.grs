@@ -29,7 +29,7 @@ package duplicate_complements {
     commands {
       del_edge e1;
       add_edge V -[iobj]-> PRON1;
-      V.fix = V.fix + two_object_pronouns + ",";
+      V.fix = V.fix + "," + two_object_pronouns;
     }
   }
 }
@@ -51,7 +51,7 @@ package oblique {
     commands {
       del_edge e;
       add_edge V -[obl:arg]-> N;   % NOT obl:loc: French UD documents no such subtype (validator level 4 rejects it), so the locative reading is recorded in fix= instead
-      V.fix = V.fix + aller_a + ",";
+      V.fix = V.fix + "," + aller_a;
     }
   }
 }
@@ -90,7 +90,7 @@ package amalgames {
     commands {
       del_edge e;
       add_edge V -[obl:arg]-> N;
-      V.fix = V.fix + de_verb_complement + ",";
+      V.fix = V.fix + "," + de_verb_complement;
     }
   }
 
@@ -165,7 +165,7 @@ package dislocation {
       del_edge e2;
       add_edge V -[dislocated:todo]-> N1;
       add_edge V -[nsubj]-> N2;
-      V.fix = V.fix + double_subject_pre + ",";
+      V.fix = V.fix + "," + double_subject_pre;
       V.todo = attach;
     }
   }
@@ -183,7 +183,7 @@ package dislocation {
       del_edge e2;
       add_edge V -[nsubj]-> N1;
       add_edge V -[dislocated:todo]-> N2;
-      V.fix = V.fix + double_subject_post + ",";
+      V.fix = V.fix + "," + double_subject_post;
     }
   }
 
@@ -200,7 +200,7 @@ package dislocation {
       del_edge e2;
       add_edge V -[nsubj]-> N1;
       add_edge V -[vocative]-> N2;
-      V.fix = V.fix + double_subject_post_vocative + ",";
+      V.fix = V.fix + "," + double_subject_post_vocative;
     }
   }
 
@@ -216,7 +216,7 @@ package dislocation {
     commands {
       del_edge e2;
       add_edge N1 -[dislocated]-> N2;
-      V.fix = V.fix + subject_right_dislocation_with_comma + ",";
+      V.fix = V.fix + "," + subject_right_dislocation_with_comma;
     }
   }
 
@@ -240,7 +240,7 @@ package dislocation {
     commands {
       del_edge e2;
       add_edge N1 -[dislocated]-> N2;
-      V.fix = V.fix + subject_right_dislocation_intransitive + ",";
+      V.fix = V.fix + "," + subject_right_dislocation_intransitive;
     }
   }
  
@@ -259,7 +259,7 @@ package dislocation {
       del_edge e2;
       add_edge V -[dislocated]-> N1;
       add_edge V -[nsubj]-> N2;
-      V.fix = V.fix + disloc_dative_pre + ",";
+      V.fix = V.fix + "," + disloc_dative_pre;
     }
   }
 
@@ -282,7 +282,7 @@ package dislocation {
     commands {
       del_edge e1;
       add_edge V -[nsubj]-> N1;
-      V.fix = V.fix + tonic_subject_pronoun + ",";
+      V.fix = V.fix + "," + tonic_subject_pronoun;
     }
   }
 
@@ -301,7 +301,7 @@ package dislocation {
     commands {
       del_edge e2;
       add_edge N1 -[dislocated]-> N2;   % obl:arg --> dislocated
-      V.fix = V.fix + disloc_dative_post + ",";
+      V.fix = V.fix + "," + disloc_dative_post;
     }
   }
 
@@ -322,7 +322,7 @@ package dislocation {
       del_edge e1; del_edge e2;
       add_edge V -[iobj]-> PRON;  % keep iobj or correct other
       add_edge PRON -[dislocated]-> N;
-      V.fix = V.fix + disloc_dative_comma + ",";
+      V.fix = V.fix + "," + disloc_dative_comma;
     }
   }
 

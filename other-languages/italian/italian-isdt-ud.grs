@@ -450,15 +450,32 @@ package amalgami {
     }
   }
 
-  % di-form in a PP or genitive: expand to the UD multiword token di + article.
-  rule split_di (amalg from "italian-amalgami.grewlex.tsv") {
+  % --- when is a di-form the preposition rather than the partitive article? ---
+  %
+  % Deprel alone is too weak here: child-language parses put the head noun of a
+  % genitive on nsubj/obj/root often enough that the PP rule below missed 11 of
+  % 11 real cases in Roma. Two much stronger signals, measured on ISDT+PoSTWITA:
+  %
+  %   preceded by a nominal : prep+art 7687 vs partitive 6  (NOUN), ADJ 1038 vs 0
+  %   head noun singular    : prep+art 51.8%, partitive 7.1% - and every singular
+  %                           partitive in the gold data is a mass noun (acqua,
+  %                           farina, male, rumore, gente), never a count noun.
+  %
+  % So: a nominal to the left, or a singular non-mass head, means preposition.
+  % What is left fused - a plural or mass head after a verb - is the partitive
+  % (legge dei libri, c'è dell'acqua), which UD keeps as one DET.
+  %
+  % The governor is matched with a bare edge, not -[det]->, and the fused form's
+  % upos is not constrained: the parser mistags it as ADJ/PRON/NOUN in 4 of those
+  % 11 cases, but still hangs it off the right noun.
+
+  rule split_di_after_nominal (amalg from "italian-amalgami.grewlex.tsv") {
     pattern {
       amalg.kind = "split";
-      D [form=amalg.fused, upos=DET];
-      N []; N -[det]-> D;
-      X -[1=nmod|obl]-> N;
+      D [form=amalg.fused];
+      N []; e0: N -> D; D << N;
+      L [upos=NOUN|PROPN|ADJ|NUM]; L < D;
     }
-    without { N -[1=case]-> C; }   % already has its own preposition
     commands {
       add_node P :< D;
       P.form = amalg.prep; P.lemma = "di"; P.upos = ADP; P.xpos = "E";
@@ -466,7 +483,48 @@ package amalgami {
       D.form = amalg.art; D.lemma = "il"; D.upos = DET; D.xpos = "RD";
       D.textform = "_"; D.wordform = amalg.art; D.Definite = "Def";
       add_edge N -[case]-> P;
-      D.fix = split_di;
+      del_edge e0; add_edge N -[det]-> D;
+      D.fix = split_di_after_nominal;
+    }
+  }
+
+  rule split_di_count_noun (amalg from "italian-amalgami.grewlex.tsv") {
+    pattern {
+      amalg.kind = "split";
+      D [form=amalg.fused];
+      N [upos=NOUN|PROPN|PRON|ADJ|NUM, Number=Sing]; e0: N -> D; D << N;
+    }
+    without { N [lemma=re"^\\(acqua\\|pane\\|latte\\|sale\\|zucchero\\|farina\\|gente\\|roba\\|carne\\|frutta\\|verdura\\|pasta\\|minestra\\|pappa\\|brodo\\|olio\\|burro\\|formaggio\\|riso\\|caffè\\|tè\\|vino\\|birra\\|sabbia\\|terra\\|neve\\|pioggia\\|male\\|bene\\|rumore\\|cioccolata\\|marmellata\\|miele\\|succo\\|sugo\\|aria\\|fumo\\|fuoco\\|luce\\|musica\\|tempo\\|denaro\\|carta\\|plastica\\|legno\\|ferro\\|oro\\|erba\\|colla\\|pipì\\|cacca\\|altro\\|tutto\\)$"]; }   % mass nouns can be partitive when singular
+    commands {
+      add_node P :< D;
+      P.form = amalg.prep; P.lemma = "di"; P.upos = ADP; P.xpos = "E";
+      P.textform = amalg.fused; P.wordform = amalg.prep;
+      D.form = amalg.art; D.lemma = "il"; D.upos = DET; D.xpos = "RD";
+      D.textform = "_"; D.wordform = amalg.art; D.Definite = "Def";
+      add_edge N -[case]-> P;
+      del_edge e0; add_edge N -[det]-> D;
+      D.fix = split_di_count_noun;
+    }
+  }
+
+  % last resort: the deprel says PP or genitive
+  rule split_di_pp (amalg from "italian-amalgami.grewlex.tsv") {
+    pattern {
+      amalg.kind = "split";
+      D [form=amalg.fused];
+      N []; e0: N -> D; D << N;
+      X -[1=nmod|obl]-> N;
+    }
+    without { N -[1=case]-> C; }
+    commands {
+      add_node P :< D;
+      P.form = amalg.prep; P.lemma = "di"; P.upos = ADP; P.xpos = "E";
+      P.textform = amalg.fused; P.wordform = amalg.prep;
+      D.form = amalg.art; D.lemma = "il"; D.upos = DET; D.xpos = "RD";
+      D.textform = "_"; D.wordform = amalg.art; D.Definite = "Def";
+      add_edge N -[case]-> P;
+      del_edge e0; add_edge N -[det]-> D;
+      D.fix = split_di_pp;
     }
   }
 
@@ -528,7 +586,9 @@ strat main {
     % re-fuse last (it must not see the pair split_di has just created - it
     % cannot, since 'di' is absent from the kind=fuse rows of the lexicon).
     Onf (amalgami.di_verb_complement),
-    Onf (amalgami.split_di),
+    Onf (amalgami.split_di_after_nominal),
+    Onf (amalgami.split_di_count_noun),
+    Onf (amalgami.split_di_pp),
     Onf (amalgami.fuse_contraction)
   )
 }

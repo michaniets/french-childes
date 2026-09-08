@@ -47,6 +47,28 @@ relabels `obj` -> `obl:arg` for a lexicon-intransitive verb with a di-form
   sequence the child produced stays as transcribed; the mark carries the original
   capitalisation too.
 
+**Deciding a di-form needs more than the deprel.** The first version keyed the
+split on the head noun's relation (nmod/obl*), mirroring French. On a real Roma
+run that fired 5 times and missed 11 of 11 genuine prep+art cases, because
+child-language parses put the head of a genitive on nsubj/obj/root - *il naso
+della bimba* had `bimba` as nsubj - and mistag the fused form itself as
+ADJ/PRON/NOUN in 4 of them. Two much stronger signals, measured on ISDT+PoSTWITA:
+
+- **a nominal to the left**: prep+art 7,687 vs partitive 6 after a NOUN, and
+  1,038 vs 0 after an ADJ;
+- **a singular head noun**: prep+art 51.8% vs partitive 7.1% - and every singular
+  partitive in the gold data is a mass noun (`acqua`, `farina`, `male`, `rumore`,
+  `gente`), never a count noun.
+
+So `split_di_after_nominal` and `split_di_count_noun` now license the split on
+those, with the deprel rule kept as a fallback; a mass-noun list keeps *c'è
+dell'acqua* fused. What stays fused is what the gold data says is partitive - a
+plural or mass head after a verb (*legge dei libri*). The governor is matched
+with a bare edge rather than `-[det]->` and its upos is not constrained, so a
+mistagged fused form is still handled, and the article is relabelled `det`
+whatever the parser called it. On Roma this takes di-splits from 5 to 14, with
+the only two left fused being the fixed adverbial *del tutto* and one fragment.
+
 Verified end to end on the 23 known-bad sentences, re-tokenised, re-parsed
 through the API and rewritten: **16 repaired, 0 regressed** (the other 7 were
 already correct once re-parsed in isolation). All 24 marks survived the API

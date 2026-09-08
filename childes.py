@@ -10,7 +10,7 @@
 # ///
 
 __author__ = "Achim Stein"
-__version__ = "5.9"
+__version__ = "6.0"
 __status__ = "8.9.26"
 __license__ = "GPL"
 

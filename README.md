@@ -64,13 +64,28 @@ This script converts CHILDES chat data to a one-word-per-line CSV format. It int
       - A **full CSV** (`.parsed.csv`) containing all original columns plus the complete CoNLL-U annotation for each token.
       - A **light CSV** (`.light.csv`) containing a subset of columns, optionally filtered by the POS of the token (`--pos_output`).
       - An optional **CoNLL-U file** (`.conllu`) for use with other NLP tools.
-      - Optional **HTML files** for browsing the parsed dependency trees in a web browser.
+      - Optional **HTML files** for browsing the parsed dependency trees in a web browser:
+        a self-contained viewer that draws the trees as dependency arcs and filters by
+        word, speaker or utterance id. No server or internet connection is needed.
 
 ### Recent changes
 
 Full rationale, evidence and examples for each item below are in
 [CHANGELOG.md](CHANGELOG.md).
 
+- **v6.0:** the tokenisation work of 5.7-5.9 is finished and verified - French
+  and Italian output now passes the official UD validator at level 5, the
+  strictest language-specific level, and the CoNLL-U carries `# sent_id`.
+  Italian gained preposizioni articolate (`al`, `nella`, `sul` pre-split and
+  re-fused as multiword tokens; the ambiguous `di`-forms stay fused so the
+  parser can decide partitive against preposition). The table and the CoNLL-U
+  are one grid again: a rule that splits a contraction inserts a node, which
+  used to shift `lemma`, `pos` and every `conll_*` column - and the codings
+  merged by `dql.py` - to the end of the utterance. TreeTagger now runs after
+  the rewrite, on the final tokenisation. The HTML export was replaced by a
+  self-contained viewer that draws real dependency arcs, filters, and is about
+  a third of the size; no dependencies, no server. Rule files renamed to
+  `<lang>-post-parse.grs`.
 - **v5.9 (Italian):** `--split_enclitics` splits verb+clitic forms
   (`dammi` → `dam`+`mi`) into UD-style multiword tokens before parsing, since a
   fused enclitic form is out of vocabulary for tagger and parser alike;

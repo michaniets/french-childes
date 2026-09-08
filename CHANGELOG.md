@@ -5,7 +5,91 @@ summary per version; this file has the full reasoning, evidence, and examples
 behind each design decision, for anyone who needs to know *why* something works
 the way it does before changing it.
 
-## Unreleased - Cyclic graphs, ecco, and the HTML export
+## v6.0 - UD-conformant tokenisation for French and Italian
+
+The tokenisation work of 5.7-5.9 is finished and verified: both languages now
+pass the official UD validator at level 5, the strictest language-specific
+level. The pieces are language-neutral enough to extend - a language needs a
+splitting rule set in childes.py and a <lang>-post-parse.grs, and the
+surrounding machinery (multiword tokens, marks in MISC, re-gridding, validation)
+is shared.
+
+The sections below group the changes; the git history has them individually.
+
+### UD compliance
+
+The CoNLL-U carried `# item_id` but not `# sent_id`, so every sentence failed
+the validator at level 2 - the lowest gate. Both are written now, with the same
+value: `item_id` is kept because dql.py, the CSV URL columns and the HTML
+anchors use it.
+
+French emitted `obl:loc`, which UD French does not document (level 4 rejects
+it; only `obl`, `obl:agent`, `obl:arg`, `obl:mod` are permitted). The `aller_a`
+rule keeps `obl:arg` and records the locative reading in `fix=aller_a`, where it
+remains available for gold work. Since the relation is now unchanged, the rule
+needed a guard to stop it re-matching itself.
+
+`init_fix_misc` seeded `fix` with an empty value in French too; the separator in
+the twelve accumulating rules moved to the front so the seed joins cleanly:
+`fix=none,aller_a`.
+
+The validator itself is vendored in childes-gold (`ud/tools/validate.py`),
+pinned to the last self-contained upstream revision.
+
+### The table and the CoNLL-U are one grid again
+
+A rewrite rule can change the number of tokens: `split_di` and `split_du` turn
+one fused determiner into a preposition plus an article. outRows is built from
+childes.py's own tokenisation, before parsing, and the columns are joined
+positionally on `<utt>_w<n>`, so after such a split every CoNLL-U id was one
+higher than the row claiming it - and the damage ran to the end of the
+utterance, taking lemma, pos and every `conll_*` column from the following
+token. dql.py --merge has the same contract, so query codings landed on the
+wrong row as well. The rows are now re-gridded onto the final CoNLL-U after the
+rewrite, aligning through the multiword-token ranges. Measured on the full Roma
+output: of 2957 utterances 2943 align one to one, 14 through a Grew-created
+split, none fail.
+
+`--tag_ud_tokens` had the same off-by-one, and tagged the fused form as one
+token besides. The tagger now runs after the rewrite and the re-gridding, so it
+sees exactly the tokens that reach the CoNLL-U and the CSV. This matters because
+the tagger's lexical lemmas are frequently better than the parser's - for
+`popò` the parser invents `popare` where the tagger keeps the form - which is
+the reason the columns exist at all.
+
+### HTML export
+
+Two steps, so the previous style remains available. First a conservative pass on
+the existing exporter: `--chunk_html` default 5000 -> 1000 (a file drops from
+about 1.7 MB to 650 KB), a rewritten stylesheet with dark mode and a sticky
+header, and child production in bold dark green.
+
+Then the exporter was replaced by a self-contained viewer. The old format wrote
+one block of coloured spans per sentence - about 600 bytes each, 65% markup -
+which was both why the files were large and why real trees were impossible:
+once a parse is flattened to dotted text there is no structure to draw arcs
+from. The sentences are now embedded as compact JSON and the page draws
+dependency arcs as SVG on demand: 0.61 MB across three files against 1.7 MB in
+one, plus a filter box, multiword surfaces shown under the group, and dark mode.
+No dependencies, no CDN, no server. Filenames and `#item_id` anchors are
+unchanged, so the URL columns keep resolving.
+
+The export also used to run before the rewrite, so the trees showed the
+uncorrected analysis and their numbering could not match the final CoNLL-U. A
+sentence whose graph cannot be turned into a tree now keeps its entry and
+reports why, instead of disappearing silently.
+
+### Renamed rule files
+
+`french-gsd-ud.grs` and `italian-isdt-ud.grs` became `french-post-parse.grs` and
+`italian-post-parse.grs`. The old names implied a tie to one treebank that does
+not exist: the xpos values written (V, B, E, RD, PC) are identical across ISDT
+and PoSTWITA, the deprels are plain UD, and the errors repaired come from
+out-of-vocabulary forms rather than one model's quirks. The real coupling is to
+the language's UD conventions and to childes.py's `Enclitic=` and `Amalgama=`
+marks.
+
+### Cyclic graphs and ecco
 
 **The HTML trees were exported before the Grew rewrite**, so they showed the
 uncorrected analysis and their token numbering could not match the final
@@ -46,7 +130,7 @@ them, which changes roughly 30 previously `obj` clitics in Roma.
 tree keeps its entry in the HTML and prints the reason in red, instead of being
 skipped silently.
 
-## Unreleased - Italian preposizioni articolate
+### Italian preposizioni articolate
 
 The French du/des problem transposed to Italian, and measured rather than assumed.
 
@@ -117,7 +201,7 @@ round-trip, all 24 multiword tokens were restored, no mark was left behind, a
 genuine *con la pianta* was untouched, and the enclitic results of the previous
 entry are unchanged.
 
-## Unreleased - Italian clitic rules made reachable
+### Italian clitic rules made reachable
 
 Two defects meant most of the `clitici` package still never applied, even after
 the regex-escaping fix recorded under v5.9 below.

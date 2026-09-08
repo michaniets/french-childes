@@ -5,6 +5,45 @@ summary per version; this file has the full reasoning, evidence, and examples
 behind each design decision, for anyone who needs to know *why* something works
 the way it does before changing it.
 
+## Unreleased - fixes found while converting the Italian corpora
+
+Running the full seven corpora surfaced four defects, three of them in rules
+added for 6.0 and reachable only on data Roma does not contain.
+
+**Two rules looped.** `single_12_iobj_with_object` and
+`single_12_transitive_verb` each guarded only against the relation it assigns
+itself, so on a verb matching both they alternated forever and Grew aborted the
+file after 10000 steps - Antelmi and Calambrone produced no rewritten output at
+all. The documented precedence is that a competing object settles the case
+syntactically, so the lexicon rule now stands back when the host already has a
+NOUN/PROPN object.
+
+**A clitic could get two governors.** In a cluster the parser often makes the
+second clitic depend on the first, and `reattach_second` cannot express that:
+it binds C1, so by injectivity its X can never be C1. `reattach_root_second`
+then added a second edge, giving `head=16|17` - which the CoNLL-U readers
+reject, so the HTML export aborted on three corpora and left malformed files on
+disk. A dedicated rule now moves that edge, and the root rules fire only when
+the clitic has no governor at all.
+
+**The root was being destroyed.** The parser makes a clitic the sentence root
+more often than expected; reattaching it under the host deleted the root edge
+and closed a cycle, leaving 30 sentences non-tree. Grew represents the root as
+an ordinary edge from a matchable node, so it can be moved instead:
+`root_clitic_promote` transfers it to the host. This also showed that
+`without { X -> C }` is never true, because X matches the root node too.
+
+**SpaceAfter=No was never written**, so the text could not be reconstructed from
+the tokens: 11272 level-2 failures, every failure of that gate apart from the
+non-tree sentences. A pass now walks the tokens against `# text`, using the
+multiword range line as the surface unit where there is one. All 103370
+sentences reconstruct.
+
+**The UDPipe provenance block** is now written once, from the model actually
+requested, instead of relying on the API echoing it: the presegmented path
+rebuilds each sentence and dropped it, and with several chunks it would
+otherwise appear repeatedly in the middle of the file.
+
 ## v6.0 - UD-conformant tokenisation for French and Italian
 
 The tokenisation work of 5.7-5.9 is finished and verified: both languages now

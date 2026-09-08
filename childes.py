@@ -1429,6 +1429,7 @@ class ChatProcessor:
                 # SpaceAfter last, on the final tokens, and written back so the
                 # file on disk carries it too
                 parsed_conllu_str = self.add_space_after(parsed_conllu_str)
+                parsed_conllu_str = self.ensure_udpipe_header(parsed_conllu_str)
                 conllu_data = self._parse_conllu_output(parsed_conllu_str)
                 with open(conllu_output_path, 'w', encoding='utf8') as f_conllu:
                     f_conllu.write(parsed_conllu_str)
@@ -1572,6 +1573,27 @@ class ChatProcessor:
         sys.stderr.write(f"- Full table (one row per token): {parsed_csv_path}\n")
         sys.stderr.write(f"- Light table (selected columns and filtered tokens): {light_csv_path}\n")
         os.unlink(tmp_file)  # delete temp file after writing
+
+    def ensure_udpipe_header(self, conllu_str):
+        """
+        Puts a single UDPipe provenance block at the top of the file.
+
+        The API echoes '# generator', '# udpipe_model' and '# udpipe_model_licence'
+        on the first sentence of every response, but that is not something to rely
+        on: restamp_presegmented_output() rebuilds each sentence from its tokens and
+        drops them (verified), and with several chunks or several parser paths in
+        one file they would otherwise appear repeatedly, in the middle of the file.
+
+        Any copies the API supplied are removed and one block is written from the
+        model we actually asked for, so the provenance is recorded exactly once and
+        is correct whichever path produced the sentences.
+        """
+        drop = ('# generator =', '# udpipe_model =', '# udpipe_model_licence =')
+        kept = [l for l in conllu_str.split('\n') if not l.startswith(drop)]
+        header = ("# generator = UDPipe 2, https://lindat.mff.cuni.cz/services/udpipe\n"
+                  f"# udpipe_model = {self.args.api_model}\n"
+                  "# udpipe_model_licence = CC BY-NC-SA\n")
+        return header + '\n'.join(kept).lstrip('\n')
 
     def add_space_after(self, conllu_str):
         """

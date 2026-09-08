@@ -24,7 +24,7 @@ SERVER_IP="server-for-html-version-of-corpus.org"  # replace with your server IP
 PYPATH="$HOME/git/french-childes"  # adjust to your path
 TAGGER_PAR="${DATAPATH}/perceo-spoken-french-utf.par"   # TreeTagger parameter file
 API_MODEL="french"  # UDPipe model. / French: french-gsd-ud-2.5-191206 / German: german-gsd-ud / Italian: italian-isdt-ud-2.5
-GRS_FILE="french-gsd-ud.grs"  # GREW rules file for parsing corrections (Option --rewrite))
+GRS_FILE="french-post-parse.grs"  # GREW rules file for parsing corrections (Option --rewrite))
 HTML_DIR="ch_fr"  # subfolder for parsed HTML files (don't precede with './')
 SERVER_URL="https://${SERVER_IP}/${HTML_DIR}"  # julienas - keep string short to avoid large output files
 # for Step 2: dql.py request file for linguistic codings

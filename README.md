@@ -75,13 +75,13 @@ Full rationale, evidence and examples for each item below are in
   (`dammi` → `dam`+`mi`) into UD-style multiword tokens before parsing, since a
   fused enclitic form is out of vocabulary for tagger and parser alike;
   optional `--verb_lexicon`/`--enclitic_stoplist` raise recall and prevent
-  real-word collisions (`dici`, `animali`). `italian-isdt-ud.grs` (packages
+  real-word collisions (`dici`, `animali`). `italian-post-parse.grs` (packages
   `clitici` and `enclitic_host_repair`) reassigns clitic dependency relations
   from the gold ISDT/PoSTWITA distribution and corrects the host's own
   upos/lemma/FEATS when the parser mistags a fused or short/rare split form.
 - **v5.8 (French):** `--fuse_contractions` keeps `du`/`des` fused for parsing
   (restores the `obj`/`obl:arg` distinction UDPipe's own tokeniser loses;
-  `au`/`aux` are pre-split instead); `french-gsd-ud.grs` (package `amalgames`)
+  `au`/`aux` are pre-split instead); `french-post-parse.grs` (package `amalgames`)
   derives the UD-conformant surface form afterward from deprel. Tokenisation
   without a tagger now defers to UDPipe's own UD-compliant tokeniser
   (multiword tokens, e.g. `gonna`→`gon`+`na`). `--tag_ud_tokens` lets the

@@ -19,7 +19,7 @@ SERVER_IP="julienas.philosophie.uni-stuttgart.de"  # replace with your server IP
 PYPATH="$HOME/git/dygram/french-childes"  # adjust to your path
 TAGGER_PAR="${DATAPATH}/italian.par"   # TreeTagger parameter file
 API_MODEL="italian-isdt-ud-2.5"  # UDPipe model. For German: german-gsd-ud
-GRS_FILE="${PYPATH}/other-languages/italian/italian-isdt-ud.grs"  # GREW rules file for parsing corrections (Option --rewrite))
+GRS_FILE="${PYPATH}/other-languages/italian/italian-post-parse.grs"  # GREW rules file for parsing corrections (Option --rewrite))
 HTML_DIR="ch_it"  # subfolder for parsed HTML files (don't precede with './')
 SERVER_URL="https://${SERVER_IP}/${HTML_DIR}"  # julienas - keep string short to avoid large output files
 # for Step 2: dql.py request file for linguistic codings

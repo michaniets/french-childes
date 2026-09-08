@@ -222,7 +222,7 @@ never consulted.
   verb lexicon raises recall but also creates collisions, splitting `dici` as
   `di`+`ci` and `animali` as `anima`+`li` (470 tokens on this corpus). Without
   either file the built-in seed lexicon is used, at lower recall.
-- *Stage 2, in `italian-isdt-ud.grs` (package `clitici`).* The parser handles the
+- *Stage 2, in `italian-post-parse.grs` (package `clitici`).* The parser handles the
   accusative reliably once the token is split, but not the dative or reflexive
   (`porta me lo` → `me`/`nsubj`, `va te ne` → `te`/`nsubj`, `fa mi vedere` →
   `mi`/`obj`), and it frequently attaches the clitic to the wrong head. The rules
@@ -348,7 +348,7 @@ not just the surface form.**
   (whichever reading turns out to be correct, the parser now has the evidence it
   needs for the right deprel) and `au`/`aux` pre-split into `à le`/`à les`
   (never ambiguous, so no need to wait for the analysis). **Stage 2**, in
-  `french-gsd-ud.grs` (package `amalgames`): once deprel is known, derive the
+  `french-post-parse.grs` (package `amalgames`): once deprel is known, derive the
   UD-conformant surface form from it - `nmod`/`obl*` ⇒ expand `du`/`des` into a
   `de`+`le`/`les` multiword token; `obj`/`nsubj` ⇒ leave as a single DET
   (UD_French-GSD's own convention for the partitive/indefinite article);

@@ -325,13 +325,21 @@ class HtmlExporter:
       .u { color:DarkGreen; }
       .x { color:Olive; }
       .d { color:blue; }
+      .m { color:gray; }
     </style>
   </head>
   <body>
 '''
         self.html_foot = '</body></html>'
 
-    def _format_tree_as_html(self, tree_str, tokenlist):
+    def _format_tree_as_html(self, tree_str, tokenlist, mwt=None):
+        """
+        mwt: {first word id: surface form of its multiword token}. to_tree() drops
+        the CoNLL-U range lines, so a split contraction or enclitic would otherwise
+        show only its syntactic words ('di' + 'il') and never the form actually
+        transcribed ('del'). The surface is appended to the first word of the group.
+        """
+        mwt = mwt or {}
         deps = {token["id"]: token["head"] for token in tokenlist}
         lines = sorted(tree_str.strip().split("\n"), key=lambda line: int(re.search(r'\[(\d+)\]', line).group(1)))
         
@@ -342,6 +350,10 @@ class HtmlExporter:
                 wID = int(match.group(1))
                 headID = deps.get(wID, 0)
                 line = line.replace(f"[{wID}]", f"[{wID}:{headID}]")
+                if wID in mwt:
+                    surface = mwt[wID].replace('<', '&lt').replace('>', '&gt')
+                    line = re.sub(r'(form:\S+)', r"\1 <span class=m>&lang;" + surface + "&rang;</span>",
+                                  line, count=1)
             
             leading_spaces = len(line) - len(line.lstrip(' '))
             indented_line = '.' * leading_spaces + line.lstrip()
@@ -433,7 +445,11 @@ class HtmlExporter:
                     sys.stdout = old_stdout; tree_str = captured_output.getvalue()
                     
                     if not tree_str: continue
-                    formatted_tree = self._format_tree_as_html(tree_str, sentence)
+                    # CoNLL-U range lines (id is a tuple, e.g. (3, '-', 4)): keep
+                    # the surface form against the first word of the group
+                    mwt = {t['id'][0]: t['form'] for t in sentence
+                           if not isinstance(t['id'], int) and t['id'][1] == '-'}
+                    formatted_tree = self._format_tree_as_html(tree_str, sentence, mwt)
 
                     f.write(f'\n<a name="{utt_id}"></a><hr>\n')  # anchor
                     if speaker == "CHI":
@@ -1391,8 +1407,6 @@ class ChatProcessor:
         html_links, conllu_data = {}, {}
         if parsed_conllu_str:
             conllu_data = self._parse_conllu_output(parsed_conllu_str)
-            if self.html_exporter:
-                html_links = self.html_exporter.export(parsed_conllu_str, self.outRows)
             if self.args.write_conllu:
                 conllu_output_path = re.sub(r'\.cha(\.gz)?$', '', self.args.chat_file) + '.conllu'
                 with open(conllu_output_path, 'w', encoding='utf8') as f_conllu:
@@ -1406,6 +1420,12 @@ class ChatProcessor:
                     with open(conllu_output_path, 'r', encoding='utf8') as f:
                         parsed_conllu_str = f.read()
                     conllu_data = self._parse_conllu_output(parsed_conllu_str)
+
+            # After the rewrite, so the trees show the corrected analysis and their
+            # token numbering matches the final CoNLL-U (a rule that splits a
+            # contraction inserts a node and shifts every id after it).
+            if self.html_exporter:
+                html_links = self.html_exporter.export(parsed_conllu_str, self.outRows)
 
         # Process rows and write initial FULL parsed CSV
         sys.stderr.write("Output tables:\n")

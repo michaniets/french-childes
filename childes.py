@@ -11,7 +11,7 @@
 
 __author__ = "Achim Stein"
 __version__ = "5.9"
-__status__ = "7.9.26"
+__status__ = "8.9.26"
 __license__ = "GPL"
 
 import sys

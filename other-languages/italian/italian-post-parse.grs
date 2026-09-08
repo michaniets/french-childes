@@ -358,6 +358,11 @@ package enclitic_host_repair {
     pattern { H [Enclitic]; }
     without { H [upos=VERB] }
     without { H [fix]; }
+    % ecco is the one Tier A host that is not a verb. When the parser already
+    % tags it ADV, ecco_host above correctly does nothing - which leaves no fix=
+    % marker to protect it, so this catch-all would clobber a correct analysis
+    % into a VERB imperative (31 of 53 ecco hosts in Roma).
+    without { H [form=re"^\([Ee]cco\)$"]; }
     commands {
       del_feat H.Gender; del_feat H.PronType; del_feat H.Definite; del_feat H.Degree;
       H.upos = VERB; H.xpos = "V"; H.Mood = "Imp"; H.VerbForm = "Fin"; H.Tense = "Pres";

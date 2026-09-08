@@ -5,6 +5,55 @@ summary per version; this file has the full reasoning, evidence, and examples
 behind each design decision, for anyone who needs to know *why* something works
 the way it does before changing it.
 
+## Unreleased - Italian preposizioni articolate
+
+The French du/des problem transposed to Italian, and measured rather than assumed.
+
+**Only `di` is ambiguous.** Italian forms the partitive article with *di* +
+article (*Max legge dei libri*), which UD keeps as a single DET; *a/da/in/su/con*
+never do. Gold ISDT makes the split/obj disjunction even sharper than French: a
+split form heads an `obj` in **1 of 15,814** cases (0.01%), an unsplit partitive
+in **57% of 75**. Verified against the live API: fusing gets both di-readings
+right (`dei libri` -> obj, `il gusto del pane` -> nmod), while splitting yields
+nmod/obl for the partitive.
+
+**The bug was the other class.** Because enclitic splitting already routes
+Italian through childes.py's own tokenisation, *every* contracted form was
+reaching the parser fused - which is right for di-forms (they were already
+correct, for free) and wrong for the rest, since a fused `al`/`nel`/`sul` hides
+the preposition and the noun comes back as a core argument. In one Roma file 23
+of 117 such forms were misanalysed: *è andata al mare* -> `mare`/**nsubj**, *sta
+sul tavolo* -> `tavolo`/**obj**, *dai da mangiare alla bambola* ->
+`bambola`/**obj**. childes.py now pre-splits them (`IT_CONTRACTIONS`), and a new
+`amalgami` package restores the UD surface from the deprel: re-fuse the
+pre-split ones as a multiword token, expand a di-form to `di` + article when its
+head noun is nmod/obl*, leave it a single DET when obj/nsubj. `di_verb_complement`
+relabels `obj` -> `obl:arg` for a lexicon-intransitive verb with a di-form
+"object", which then lets the split apply; it is traceable as
+`fix=di_verb_complement`.
+
+**Two homograph traps, both settled on corpus counts rather than intuition:**
+
+- `dai dallo dalla dalle dagli` collide with *dare*. ISDT is newswire and has
+  `dai` 166x as a contraction against 2x as a verb; child language inverts that -
+  in Roma `dai` is 17x VERB (*me lo dai?*), 7x ADV (*dai!*) and only about 6x the
+  contraction, and *dalla a mamma* is *give it to mum*. They are never pre-split
+  and keep the residual obl error, rather than corrupting a frequent verb.
+- Re-fusion is keyed on an `Amalgama=` mark childes.py writes in MISC, **not** on
+  the surface forms. Modern Italian writes *con il/la* uncontracted - 1,147
+  occurrences in this corpus against 508 `col` - so a form-based rule would
+  silently rewrite a genuine *con la* as *colla*, which is also the noun 'glue'.
+  Only what the pipeline actually split is put back together, so an uncontracted
+  sequence the child produced stays as transcribed; the mark carries the original
+  capitalisation too.
+
+Verified end to end on the 23 known-bad sentences, re-tokenised, re-parsed
+through the API and rewritten: **16 repaired, 0 regressed** (the other 7 were
+already correct once re-parsed in isolation). All 24 marks survived the API
+round-trip, all 24 multiword tokens were restored, no mark was left behind, a
+genuine *con la pianta* was untouched, and the enclitic results of the previous
+entry are unchanged.
+
 ## Unreleased - Italian clitic rules made reachable
 
 Two defects meant most of the `clitici` package still never applied, even after

@@ -411,6 +411,84 @@ package clitic_reattach {
   }
 }
 
+% ============================================================
+% Preposizioni articolate (al, nella, del, ...)
+%
+% Only 'di' also forms the partitive article, so di-forms are ambiguous between
+% a single DET (Max legge dei libri) and ADP+DET (il gusto del pane), and are
+% submitted to the parser FUSED so that it can decide - measured in ISDT: a split
+% form heads an obj in 1 of 15814 cases (0.01%), an unsplit partitive in 57% of
+% 75, and fusing gets both readings right. a/in/su/con (and the unambiguous dal,
+% dall') never form a partitive; left fused the parser loses the preposition and
+% reads the noun as a core argument, so childes.py pre-splits them.
+%
+% These rules restore the UD-conformant surface from the deprel, which is exactly
+% what the tokenizer could not know:
+%   pre-split a/in/su/con/da  -> re-fuse as a multiword token (analysis was right)
+%   di-form, head noun nmod/obl* -> expand to di + article (multiword token)
+%   di-form, head noun obj/nsubj -> partitive article, leave as a single DET
+% Each rule logs in 'fix' on the node it changes.
+%
+% The dare-homographs dai/dallo/dalla/dalle/dagli are never pre-split (see
+% IT_CONTRACTIONS_VETOED in childes.py), so they arrive fused and are left alone
+% here: in child language they are overwhelmingly the verb, not the contraction.
+% ============================================================
+package amalgami {
+
+  % An intransitive verb has no direct object, so a di-form "object" is a di-PP.
+  % Relabelling to obl:arg also lets split_di below apply on the next pass.
+  rule di_verb_complement (verbs from "italian-verbs.grewlex.tsv") {
+    pattern {
+      V [upos=VERB|AUX, lemma=verbs.lemma]; verbs.Obj = "no";
+      N []; D [form=re"^\([Dd]el\|[Dd]ello\|[Dd]ella\|[Dd]ell'\|[Dd]ei\|[Dd]egli\|[Dd]elle\)$", upos=DET];
+      N -[det]-> D;
+      e: V -[obj]-> N;
+    }
+    without { N -[1=case]-> C; }   % already marked by another preposition
+    commands {
+      del_edge e; add_edge V -[obl:arg]-> N; V.fix = di_verb_complement;
+    }
+  }
+
+  % di-form in a PP or genitive: expand to the UD multiword token di + article.
+  rule split_di (amalg from "italian-amalgami.grewlex.tsv") {
+    pattern {
+      amalg.kind = "split";
+      D [form=amalg.fused, upos=DET];
+      N []; N -[det]-> D;
+      X -[1=nmod|obl]-> N;
+    }
+    without { N -[1=case]-> C; }   % already has its own preposition
+    commands {
+      add_node P :< D;
+      P.form = amalg.prep; P.lemma = "di"; P.upos = ADP; P.xpos = "E";
+      P.textform = amalg.fused; P.wordform = amalg.prep;
+      D.form = amalg.art; D.lemma = "il"; D.upos = DET; D.xpos = "RD";
+      D.textform = "_"; D.wordform = amalg.art; D.Definite = "Def";
+      add_edge N -[case]-> P;
+      D.fix = split_di;
+    }
+  }
+
+  % Pre-split a/da/in/su/con + article: restore the fused surface as a multiword
+  % token. The analysis is already right; only the surface differs.
+  %
+  % Matched on the Amalgama= mark childes.py wrote, NOT on the forms: modern
+  % Italian writes 'con il/la' uncontracted (1147 occurrences in this corpus
+  % against 508 'col'), so a form-based rule would rewrite a genuine 'con la' as
+  % 'colla' - which is also the noun 'glue'. Only what we split is re-fused, so
+  % an uncontracted sequence the child actually produced stays as transcribed.
+  % The mark also carries the original capitalisation, and deleting it
+  % terminates the rule.
+  rule fuse_contraction {
+    pattern { P [Amalgama]; D []; P < D; }
+    commands {
+      P.textform = P.Amalgama; D.textform = "_";
+      del_feat P.Amalgama; P.fix = fuse_contraction;
+    }
+  }
+}
+
 strat main {
   Seq (
     Onf (enclitic_host_repair.ecco_host),
@@ -445,7 +523,13 @@ strat main {
       clitici.single_12_dative_verb,
       clitici.single_12_transitive_verb,
     )),
-    Onf (clitici.single_12_undecided)
+    Onf (clitici.single_12_undecided),
+    % contractions: relabel first, so split_di sees the corrected deprel, and
+    % re-fuse last (it must not see the pair split_di has just created - it
+    % cannot, since 'di' is absent from the kind=fuse rows of the lexicon).
+    Onf (amalgami.di_verb_complement),
+    Onf (amalgami.split_di),
+    Onf (amalgami.fuse_contraction)
   )
 }
 

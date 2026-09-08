@@ -1,0 +1,31 @@
+% Italian di-forms (del, dello, della, dell', dei, degli, delle), for the
+% 'amalgami' package in italian-isdt-ud.grs.
+%
+% Only 'di' also forms the PARTITIVE article, so these are ambiguous between a
+% single DET (Max legge dei libri) and di + article (il gusto del pane), and are
+% submitted to the parser FUSED so the analysis can decide. split_di expands one
+% into a multiword token only when the head noun is nmod/obl*; an obj/nsubj head
+% means partitive and it stays a single DET.
+%
+% a/da/in/su/con contractions are NOT here: childes.py pre-splits those and marks
+% them Amalgama= in MISC, and fuse_contraction re-fuses on that mark alone.
+%
+% Capitalised variants are listed explicitly: Grew has no case folding, so an
+% utterance-initial 'Della' must map to 'Di'.
+%
+% Generated - see IT_CONTRACTIONS in childes.py, which must stay in step.
+fused	prep	art	kind
+degli	di	gli	split
+Degli	Di	gli	split
+dei	di	i	split
+Dei	Di	i	split
+del	di	il	split
+Del	Di	il	split
+dell'	di	l'	split
+Dell'	Di	l'	split
+della	di	la	split
+Della	Di	la	split
+delle	di	le	split
+Delle	Di	le	split
+dello	di	lo	split
+Dello	Di	lo	split

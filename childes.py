@@ -224,6 +224,40 @@ IT_AUXILIARIES = {
     'avevamo', 'avevano', 'avrà', 'avranno', 'avrei',
 }
 
+# Italian preposizioni articolate: preposition + definite article written as one
+# word. Only 'di' also forms the PARTITIVE article ('Max legge dei libri'), which
+# UD keeps as a single DET, so di-forms are genuinely ambiguous between DET and
+# ADP+DET and must be left fused for the parser to decide - exactly like French
+# du/des, and for the same measured reason: in UD_Italian-ISDT a split form heads
+# an 'obj' in 1 of 15814 cases (0.01%), an unsplit partitive in 57% of 75. Fusing
+# gets both readings right (dei libri -> obj, il gusto del pane -> nmod).
+#
+# a/in/su/con never form a partitive, so they are always ADP+DET. Left fused the
+# parser loses the preposition and reads the noun as a core argument ('è andata
+# al mare' -> mare/nsubj, 'sta sul tavolo' -> tavolo/obj: 23 of 117 such forms
+# were misanalysed in one Roma file). They are therefore pre-split here, and the
+# fused surface is restored as a multiword token by the 'amalgami' rules.
+IT_CONTRACTIONS = {
+    'al': 'a il', 'allo': 'a lo', 'alla': 'a la', 'ai': 'a i',
+    'agli': 'a gli', 'alle': 'a le', "all'": "a l'",
+    'dal': 'da il', "dall'": "da l'",
+    'nel': 'in il', 'nello': 'in lo', 'nella': 'in la', 'nei': 'in i',
+    'negli': 'in gli', 'nelle': 'in le', "nell'": "in l'",
+    'sul': 'su il', 'sullo': 'su lo', 'sulla': 'su la', 'sui': 'su i',
+    'sugli': 'su gli', 'sulle': 'su le', "sull'": "su l'",
+    'col': 'con il', 'coi': 'con i',
+}
+
+# da-forms that are homographic with 'dare' (dai = 'you give' / 'come on!',
+# dalla/dallo/dalle/dagli = da' + enclitic) are deliberately NOT in the table
+# above. ISDT is newswire and has dai 166x as a contraction against 2x as a verb,
+# but child language inverts that: in Roma 'dai' is 17x VERB ('me lo dai?'), 7x
+# ADV ('dai!') and only about 6x the contraction, and 'dalla a mamma' is 'give it
+# to mum'. Splitting them would corrupt a frequent verb to repair a rare
+# contraction, so they stay fused and keep the obl error. Same reasoning as
+# IT_MONOSYLLABIC_GEMINATING_IMP.
+IT_CONTRACTIONS_VETOED = {'dai', 'dallo', 'dalla', 'dalle', 'dagli'}
+
 
 def _it_verb_forms(lemmas):
     """
@@ -470,7 +504,7 @@ class ChatProcessor:
         """
         if self.args.fuse_contractions == 'yes': return True
         if self.args.fuse_contractions == 'no': return False
-        return bool(getattr(self, 'language', '') and re.search(r'fra|french', self.language))
+        return bool(getattr(self, 'language', '') and re.search(r'fra|french|ita|italian', self.language))
 
     def split_enclitics(self):
         """
@@ -688,6 +722,43 @@ class ChatProcessor:
             s = re.sub(r'\s+', ' ', s).strip()
         return s
 
+    def _it_split_contractions(self, s, mwt, misc):
+        """
+        Splits Italian preposizioni articolate on the finished token list:
+        'nella' -> 'in la', "sull'" -> "su l'", 'Al' -> 'A il'.
+
+        The preposition carries Amalgama=<original form> in MISC, and the
+        'amalgami' rules re-fuse ONLY marked pairs. Matching on the forms alone
+        would be wrong: modern Italian writes 'con il/la' uncontracted (1147
+        occurrences in this corpus against 508 'col'), so a form-based rule would
+        silently rewrite genuine 'con la' as 'colla' - which is also the noun
+        'glue'. Marking keeps the surface faithful and restores the capital for
+        free. di-forms are not listed (ambiguous, must stay fused) and neither
+        are the dare-homographs (IT_CONTRACTIONS_VETOED).
+
+        Runs after split_italian_enclitics(), so the multiword-token groups and
+        MISC keys it returned are re-indexed here for the tokens inserted.
+        """
+        toks = s.split()
+        out, shift, marks = [], {}, {}
+        for i, t in enumerate(toks, 1):
+            shift[i] = len(out) + 1
+            rep = IT_CONTRACTIONS.get(t.lower())
+            if rep is None:
+                out.append(t)
+                continue
+            prep, art = rep.split(' ', 1)
+            if t[:1].isupper():
+                prep = prep.capitalize()
+            marks[len(out) + 1] = 'Amalgama=' + t
+            out.extend([prep, art])
+        if not marks:
+            return s, mwt, misc
+        mwt = [(shift[a], shift[b], f, tier) for (a, b, f, tier) in mwt]
+        misc = {shift[k]: v for k, v in misc.items()}
+        misc.update(marks)
+        return ' '.join(out), mwt, misc
+
     def tokenise(self, s, split_contractions=False, return_mwt=False):
         """
         Tokenises a string, with language-specific rules.
@@ -695,12 +766,16 @@ class ChatProcessor:
         German clitics can't be handled: habs, gehts, etc.
 
         split_contractions: only set when the result is submitted to the parser with
-        fixed tokens (fuse_contractions()). French au/aux are then pre-split into
-        'à le' / 'à les'. Unlike du/des they have no partitive reading, so they are
-        always the preposition à + article; leaving them fused loses the preposition
-        and the parser reads the noun as a direct object ('il va au parc' -> parc/obj
-        instead of obl:arg). Not applied for tagger input, where the token grid must
-        stay aligned with TreeTagger's own tokenisation.
+        fixed tokens (fuse_contractions()). The unambiguous contractions are then
+        pre-split - French au/aux into 'à le' / 'à les', Italian a/da/in/su/con
+        forms into 'a il', 'in la' etc. (see IT_CONTRACTIONS). None of these has a
+        partitive reading, so they are always preposition + article; leaving them
+        fused loses the preposition and the parser reads the noun as a core
+        argument ('il va au parc' -> parc/obj instead of obl:arg, 'è andata al
+        mare' -> mare/nsubj). The ambiguous ones - French du/des, Italian di-forms
+        - stay fused instead, because only the eventual deprel can decide them.
+        Not applied for tagger input, where the token grid must stay aligned with
+        TreeTagger's own tokenisation.
 
         return_mwt: also return the multiword-token groups and the MISC map produced
         by Italian enclitic splitting (see split_italian_enclitics()). Unlike the
@@ -748,6 +823,11 @@ class ChatProcessor:
         mode = self.split_enclitics()
         if mode != 'none' and s.strip():
             s, mwt, misc = self.split_italian_enclitics(s.strip(), mode)
+        # Contractions last, on the finished token list, so the marks it writes
+        # are keyed by the final token indices (see _it_split_contractions).
+        if split_contractions and s.strip() and re.search(
+                r'ita|italian', getattr(self, 'language', '') or ''):
+            s, mwt, misc = self._it_split_contractions(s, mwt, misc)
         return (s, mwt, misc) if return_mwt else s
 
     def tokens2conllu(self):

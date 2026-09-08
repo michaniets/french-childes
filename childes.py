@@ -1426,6 +1426,9 @@ class ChatProcessor:
                     with open(conllu_output_path, 'r', encoding='utf8') as f:
                         parsed_conllu_str = f.read()
                     conllu_data = self._parse_conllu_output(parsed_conllu_str)
+                    # a rule may have changed the token count, which would shift
+                    # every column joined on '<utt>_w<n>' from that point on
+                    self.realign_rows_to_conllu(parsed_conllu_str)
 
             # After the rewrite, so the trees show the corrected analysis and their
             # token numbering matches the final CoNLL-U (a rule that splits a
@@ -1558,6 +1561,96 @@ class ChatProcessor:
         sys.stderr.write(f"- Full table (one row per token): {parsed_csv_path}\n")
         sys.stderr.write(f"- Light table (selected columns and filtered tokens): {light_csv_path}\n")
         os.unlink(tmp_file)  # delete temp file after writing
+
+    def realign_rows_to_conllu(self, conllu_str):
+        """
+        Re-grids self.outRows onto the token sequence of the final CoNLL-U.
+
+        A rewrite rule may change the number of tokens: split_di / split_du turn
+        one fused determiner into a preposition plus an article, inserting a node.
+        outRows is built from childes.py's own tokenisation, before parsing, so
+        from that point on every CoNLL-U id is one higher than the row that claims
+        it. The columns are joined positionally on '<utt>_w<n>', so the shift is
+        silent: the word column keeps the fused form while lemma/pos come from the
+        following token. dql.py --merge has the same contract - it looks up
+        '<sent_id>_w<node_id>' taken from the query result - so codings land on the
+        wrong row too.
+
+        Enclitics are unaffected because childes.py splits them itself, before
+        parsing, so both sides already agree.
+
+        Alignment walks the two sequences: equal forms map one to one, and where
+        they differ the multiword-token range covering the CoNLL-U token carries
+        the original fused form, which identifies the group that corresponds to a
+        single old row. An utterance that does not align is left as it was, with a
+        warning, rather than being silently regridded.
+        """
+        by_utt, order = {}, []
+        for row in self.outRows:
+            uid = re.match(r'(.*)_w\d+', row['utt_id']).group(1)
+            if uid not in by_utt:
+                by_utt[uid] = []
+                order.append(uid)
+            by_utt[uid].append(row)
+
+        # CoNLL-U word tokens and multiword ranges, per utterance
+        sents, cur, uid = {}, [], None
+        for line in conllu_str.splitlines():
+            if line.startswith('#'):
+                if m := re.match(r'#\s*item_id\s*=\s*(.*)', line):
+                    uid = m.group(1).strip()
+                continue
+            if not line.strip():
+                if uid:
+                    sents[uid] = cur
+                cur, uid = [], None
+            else:
+                cur.append(line.split('\t'))
+        if uid:
+            sents[uid] = cur
+
+        new_rows, regridded, failed = [], 0, 0
+        for uid in order:
+            old = by_utt[uid]
+            toks = sents.get(uid)
+            if not toks:
+                new_rows.extend(old)
+                continue
+            words = [t for t in toks if '-' not in t[0] and '.' not in t[0]]
+            mwt = {int(t[0].split('-')[0]): (int(t[0].split('-')[1]), t[1])
+                   for t in toks if '-' in t[0]}
+
+            mapped, i, j, ok = [], 0, 0, True
+            while i < len(old) and j < len(words):
+                wid = int(words[j][0])
+                if old[i]['word'] == words[j][1]:
+                    mapped.append((words[j], old[i])); i += 1; j += 1
+                elif wid in mwt and mwt[wid][1] == old[i]['word']:
+                    for k in range(wid, mwt[wid][0] + 1):   # the whole group
+                        mapped.append((words[j], old[i])); j += 1
+                    i += 1
+                else:
+                    ok = False; break
+            if not (ok and i == len(old) and j == len(words)):
+                failed += 1
+                new_rows.extend(old)
+                continue
+            if len(mapped) != len(old):
+                regridded += 1
+            for tok, src in mapped:
+                row = src.copy()
+                row['word'] = tok[1]
+                row['utt_id'] = f"{uid}_w{tok[0]}"
+                row['w_nr'] = tok[0]
+                new_rows.append(row)
+
+        if regridded:
+            sys.stderr.write(f"- Re-gridded {regridded} utterance(s) whose token count "
+                             f"changed during rewriting.\n")
+        if failed:
+            sys.stderr.write(f"  [WARNING] {failed} utterance(s) could not be aligned with "
+                             f"the CoNLL-U and were left unchanged.\n")
+        self.outRows = new_rows
 
     def _parse_conllu_output(self, conllu_str):
         conllu_data = {}

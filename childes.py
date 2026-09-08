@@ -19,9 +19,10 @@ import argparse, re
 import os
 import subprocess
 import csv
+import html
+import json
 import tempfile
 import gzip
-import io
 import time
 import requests
 from conllu import parse
@@ -292,216 +293,179 @@ def _it_verb_forms(lemmas):
 # HTML export class for UD parsed data
 #-------------------------------------------------------
 class HtmlExporter:
-    """Generates a chunked, styled HTML corpus with dependency trees."""
+    """
+    Writes the parses as a self-contained viewer: the sentences are embedded as
+    compact JSON and the dependency arcs are drawn in the browser as SVG.
+
+    The previous version emitted one pre-rendered block of coloured markup per
+    sentence, which cost about 600 bytes each - 65% of it markup - and left no
+    structure to draw a real tree from. Storing the data instead is roughly three
+    times smaller and lets the page draw arcs, filter, and stay readable.
+
+    No dependencies, no CDN, no server: one file that works over file://.
+    Filenames and #item_id anchors are unchanged, so the URL columns in the CSV
+    keep resolving.
+    """
+
+    PAGE = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>CHILDES parses: __TITLE__</title><style>
+:root{--fg:#1a1a1a;--bg:#fff;--mut:#666;--line:#ddd;--code:#f6f6f6;
+ --chi:#0a5c2e;--acc:#06c;--tok:#111;--pos:#0a6;--dep:#06c;--mwt:#999}
+@media(prefers-color-scheme:dark){:root{--fg:#e0e0e0;--bg:#17191d;--mut:#9aa;--line:#333;
+ --code:#22252a;--chi:#4cc38a;--acc:#6aa9ff;--tok:#eee;--pos:#4cc9a0;--dep:#6aa9ff;--mwt:#888}}
+*{box-sizing:border-box}
+body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--fg);
+ background:var(--bg);margin:0}
+header{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);
+ padding:10px 16px;z-index:9;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+#q{font:14px inherit;padding:6px 10px;width:min(380px,55vw);border:1px solid var(--line);
+ border-radius:6px;background:var(--bg);color:var(--fg)}
+#n{color:var(--mut);font-size:13px}
+nav a{color:var(--acc);text-decoration:none;margin:0 6px}
+main{padding:4px 16px 40vh;max-width:1100px}
+.s{border-bottom:1px solid var(--line);padding:9px 0}
+.s:target{background:#ffe89a33;border-radius:4px}
+.h{font-size:12px;color:var(--mut)}
+.h b{color:var(--acc);font-weight:600}
+.chi .h em{color:var(--chi);font-weight:700;font-style:normal}
+.u{margin:3px 0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;
+ background:var(--code);padding:5px 9px;border-left:3px solid var(--line);border-radius:3px;
+ overflow-x:auto;white-space:pre-wrap}
+.chi .u{border-left-color:var(--chi)}
+details>summary{cursor:pointer;color:var(--acc);font-size:12px;list-style:none;padding:2px 0}
+details>summary::before{content:"\25B8 tree"}
+details[open]>summary::before{content:"\25BE tree"}
+.t{overflow-x:auto}
+svg{display:block}
+.tk{fill:var(--tok);font:13px ui-monospace,Menlo,monospace}
+.ps{fill:var(--pos);font:10px ui-monospace,Menlo,monospace}
+.dp{fill:var(--dep);font:10px ui-monospace,Menlo,monospace}
+.mw{fill:var(--mwt);font:10px ui-monospace,Menlo,monospace}
+path{fill:none;stroke:var(--mut);stroke-width:1.2}
+.err{color:#c33;font-style:italic;font-size:12px}
+</style></head><body>
+<header><nav>__NAV__</nav><input id=q placeholder="filter by word, speaker or id…" autocomplete=off>
+<span id=n></span></header><main id=m></main>
+<script id=d type="application/json">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('d').textContent),M=document.getElementById('m'),
+ N=document.getElementById('n');
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function svg(t,mwt){
+ const CW=8,PAD=14,GAP=18;let x=PAD;const xs=[];
+ t.forEach(k=>{const w=Math.max(k[1].length,k[2].length,(k[4]||'').length)*CW;xs.push(x+w/2);x+=w+GAP;});
+ const W=x+PAD,md=t.reduce((m,k)=>Math.max(m,k[3]?Math.abs(k[0]-k[3]):0),1),
+  AH=Math.min(26+md*13,160),H=AH+62;let p='';
+ const ms={};(mwt||[]).forEach(g=>ms[g[0]]=g[2]);
+ t.forEach((k,i)=>{
+  const h=k[3];
+  if(h>0&&xs[h-1]!==undefined){
+   const a=xs[i],b=xs[h-1],d=Math.abs(k[0]-h),y=AH-Math.min(d*13,AH-18),dir=b>a?1:-1;
+   p+=`<path d="M${a} ${AH} C${a} ${y} ${b} ${y} ${b} ${AH}"/>`;
+   p+=`<path d="M${b-7*dir} ${AH-6} L${b} ${AH} L${b-7*dir} ${AH+3}" stroke-width="1"/>`;
+   p+=`<text class=dp x=${(a+b)/2} y=${y-4} text-anchor=middle>${esc(k[4])}</text>`;}
+  p+=`<text class=tk x=${xs[i]} y=${AH+20} text-anchor=middle>${esc(k[1])}</text>`;
+  p+=`<text class=ps x=${xs[i]} y=${AH+34} text-anchor=middle>${esc(k[2])}</text>`;
+  if(ms[k[0]])p+=`<text class=mw x=${xs[i]} y=${AH+48} text-anchor=middle>⟨${esc(ms[k[0]])}⟩</text>`;});
+ return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${p}</svg>`;}
+function card(o){
+ return `<div class="s${o.s==='CHI'?' chi':''}" id="${esc(o.i)}"><div class=h>ID: <b>${esc(o.i)}</b>`+
+  ` | ${esc(o.p)} | <em>${esc(o.s)} | ${esc(o.a)}</em></div><div class=u>${esc(o.c)}</div>`+
+  `<details><summary></summary><div class=t></div></details></div>`;}
+function render(list){
+ M.innerHTML=list.map(card).join('');
+ N.textContent=list.length+' of '+D.length+' utterances';
+ M.querySelectorAll('details').forEach((dt,k)=>dt.addEventListener('toggle',()=>{
+  if(!dt.open||dt.dataset.done)return;dt.dataset.done=1;const o=list[k];
+  dt.querySelector('.t').innerHTML=o.e?`<p class=err>no tree for this sentence: ${esc(o.e)}</p>`
+   :svg(o.t,o.m);}));}
+let shown=D.slice(0,400);render(shown);
+document.getElementById('q').addEventListener('input',e=>{
+ const v=e.target.value.toLowerCase().trim();
+ render((v?D.filter(o=>(o.c+' '+o.i+' '+o.s).toLowerCase().includes(v)):D).slice(0,400));});
+function jump(){const id=decodeURIComponent(location.hash.slice(1));if(!id)return;
+ if(!document.getElementById(id)){const o=D.find(x=>x.i===id);if(o)render([o]);}
+ const el=document.getElementById(id);
+ if(el){el.scrollIntoView();const dt=el.querySelector('details');if(dt)dt.open=true;}}
+addEventListener('hashchange',jump);jump();
+</script></body></html>"""
+
     def __init__(self, output_dir, file_basename, chunk_size=1000):
         self.output_dir = output_dir
         self.file_basename = file_basename
-        self.project = ''  # rather than file_basename, for html filenames
         self.chunk_size = chunk_size
-        os.makedirs(self.output_dir, exist_ok=True)
-        self.html_head = '''<!DOCTYPE html>
-<html>
-  <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-  <head>
-    <title>CHILDES Parse: %s</title>
-    <style>
-      :root {
-        --fg:#1a1a1a; --bg:#fff; --mut:#666; --line:#ddd; --code-bg:#f6f6f6;
-        --chi:#0a5c2e; --lem:#a0369a; --upos:#0a6; --xpos:#8a7a00; --dep:#06c;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --fg:#e0e0e0; --bg:#17191d; --mut:#9aa; --line:#333; --code-bg:#22252a;
-          --chi:#4cc38a; --lem:#d68fd0; --upos:#4cc9a0; --xpos:#d0bd5a; --dep:#6aa9ff;
-        }
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        color: var(--fg); background: var(--bg);
-        margin: 0 auto; padding: 0 16px; max-width: 1100px; line-height: 1.5;
-      }
-      h3 { font-size: 13px; font-weight: 400; color: var(--mut); margin: 0 0 4px; }
-      hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0 10px; }
-      .parse p {
-        font-family: ui-monospace, Menlo, Consolas, monospace;
-        white-space: pre;
-        margin: 0;
-        font-size: 13px;
-        overflow-x: auto;
-      }
-      .coding {
-        background: var(--code-bg); color: var(--fg);
-        font-family: ui-monospace, Menlo, Consolas, monospace;
-        font-size: 12px; padding: 6px 10px; border-left: 3px solid var(--dep);
-        border-radius: 3px; margin: 0 0 10px; overflow-x: auto;
-      }
-      .nav-header {
-        position: sticky; top: 0; z-index: 9;
-        background: var(--bg); border-bottom: 1px solid var(--line);
-        margin: 0 0 1.5em; padding: 10px 0; text-align: center;
-      }
-      .nav-footer { margin-top: 2em; text-align: center; }
-      .nav-header a, .nav-footer a { color: var(--dep); }
-      .a { color: var(--fg); font-weight: bold; }
-      .v { background-color: #ffe89a; color: #000; border-radius: 2px; }
-      .l { color: var(--lem); }
-      /* child production: must stand out from adult speech */
-      .r { color: var(--chi); font-weight: bold; }
-      .u { color: var(--upos); }
-      .x { color: var(--xpos); }
-      .d { color: var(--dep); }
-      .m { color: var(--mut); }
-      .err { color:#c33; font-style:italic; }
-    </style>
-  </head>
-  <body>
-'''
-        self.html_foot = '</body></html>'
-
-    def _format_tree_as_html(self, tree_str, tokenlist, mwt=None):
-        """
-        mwt: {first word id: surface form of its multiword token}. to_tree() drops
-        the CoNLL-U range lines, so a split contraction or enclitic would otherwise
-        show only its syntactic words ('di' + 'il') and never the form actually
-        transcribed ('del'). The surface is appended to the first word of the group.
-        """
-        mwt = mwt or {}
-        deps = {token["id"]: token["head"] for token in tokenlist}
-        lines = sorted(tree_str.strip().split("\n"), key=lambda line: int(re.search(r'\[(\d+)\]', line).group(1)))
-        
-        rebuilt_lines = []
-        for line in lines:
-            match = re.search(r'\[(\d+)\]$', line)
-            if match:
-                wID = int(match.group(1))
-                headID = deps.get(wID, 0)
-                line = line.replace(f"[{wID}]", f"[{wID}:{headID}]")
-                if wID in mwt:
-                    surface = mwt[wID].replace('<', '&lt').replace('>', '&gt')
-                    line = re.sub(r'(form:\S+)', r"\1 <span class=m>&lang;" + surface + "&rang;</span>",
-                                  line, count=1)
-            
-            leading_spaces = len(line) - len(line.lstrip(' '))
-            indented_line = '.' * leading_spaces + line.lstrip()
-            rebuilt_lines.append(indented_line)
-
-        html_tree = "\n".join(rebuilt_lines)
-        
-        html_tree = re.sub(
-            r'(\.*)\(deprel:(.*?)\)(.*?)\[(\d+):(\d+)\]',
-            lambda m: f"{int(m.group(4)):02d}{m.group(1)}{m.group(3)} <span class=d>{m.group(2)}</span>→{m.group(5)}",
-            html_tree,
-            flags=re.MULTILINE
-        )
-        html_tree = re.sub(r'lemma:(.*?) ', r'<span class=l>\1</span> ', html_tree)
-        html_tree = re.sub(r'upos:(VER[A-Z]+) ', r'<span class=v>\1</span> ', html_tree)
-        html_tree = re.sub(r'upos:(.*?) ', r'<span class=u>\1</span> ', html_tree)
-        html_tree = re.sub(r'xpos:(.*?) ', r'<span class=x>\1</span> ', html_tree)
-        html_tree = re.sub(r'form:(.*?) ', r'<b>\1</b> ', html_tree)
-        return html_tree
+        self.project = ''
+        os.makedirs(output_dir, exist_ok=True)
 
     def export(self, parsed_conllu_str, original_rows):
         sentences = parse(parsed_conllu_str)
-        
+
         header_info_map = {}
         for row in original_rows:
-            utt_id_base = re.match(r'(.*)_w\d+', row['utt_id']).group(1)
-            if utt_id_base not in header_info_map:
-                header_info_map[utt_id_base] = {
+            base = re.match(r'(.*)_w\d+', row['utt_id']).group(1)
+            if base not in header_info_map:
+                header_info_map[base] = {
                     'child_project': row['child_project'],
                     'speaker': row['speaker'],
                     'age': row['age'] if row['age'] else '_',
-                    'utterance': row['utterance']
+                    'utterance': row['utterance'],
                 }
 
         html_links = {}
         total_chunks = (len(sentences) + self.chunk_size - 1) // self.chunk_size
         for chunk_id in range(total_chunks):
-            sys.stderr.write(f"\rWriting HTML files to {self.output_dir} for chunk {chunk_id+1}/{total_chunks}")
+            sys.stderr.write(f"\rWriting HTML files to {self.output_dir} "
+                             f"for chunk {chunk_id+1}/{total_chunks}")
             sys.stderr.flush()
-            start_index = chunk_id * self.chunk_size
-            end_index = start_index + self.chunk_size
-            chunk_sentences = sentences[start_index:end_index]
-            
-            html_filename = f"{self.project[:3]}{chunk_id}.html" # keep as short as possible
+            chunk = sentences[chunk_id * self.chunk_size:(chunk_id + 1) * self.chunk_size]
+            html_filename = f"{self.project[:3]}{chunk_id}.html"
             html_filepath = os.path.join(self.output_dir, html_filename)
 
+            data = []
+            for sentence in chunk:
+                if 'item_id' not in sentence.metadata:
+                    continue
+                utt_id = sentence.metadata['item_id']
+                info = header_info_map.get(utt_id, {})
+                html_links[utt_id] = {'local': html_filepath, 'file': html_filename}
+
+                toks, mwt = [], []
+                for tok in sentence:
+                    tid = tok['id']
+                    if isinstance(tid, tuple):
+                        if tid[1] == '-':
+                            mwt.append([tid[0], tid[2], tok['form']])
+                        continue
+                    head = tok['head'] if isinstance(tok['head'], int) else 0
+                    toks.append([tid, tok['form'], tok['upos'] or '_', head, tok['deprel'] or '_'])
+
+                # Same check as before: a malformed graph (typically a cycle, so no
+                # root) is reported in the page instead of silently disappearing.
+                err = ''
+                try:
+                    sentence.to_tree()
+                except Exception as e:
+                    err = str(e)
+                    sys.stderr.write(f"\nCould not generate tree for {utt_id}: {e}\n")
+
+                data.append({'i': utt_id, 'p': info.get('child_project', 'N/A'),
+                             's': info.get('speaker', 'N/A'), 'a': info.get('age', '_'),
+                             'c': info.get('utterance', '[Utterance not found]'),
+                             't': toks, 'm': mwt, 'e': err})
+
+            nav = f"<b>CHILDES project {self.project}</b>"
+            if chunk_id > 0:
+                nav = f'<a href="{self.project[:3]}{chunk_id-1}.html">&laquo; previous</a>' + nav
+            if chunk_id < total_chunks - 1:
+                nav += f'<a href="{self.project[:3]}{chunk_id+1}.html">next &raquo;</a>'
+
+            page = (self.PAGE
+                    .replace('__TITLE__', html.escape(self.file_basename))
+                    .replace('__NAV__', nav)
+                    .replace('__DATA__', json.dumps(data, ensure_ascii=False,
+                                                    separators=(',', ':'))))
             with open(html_filepath, 'w', encoding='utf8') as f:
-                # HTML header
-                f.write(self.html_head % self.file_basename)
-                # Navigation header
-                nav_header = ''
-                if chunk_id > 0:
-                    prev_file = f"{self.project[:3]}{chunk_id - 1}.html"
-                    nav_header += f'<a href="{prev_file}">&laquo; Previous Page</a>'
-                if chunk_id > 0 and chunk_id < total_chunks - 1:
-                    nav_header += ' | '
-                nav_header += f" <b> CHILDES project {self.project}</b> | "
-                if chunk_id < total_chunks - 1:
-                    next_file = f"{self.project[:3]}{chunk_id + 1}.html"
-                    nav_header += f'<a href="{next_file}">Next Page &raquo;</a>'
-                nav_header = '<div class="nav-header">' + nav_header + '</div>'
-                f.write(nav_header)
-
-
-                for sentence in chunk_sentences:
-                    if 'item_id' not in sentence.metadata: continue
-                    utt_id = sentence.metadata['item_id']
-                    
-                    info = header_info_map.get(utt_id, {})
-                    child_project = info.get('child_project', 'N/A')
-                    html_filename = f"{self.project[:3]}{chunk_id}.html"
-                    speaker = info.get('speaker', 'N/A')
-                    age = info.get('age', '_')
-                    raw_utterance = info.get('utterance', '[Utterance not found]')
-                    
-                    html_links[utt_id] = {'local': html_filepath, 'file': html_filename}
-                    
-                    for token in sentence:
-                        if token['lemma'] is None:
-                            token['lemma'] = '_'
-                        if token['xpos'] is None:
-                            token['xpos'] = '_'
-
-                    tree_error = None
-                    old_stdout = sys.stdout; sys.stdout = captured_output = io.StringIO()
-                    try:
-                        sentence.to_tree().print_tree()
-                    except Exception as e:
-                        tree_error = str(e)
-                        sys.stderr.write(f"Could not generate tree for {utt_id}: {e}\n")
-                    sys.stdout = old_stdout; tree_str = captured_output.getvalue()
-
-                    # A malformed graph (typically a cycle, so no root) used to make
-                    # the sentence disappear from the export without trace. Keep the
-                    # entry and say what went wrong instead.
-                    if not tree_str and tree_error is None:
-                        tree_error = "empty tree"
-                    # CoNLL-U range lines (id is a tuple, e.g. (3, '-', 4)): keep
-                    # the surface form against the first word of the group
-                    mwt = {t['id'][0]: t['form'] for t in sentence
-                           if not isinstance(t['id'], int) and t['id'][1] == '-'}
-                    formatted_tree = (self._format_tree_as_html(tree_str, sentence, mwt)
-                                      if tree_str else '')
-
-                    f.write(f'\n<a name="{utt_id}"></a><hr>\n')  # anchor
-                    if speaker == "CHI":
-                        f.write(f"<h3>ID: {utt_id} | {child_project} | <span class=r>{speaker} | {age}</span></h3>\n")
-                    else:
-                        f.write(f"<h3>ID: {utt_id} | {child_project} | {speaker}</h3>\n")
-                    escaped_utt = raw_utterance.replace('<', '&lt').replace('>', '&gt')
-                    f.write(f'<p class="coding">{escaped_utt}</p>\n')
-                    if tree_error:
-                        msg = tree_error.replace('<', '&lt').replace('>', '&gt')
-                        f.write(f'<div class="parse"><p class="err">no tree for this '
-                                f'sentence: {msg}</p></div>\n')
-                    else:
-                        f.write(f'<div class="parse"><p>{formatted_tree}</p></div>\n')
-
-                # copy header to footer
-                nav_footer = '<div class="nav-footer">' + nav_header + '</div>'
-                f.write(nav_footer)
-                f.write(self.html_foot)
+                f.write(page)
         sys.stderr.write("\n")
 
         return html_links

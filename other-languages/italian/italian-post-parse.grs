@@ -423,14 +423,29 @@ package clitic_reattach {
     pattern { H [Enclitic]; C1 [textform="_"]; C2 [textform="_"]; H < C1; C1 < C2; e: X -> C2; }
     commands { del_edge e; add_edge H -[dep]-> C2; }
   }
+  % The second clitic is often governed by the first (diglielo: glie -appos-> lo).
+  % reattach_second cannot express that: it binds C1, so by injectivity its X can
+  % never be C1 and the edge stays. This rule moves it.
+  rule reattach_second_from_first {
+    pattern { H [Enclitic]; C1 [textform="_"]; C2 [textform="_"]; H < C1; C1 < C2;
+              e: C1 -> C2; }
+    commands { del_edge e; add_edge H -[dep]-> C2; }
+  }
+  % The root rules ADD a governor, so they must fire only when the clitic has none
+  % at all. Guarding on 'H -> C' alone is not enough: a clitic governed by another
+  % node gets a second head, and a 'head=2|3' row makes the CoNLL-U unreadable for
+  % anything that parses it strictly (it aborted the HTML export on three corpora).
   rule reattach_root_single {
     pattern { H [Enclitic]; C [textform="_"]; H < C; }
     without { H -> C; }
+    without { X -> C; }
     commands { add_edge H -[dep]-> C; }
   }
   rule reattach_root_second {
     pattern { H [Enclitic]; C1 [textform="_"]; C2 [textform="_"]; H < C1; C1 < C2; }
     without { H -> C2; }
+    without { C1 -> C2; }
+    without { X -> C2; }
     commands { add_edge H -[dep]-> C2; }
   }
 }
@@ -637,6 +652,7 @@ strat main {
               cycle_repair.host_promote, cycle_repair.host_promote_second)),
     Onf (clitic_reattach.reattach_single),
     Onf (clitic_reattach.reattach_second),
+    Onf (clitic_reattach.reattach_second_from_first),
     Onf (clitic_reattach.reattach_root_single),
     Onf (clitic_reattach.reattach_root_second),
     % single_12_undecided is a catch-all: it must run only after every deciding

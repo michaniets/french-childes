@@ -317,8 +317,13 @@ package clitici {
 % works once H's lemma is corrected here.
 
 package enclitic_host_repair {
+  % Enclitic=A|B, not just the presence of Enclitic: a form marked Enclitic=Cand
+  % was deliberately NOT split (it is a Tier B candidate the licensing test
+  % rejected), so it is an ordinary word and must not be re-tagged as an enclitic
+  % host. Matching on presence gave 'capivi' and 'chiamavi' Mood=Imp|Person=2 -
+  % 34 tokens over the Italian corpora.
   rule ecco_host {
-    pattern { H [Enclitic, form=re"^[Ee]cco$"]; }
+    pattern { H [Enclitic=A|B, form=re"^[Ee]cco$"]; }
     without { H [upos=ADV] }
     commands {
       del_feat H.Mood; del_feat H.Gender; del_feat H.Number; del_feat H.PronType;
@@ -328,7 +333,7 @@ package enclitic_host_repair {
   }
 
   rule infinitive_host {
-    pattern { H [Enclitic, form=re".*r$"]; }
+    pattern { H [Enclitic=A|B, form=re".*r$"]; }
     without { H [upos=VERB] }
     without { H [fix]; }
     commands {
@@ -338,7 +343,7 @@ package enclitic_host_repair {
   }
 
   rule gerund_host {
-    pattern { H [Enclitic, form=re".*[ae]ndo$"]; }
+    pattern { H [Enclitic=A|B, form=re".*[ae]ndo$"]; }
     without { H [upos=VERB] }
     without { H [fix]; }
     commands {
@@ -348,7 +353,7 @@ package enclitic_host_repair {
   }
 
   rule imperative_host_plural2 {
-    pattern { H [Enclitic, form=re".*[aei]te$"]; }
+    pattern { H [Enclitic=A|B, form=re".*[aei]te$"]; }
     without { H [upos=VERB] }
     without { H [fix]; }
     commands {
@@ -359,7 +364,7 @@ package enclitic_host_repair {
   }
 
   rule imperative_host_plural1 {
-    pattern { H [Enclitic, form=re".*iamo$"]; }
+    pattern { H [Enclitic=A|B, form=re".*iamo$"]; }
     without { H [upos=VERB] }
     without { H [fix]; }
     commands {
@@ -373,7 +378,7 @@ package enclitic_host_repair {
   % matching a more specific shape has already been converted to upos=VERB and is
   % therefore excluded by this same guard - no risk of misfiring on those.
   rule imperative_host_singular {
-    pattern { H [Enclitic]; }
+    pattern { H [Enclitic=A|B]; }
     without { H [upos=VERB] }
     without { H [fix]; }
     % ecco is the one Tier A host that is not a verb. When the parser already
@@ -388,11 +393,11 @@ package enclitic_host_repair {
     }
   }
 
-  rule lemma_dare  { pattern { H [Enclitic, form=re"^\([Dd]am\|[Dd]ac\|[Dd]a\)$"]; } without { H [lemma="dare"]; } commands { H.lemma = "dare"; } }
-  rule lemma_dire  { pattern { H [Enclitic, form=re"^\([Dd]im\|[Dd]ic\|[Dd]i\)$"]; } without { H [lemma="dire"]; } commands { H.lemma = "dire"; } }
-  rule lemma_fare  { pattern { H [Enclitic, form=re"^\([Ff]am\|[Ff]ac\|[Ff]a\)$"]; } without { H [lemma="fare"]; } commands { H.lemma = "fare"; } }
-  rule lemma_andare{ pattern { H [Enclitic, form=re"^\([Vv]ac\|[Vv]a\)$"]; } without { H [lemma="andare"]; } commands { H.lemma = "andare"; } }
-  rule lemma_stare { pattern { H [Enclitic, form=re"^\([Ss]tac\|[Ss]ta\)$"]; } without { H [lemma="stare"]; } commands { H.lemma = "stare"; } }
+  rule lemma_dare  { pattern { H [Enclitic=A|B, form=re"^\([Dd]am\|[Dd]ac\|[Dd]a\)$"]; } without { H [lemma="dare"]; } commands { H.lemma = "dare"; } }
+  rule lemma_dire  { pattern { H [Enclitic=A|B, form=re"^\([Dd]im\|[Dd]ic\|[Dd]i\)$"]; } without { H [lemma="dire"]; } commands { H.lemma = "dire"; } }
+  rule lemma_fare  { pattern { H [Enclitic=A|B, form=re"^\([Ff]am\|[Ff]ac\|[Ff]a\)$"]; } without { H [lemma="fare"]; } commands { H.lemma = "fare"; } }
+  rule lemma_andare{ pattern { H [Enclitic=A|B, form=re"^\([Vv]ac\|[Vv]a\)$"]; } without { H [lemma="andare"]; } commands { H.lemma = "andare"; } }
+  rule lemma_stare { pattern { H [Enclitic=A|B, form=re"^\([Ss]tac\|[Ss]ta\)$"]; } without { H [lemma="stare"]; } commands { H.lemma = "stare"; } }
 }
 
 % ============================================================

@@ -1,8 +1,7 @@
 #!/bin/bash
 #
 # childes-pipeline.sh
-# Version 2.3
-# Dec 2025
+# Sep 2026
 #
 # pipeline to process a CHAT file. It uses childes.py verion>=4.0 to handle
 # conversion, tagging, parsing, and HTML generation in a single step.

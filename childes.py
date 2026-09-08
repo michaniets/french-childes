@@ -873,6 +873,9 @@ class ChatProcessor:
 
         with open(self.conllu_input_file, 'w', encoding='utf8') as f:
             for utt_id, data in utterances.items():
+                # sent_id is what the UD validator requires; item_id is kept
+                # because dql.py, the CSV URL columns and the HTML anchors use it
+                f.write(f"# sent_id = {utt_id}\n")
                 f.write(f"# item_id = {utt_id}\n")
                 f.write(f"# speaker = {data['speaker']}\n")
                 f.write(f"# age = {data['age']}\n")
@@ -929,7 +932,7 @@ class ChatProcessor:
         """
         Post-processes UDPipe's tokenizer=presegmented output: replaces UDPipe's own
         per-sentence comments (# newdoc, # newpar, # sent_id, # text) with our own
-        metadata (# item_id, # speaker, # age, # child, # project, # text, # chat),
+        metadata (# sent_id, # item_id, # speaker, # age, # child, # project, # text, # chat),
         matched to the submitted utterances by ORDER - build_presegmented_input()
         guarantees one output sentence per submitted line, in order (verified live).
         Also builds self.outRows from the returned tokens - this is the first point
@@ -953,6 +956,7 @@ class ChatProcessor:
             token_lines = [line for line in block.splitlines() if line and not line.startswith('#')]
 
             header_lines = [
+                f"# sent_id = {uttID}",
                 f"# item_id = {uttID}",
                 f"# speaker = {meta['speaker'] or '_'}",
                 f"# age = {meta['age'] or '_'}",
@@ -1648,6 +1652,7 @@ class ChatProcessor:
 
                 meta = (meta_map or {}).get(sent_id, {})
 
+                f.write(f"# sent_id = {sent_id}\n")
                 f.write(f"# item_id = {sent_id}\n")
                 f.write(f"# speaker = {meta.get('speaker', '_')}\n")
                 f.write(f"# age = {meta.get('age', '_')}\n")

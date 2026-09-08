@@ -5,6 +5,47 @@ summary per version; this file has the full reasoning, evidence, and examples
 behind each design decision, for anyone who needs to know *why* something works
 the way it does before changing it.
 
+## Unreleased - Cyclic graphs, ecco, and the HTML export
+
+**The HTML trees were exported before the Grew rewrite**, so they showed the
+uncorrected analysis and their token numbering could not match the final
+CoNLL-U (a rule that splits a contraction inserts a node). The export now runs
+after the rewrite. Multiword tokens are also shown: `to_tree()` drops the range
+lines, so the surface form is appended to the first word of each group -
+`di ⟨del⟩`, `metti ⟨mettilo⟩` - which keeps the tree readable against the
+transcription.
+
+**Cyclic graphs.** The parser sometimes makes an enclitic host a dependent of
+one of its own clitics (`ecco -advmod-> le`, `da -case-> me`); the clitic rules
+then hang the clitics off the host and close a cycle. The sentence has no root,
+tree building fails, and it used to vanish from the export without trace - 25 of
+115 enclitic multiword tokens in one Roma run. The new `cycle_repair` package
+promotes the host into the clitic's slot with `shift_in`, which moves the
+clitic's governors onto the host with their labels, so the host inherits the
+position the group should occupy; if the clitic was the root, the host becomes
+the root. Both clitic positions are covered, since promoting over the first can
+leave the host governed by the second (`dammelo`), and a `break_cycle` pair
+handles re-processing of already-rewritten output, where the cycle arrives fully
+formed. On fresh output this takes tree failures from 2 of 7 to 0 on the test
+set, and `dammelo` comes out correct throughout (`da` root imperative, `me`
+iobj, `lo` obj). It cannot rescue a file whose root was already lost: if no node
+carries head=0 there is nothing to promote anyone into, so files produced before
+this change must be regenerated from the `.cha` source.
+
+**`ecco`.** Two corrections. The catch-all `imperative_host_singular` was
+clobbering a correctly tagged `ecco`: when the parser already gives ADV,
+`ecco_host` rightly does nothing, which leaves no `fix=` marker to protect the
+node, and the catch-all - guarding only on `upos=VERB` and an existing `fix=` -
+overwrote it with VERB + Mood=Imp (31 of 53 `ecco` hosts in one run). It is now
+guarded by form. And `ecco` is a presentative, not a verb, so UD makes its
+clitic an expletive rather than an object: `expl` in 4 of 4 gold cases in
+ISDT+PoSTWITA. The new `ecco_clitic` rule runs after the others and overrides
+them, which changes roughly 30 previously `obj` clitics in Roma.
+
+**Failed trees are now visible.** A sentence whose graph cannot be turned into a
+tree keeps its entry in the HTML and prints the reason in red, instead of being
+skipped silently.
+
 ## Unreleased - Italian preposizioni articolate
 
 The French du/des problem transposed to Italian, and measured rather than assumed.

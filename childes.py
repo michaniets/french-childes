@@ -326,6 +326,7 @@ class HtmlExporter:
       .x { color:Olive; }
       .d { color:blue; }
       .m { color:gray; }
+      .err { color:red; font-style:italic; }
     </style>
   </head>
   <body>
@@ -437,19 +438,26 @@ class HtmlExporter:
                         if token['xpos'] is None:
                             token['xpos'] = '_'
 
+                    tree_error = None
                     old_stdout = sys.stdout; sys.stdout = captured_output = io.StringIO()
                     try:
                         sentence.to_tree().print_tree()
                     except Exception as e:
+                        tree_error = str(e)
                         sys.stderr.write(f"Could not generate tree for {utt_id}: {e}\n")
                     sys.stdout = old_stdout; tree_str = captured_output.getvalue()
-                    
-                    if not tree_str: continue
+
+                    # A malformed graph (typically a cycle, so no root) used to make
+                    # the sentence disappear from the export without trace. Keep the
+                    # entry and say what went wrong instead.
+                    if not tree_str and tree_error is None:
+                        tree_error = "empty tree"
                     # CoNLL-U range lines (id is a tuple, e.g. (3, '-', 4)): keep
                     # the surface form against the first word of the group
                     mwt = {t['id'][0]: t['form'] for t in sentence
                            if not isinstance(t['id'], int) and t['id'][1] == '-'}
-                    formatted_tree = self._format_tree_as_html(tree_str, sentence, mwt)
+                    formatted_tree = (self._format_tree_as_html(tree_str, sentence, mwt)
+                                      if tree_str else '')
 
                     f.write(f'\n<a name="{utt_id}"></a><hr>\n')  # anchor
                     if speaker == "CHI":
@@ -458,7 +466,12 @@ class HtmlExporter:
                         f.write(f"<h3>ID: {utt_id} | {child_project} | {speaker}</h3>\n")
                     escaped_utt = raw_utterance.replace('<', '&lt').replace('>', '&gt')
                     f.write(f'<p class="coding">{escaped_utt}</p>\n')
-                    f.write(f'<div class="parse"><p>{formatted_tree}</p></div>\n')
+                    if tree_error:
+                        msg = tree_error.replace('<', '&lt').replace('>', '&gt')
+                        f.write(f'<div class="parse"><p class="err">no tree for this '
+                                f'sentence: {msg}</p></div>\n')
+                    else:
+                        f.write(f'<div class="parse"><p>{formatted_tree}</p></div>\n')
 
                 # copy header to footer
                 nav_footer = '<div class="nav-footer">' + nav_header + '</div>'

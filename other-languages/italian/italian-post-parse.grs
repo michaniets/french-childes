@@ -237,6 +237,18 @@ package clitici {
   % Neither the syntax nor the lexicon decides: attach to the host so that the
   % tree is well formed, but say so. Count these before trusting any obj/iobj
   % ratio computed over 1st/2nd person clitics.
+  % ecco is a presentative, not a verb: UD makes its clitic an expletive, not an
+  % object (ISDT+PoSTWITA: expl in 4 of 4 - lo x2, ci, le). Runs after the rules
+  % above rather than guarding each of them, so it simply overrides whatever they
+  % assigned; the expl guard terminates it.
+  rule ecco_clitic {
+    pattern {
+      H [Enclitic, form=re"^\([Ee]cco\)$"]; C [textform="_"]; H << C; e: H -> C;
+    }
+    without { H -[expl]-> C; }
+    commands { del_edge e; add_edge H -[expl]-> C; C.fix = ecco_clitic; }
+  }
+
   rule single_12_undecided {
     pattern {
       H [Enclitic, upos=VERB|AUX]; H < C;
@@ -553,6 +565,55 @@ package amalgami {
   }
 }
 
+% ============================================================
+% Cyclic graphs
+%
+% The parser sometimes makes the enclitic host a dependent of one of its own
+% clitics (ecco -advmod-> le, da -case-> me). The rules below then hang the
+% clitics off the host, closing a cycle: the sentence has no root and anything
+% that builds a tree from it fails, so it silently disappears from the HTML
+% export - 25 of 115 enclitic multiword tokens in one Roma run.
+%
+% The repair is to promote the host into the clitic's slot: shift_in moves the
+% clitic's governors onto the host, labels included, so the host inherits the
+% position the whole group should occupy, and the clitic then hangs off the
+% host. If the clitic was the sentence root, the host becomes the root.
+%
+% Both clitic positions are needed: promoting over the first can leave the host
+% governed by the second (dammelo: da -case-> me -nmod-> lo), and the cluster
+% rules would close the cycle again. The break_cycle rules matter only when
+% already-rewritten output is processed a second time, where the cycle arrives
+% fully formed and shift_in would otherwise retarget an edge into a self-loop
+% and leave the clitic with two governors.
+%
+% Note this cannot rescue a file whose root was already lost: if no node carries
+% head=0 there is nothing to promote anyone into. Such files must be regenerated
+% from the .cha source.
+% ============================================================
+package cycle_repair {
+  rule break_cycle {
+    pattern { H [Enclitic]; C [textform="_"]; H < C; C -> H; e: H -> C; }
+    commands { del_edge e; }
+  }
+
+  rule break_cycle_second {
+    pattern { H [Enclitic]; C1 [textform="_"]; C2 [textform="_"]; H < C1; C1 < C2;
+              C2 -> H; e: H -> C2; }
+    commands { del_edge e; }
+  }
+
+  rule host_promote {
+    pattern { H [Enclitic]; C [textform="_"]; H < C; e: C -> H; }
+    commands { del_edge e; shift_in C ==> H; add_edge H -[dep]-> C; }
+  }
+
+  rule host_promote_second {
+    pattern { H [Enclitic]; C1 [textform="_"]; C2 [textform="_"]; H < C1; C1 < C2;
+              e: C2 -> H; }
+    commands { del_edge e; shift_in C2 ==> H; add_edge H -[dep]-> C2; }
+  }
+}
+
 strat main {
   Seq (
     Onf (enclitic_host_repair.ecco_host),
@@ -564,6 +625,10 @@ strat main {
     Onf (Alt (enclitic_host_repair.lemma_dare, enclitic_host_repair.lemma_dire,
               enclitic_host_repair.lemma_fare, enclitic_host_repair.lemma_andare,
               enclitic_host_repair.lemma_stare)),
+    % before the clitics are re-attached, so the host is already in the right
+    % slot when they are hung off it
+    Onf (Alt (cycle_repair.break_cycle, cycle_repair.break_cycle_second,
+              cycle_repair.host_promote, cycle_repair.host_promote_second)),
     Onf (clitic_reattach.reattach_single),
     Onf (clitic_reattach.reattach_second),
     Onf (clitic_reattach.reattach_root_single),
@@ -588,6 +653,7 @@ strat main {
       clitici.single_12_transitive_verb,
     )),
     Onf (clitici.single_12_undecided),
+    Onf (clitici.ecco_clitic),
     % contractions: relabel first, so split_di sees the corrected deprel, and
     % re-fuse last (it must not see the pair split_di has just created - it
     % cannot, since 'di' is absent from the kind=fuse rows of the lexicon).

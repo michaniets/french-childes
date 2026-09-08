@@ -55,9 +55,12 @@
 % Whatever remains genuinely undecided is marked todo= rather than guessed, so it
 % can be counted and reviewed instead of silently entering the counts.
 
+% NB: the value must not be empty. An empty MISC value (fix=) makes Grew drop
+% the ENTIRE MISC field of that node when the file is read back, so Enclitic=
+% becomes invisible and every rule below silently stops matching on re-runs.
 rule init_fix_misc {
   pattern { V [upos=VERB|AUX, !fix]; }
-  commands { V.fix = ""; }
+  commands { V.fix = "none"; }
 }
 
 package clitici {
@@ -106,7 +109,7 @@ package clitici {
       H [Enclitic]; H < C1; C1 < C2;
       C1 [form=re"^\([Mm]e\|[Tt]e\|[Cc]e\|[Vv]e\|[Ss]e\|[Gg]lie\|[Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ss]i\)$", textform="_"];
       C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\)$", textform="_"];
-      e: X -> C2;
+      e: H -> C2;
     }
     without { H -[obj]-> C2; }
     commands { del_edge e; add_edge H -[obj]-> C2; C2.fix = cluster_second_obj; }
@@ -117,7 +120,7 @@ package clitici {
       H [Enclitic]; H < C1; C1 < C2;
       C1 [form=re"^\([Mm]e\|[Tt]e\|[Cc]e\|[Vv]e\|[Ss]e\|[Gg]lie\|[Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ss]i\)$", textform="_"];
       C2 [form=re"^[Nn]e$", textform="_"];
-      e: X -> C2;
+      e: H -> C2;
     }
     without { H -[iobj]-> C2; }
     commands { del_edge e; add_edge H -[iobj]-> C2; C2.fix = cluster_second_ne; }
@@ -129,7 +132,7 @@ package clitici {
       H [Enclitic]; H < C1; C1 < C2;
       C1 [form=re"^[Ss][ie]$", textform="_"];
       C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"];
-      e: X -> C1;
+      e: H -> C1;
     }
     without { H -[expl]-> C1; }
     commands { del_edge e; add_edge H -[expl]-> C1; C1.fix = cluster_first_refl; }
@@ -140,7 +143,7 @@ package clitici {
       H [Enclitic]; H < C1; C1 < C2;
       C1 [form=re"^\([Mm]e\|[Tt]e\|[Cc]e\|[Vv]e\|[Gg]lie\|[Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\)$", textform="_"];
       C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"];
-      e: X -> C1;
+      e: H -> C1;
     }
     without { H -[iobj]-> C1; }
     commands { del_edge e; add_edge H -[iobj]-> C1; C1.fix = cluster_first_dat; }
@@ -153,7 +156,7 @@ package clitici {
   % ------------------------------------------------------------------
   rule single_acc {
     pattern {
-      H [Enclitic]; H < C; C [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\)$", textform="_"]; e: X -> C;
+      H [Enclitic]; H < C; C [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\)$", textform="_"]; e: H -> C;
     }
     without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[obj]-> C; }
@@ -162,7 +165,7 @@ package clitici {
 
   rule single_dat_gli {
     pattern {
-      H [Enclitic]; H < C; C [form=re"^\([Gg]li\|[Gg]lie\)$", textform="_"]; e: X -> C;
+      H [Enclitic]; H < C; C [form=re"^\([Gg]li\|[Gg]lie\)$", textform="_"]; e: H -> C;
     }
     without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[iobj]-> C; }
@@ -171,7 +174,7 @@ package clitici {
 
   rule single_ne {
     pattern {
-      H [Enclitic]; H < C; C [form=re"^[Nn]e$", textform="_"]; e: X -> C;
+      H [Enclitic]; H < C; C [form=re"^[Nn]e$", textform="_"]; e: H -> C;
     }
     without { H -[iobj]-> C; }
     commands { del_edge e; add_edge H -[iobj]-> C; C.fix = single_ne; }
@@ -179,7 +182,7 @@ package clitici {
 
   rule single_refl_si {
     pattern {
-      H [Enclitic]; H < C; C [form=re"^[Ss]i$", textform="_"]; e: X -> C;
+      H [Enclitic]; H < C; C [form=re"^[Ss]i$", textform="_"]; e: H -> C;
     }
     without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[1=expl]-> C; }
@@ -195,32 +198,38 @@ package clitici {
   % ------------------------------------------------------------------
   rule single_12_iobj_with_object {
     pattern {
-      H [Enclitic, upos=VERB|AUX]; H < C; H -[obj]-> O;
+      H [Enclitic, upos=VERB|AUX]; H < C; H -[obj]-> O; O [upos=NOUN|PROPN];
       C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"];
-      e: X -> C;
+      e: H -> C;
     }
     without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[iobj]-> C; }
+    % keep an expl the parser asserted: ti/ci/vi of a pronominal verb
+    without { H -[expl]-> C; }
     commands { del_edge e; add_edge H -[iobj]-> C; C.fix = single_12_iobj_with_object; }
   }
 
   rule single_12_dative_verb (verbs from "italian-verbs.grewlex.tsv") {
     pattern {
       H [Enclitic, upos=VERB|AUX, lemma=verbs.lemma]; verbs.Iobj = "yes"; verbs.Obj = "no";
-      H < C; C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"]; e: X -> C;
+      H < C; C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"]; e: H -> C;
     }
     without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[iobj]-> C; }
+    % keep an expl the parser asserted: ti/ci/vi of a pronominal verb
+    without { H -[expl]-> C; }
     commands { del_edge e; add_edge H -[iobj]-> C; C.fix = single_12_dative_verb; }
   }
 
   rule single_12_transitive_verb (verbs from "italian-verbs.grewlex.tsv") {
     pattern {
       H [Enclitic, upos=VERB|AUX, lemma=verbs.lemma]; verbs.Obj = "yes"; verbs.Iobj = "no";
-      H < C; C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"]; e: X -> C;
+      H < C; C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"]; e: H -> C;
     }
     without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { H -[obj]-> C; }
+    % keep an expl the parser asserted: ti/ci/vi of a pronominal verb
+    without { H -[expl]-> C; }
     commands { del_edge e; add_edge H -[obj]-> C; C.fix = single_12_transitive_verb; }
   }
 
@@ -230,11 +239,19 @@ package clitici {
   rule single_12_undecided {
     pattern {
       H [Enclitic, upos=VERB|AUX]; H < C;
-      C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"]; e: X -> C;
+      C [form=re"^\([Mm]i\|[Tt]i\|[Cc]i\|[Vv]i\|[Ll]e\)$", textform="_"]; e: H -> C;
     }
     without { C < C2; C2 [form=re"^\([Ll]o\|[Ll]a\|[Ll]i\|[Ll]e\|[Nn]e\)$", textform="_"]; }
     without { C [todo]; }
-    without { H -[obj]-> O; }
+    % never overwrite a decision another rule already made (Alt gives no order)
+    without { H -[obj]-> C; }
+    without { H -[iobj]-> C; }
+    % must mirror single_12_iobj_with_object's guard exactly: if the competing
+    % object is not a real NP that rule stays silent, so this one must speak,
+    % otherwise the clitic keeps the 'dep' placeholder and is never labelled.
+    without { H -[obj]-> O; O [upos=NOUN|PROPN]; }
+    % keep an expl the parser asserted: ti/ci/vi of a pronominal verb
+    without { H -[expl]-> C; }
     commands {
       del_edge e; add_edge H -[obj]-> C;
       C.fix = single_12_undecided; C.todo = "obj_or_iobj";
@@ -360,6 +377,40 @@ package enclitic_host_repair {
 
 % Onf = One normal form (Apply rules repeatedly until stable)
 % Alt = Try all rules in the list
+% ============================================================
+% Normalise the attachment of split clitics before anything else.
+%
+% Grew matches injectively: in "e: X -> C" the identifier X can never bind to H.
+% Every rule in 'clitici' therefore used to be unreachable whenever the parser
+% attached the clitic to its own host (48% of real cases) or made it the root
+% (18%) - measured on Roma. Forcing each clitic of a split multiword token onto
+% its host first lets those rules match "e: H -> C" and reach every case.
+%
+% Only fires where the attachment is actually wrong: reattach_* needs a governor
+% other than H (injectivity), reattach_root_* needs no H->C edge to exist. A
+% clitic already hanging off its host is left alone, label and all.
+% ============================================================
+package clitic_reattach {
+  rule reattach_single {
+    pattern { H [Enclitic]; C [textform="_"]; H < C; e: X -> C; }
+    commands { del_edge e; add_edge H -[dep]-> C; }
+  }
+  rule reattach_second {
+    pattern { H [Enclitic]; C1 [textform="_"]; C2 [textform="_"]; H < C1; C1 < C2; e: X -> C2; }
+    commands { del_edge e; add_edge H -[dep]-> C2; }
+  }
+  rule reattach_root_single {
+    pattern { H [Enclitic]; C [textform="_"]; H < C; }
+    without { H -> C; }
+    commands { add_edge H -[dep]-> C; }
+  }
+  rule reattach_root_second {
+    pattern { H [Enclitic]; C1 [textform="_"]; C2 [textform="_"]; H < C1; C1 < C2; }
+    without { H -> C2; }
+    commands { add_edge H -[dep]-> C2; }
+  }
+}
+
 strat main {
   Seq (
     Onf (enclitic_host_repair.ecco_host),
@@ -371,10 +422,30 @@ strat main {
     Onf (Alt (enclitic_host_repair.lemma_dare, enclitic_host_repair.lemma_dire,
               enclitic_host_repair.lemma_fare, enclitic_host_repair.lemma_andare,
               enclitic_host_repair.lemma_stare)),
+    Onf (clitic_reattach.reattach_single),
+    Onf (clitic_reattach.reattach_second),
+    Onf (clitic_reattach.reattach_root_single),
+    Onf (clitic_reattach.reattach_root_second),
+    % single_12_undecided is a catch-all: it must run only after every deciding
+    % rule has converged, otherwise Alt's unspecified order lets it claim cases
+    % the lexicon or the syntax could have decided, and stamp them todo=.
     Onf (Alt (
       init_fix_misc,
-      clitici,
-    ))
+      clitici.clitic_features,
+      clitici.clitic_features_second,
+      clitici.cluster_second_obj,
+      clitici.cluster_second_ne,
+      clitici.cluster_first_refl,
+      clitici.cluster_first_dat,
+      clitici.single_acc,
+      clitici.single_dat_gli,
+      clitici.single_ne,
+      clitici.single_refl_si,
+      clitici.single_12_iobj_with_object,
+      clitici.single_12_dative_verb,
+      clitici.single_12_transitive_verb,
+    )),
+    Onf (clitici.single_12_undecided)
   )
 }
 

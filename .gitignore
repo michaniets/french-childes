@@ -28,6 +28,7 @@ MANIFEST
 
 # Claude's memory
 CLAUDE.md
+.claude/
 
 # TreeTagger
 tagger/

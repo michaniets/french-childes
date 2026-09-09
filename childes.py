@@ -11,7 +11,7 @@
 
 __author__ = "Achim Stein"
 __version__ = "6.0"
-__status__ = "8.9.26"
+__status__ = "9.9.26"
 __license__ = "GPL"
 
 import sys
@@ -343,6 +343,31 @@ def _it_verb_forms(lemmas):
 #-------------------------------------------------------
 # HTML export class for UD parsed data
 #-------------------------------------------------------
+INDEX_PAGE = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>CHILDES parses</title><style>
+:root{--fg:#1a1a1a;--bg:#fff;--mut:#666;--line:#ddd;--acc:#06c;--head:#f6f6f6}
+@media(prefers-color-scheme:dark){:root{--fg:#e0e0e0;--bg:#17191d;--mut:#9aa;--line:#333;
+ --acc:#6aa9ff;--head:#22252a}}
+body{font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--fg);
+ background:var(--bg);margin:0 auto;padding:28px 18px;max-width:820px}
+h1{font-size:19px;margin:0 0 2px}
+p.sub{color:var(--mut);margin:0 0 20px;font-size:13px}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--head);font-size:12px;font-weight:600;color:var(--mut)}
+td.n{text-align:right;color:var(--mut);white-space:nowrap}
+td.p a{display:inline-block;min-width:1.7em;text-align:center;margin:1px 2px;padding:1px 5px;
+ border:1px solid var(--line);border-radius:4px;color:var(--acc);text-decoration:none}
+td.p a:hover{border-color:var(--acc)}
+</style></head><body>
+<h1>CHILDES parses</h1>
+<p class=sub>Directory <code>__DIR__</code>. Each number is one page of utterances;
+open a page and use its filter box, or follow a link of the form
+<code>page.html#&lt;item_id&gt;</code> from the tables.</p>
+<table><tr><th>corpus</th><th>pages</th><th>n</th><th>size</th></tr>
+__ROWS__
+</table></body></html>"""
+
 class HtmlExporter:
     """
     Writes the parses as a self-contained viewer: the sentences are embedded as
@@ -448,6 +473,55 @@ addEventListener('hashchange',jump);jump();
         self.project = ''
         os.makedirs(output_dir, exist_ok=True)
 
+    def write_index(self):
+        """
+        Writes an index.html listing every viewer file in the output directory.
+
+        The directory accumulates across runs - one childes.py run handles one
+        corpus and writes <proj><chunk>.html - so the index is rebuilt from what
+        is actually on disk rather than from this run alone, and corpora
+        converted earlier stay listed. The corpus name comes from each file's
+        own <title>, which is the only place the full name survives (the
+        filenames are truncated to three letters to keep URLs short).
+        """
+        files = [f for f in os.listdir(self.output_dir)
+                 if f.endswith('.html') and f != 'index.html']
+        if not files:
+            return
+
+        def chunk_no(name):
+            m = re.match(r'.*?(\d+)\.html$', name)
+            return int(m.group(1)) if m else 0
+
+        corpora = {}
+        for f in sorted(files, key=lambda n: (re.sub(r'\d+\.html$', '', n), chunk_no(n))):
+            path = os.path.join(self.output_dir, f)
+            try:
+                with open(path, encoding='utf8') as fh:
+                    head = fh.read(4096)
+            except OSError:
+                continue
+            m = re.search(r'<title>(.*?)</title>', head, re.S)
+            title = (m.group(1).strip() if m else f)
+            title = re.sub(r'^CHILDES parses:\s*', '', title)
+            size = os.path.getsize(path)
+            corpora.setdefault(title, []).append((f, size))
+
+        rows = []
+        for corpus in sorted(corpora):
+            links = ' '.join(
+                f'<a href="{html.escape(f)}">{chunk_no(f) + 1}</a>' for f, _ in corpora[corpus])
+            total = sum(sz for _, sz in corpora[corpus]) / 1024
+            rows.append(f'<tr><td>{html.escape(corpus)}</td><td class=p>{links}</td>'
+                        f'<td class=n>{len(corpora[corpus])}</td>'
+                        f'<td class=n>{total:,.0f} KB</td></tr>')
+
+        page = INDEX_PAGE.replace('__ROWS__', '\n'.join(rows)).replace(
+            '__DIR__', html.escape(os.path.basename(os.path.abspath(self.output_dir))))
+        with open(os.path.join(self.output_dir, 'index.html'), 'w', encoding='utf8') as f:
+            f.write(page)
+        sys.stderr.write(f"- Index of {len(files)} page(s) in {self.output_dir}/index.html\n")
+
     def export(self, parsed_conllu_str, original_rows):
         sentences = parse(parsed_conllu_str)
 
@@ -518,6 +592,7 @@ addEventListener('hashchange',jump);jump();
             with open(html_filepath, 'w', encoding='utf8') as f:
                 f.write(page)
         sys.stderr.write("\n")
+        self.write_index()
 
         return html_links
 

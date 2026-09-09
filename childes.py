@@ -68,6 +68,10 @@ def cleanUtt(s):
     cleans standard CHAT markup from utterances to prepare them for NLP tools
     revised v4.4
     """
+    # Some corpora write CHAT's scope markers as angle quotation marks
+    # (<nose spray> as ‹nose spray›, 35945 in the North American English data).
+    # Normalised first, so every <...> rule below applies to them too.
+    s = s.replace('‹', '<').replace('›', '>')
     s = re.sub(r' 0([\S+])', r' \1', s)           # 0word -> word
     s = re.sub(r'0(faire|ne) ', '\1 ', s)           # Specific fix for 0faire, 0ne
     s = re.sub(r'&=li ', ' ', s)                   # Remove non-canonical liaison markers (mostly in Lyon project)
@@ -873,6 +877,11 @@ class ChatProcessor:
             s = re.sub(r" ?\(\d\.\d\)", r"", s)  # ⌊eh a:::o⌋ → (0.4)
             # English UK Belfast
             s = re.sub(r" ?‡", r"", s)  # oh ‡ aren't they gorgeous !
+            # „ is the mirror image of ‡: CHAT marks a satellite that FOLLOWS
+            # (a tag question or vocative) - "she's a character „ isn't she ?".
+            # Left in, the parser reads it as a token and attaches it as parataxis
+            # or conj, which the validator rejects at level 3. 76003 in the UK data.
+            s = re.sub(r" ?„", r"", s)
             # English UK Wells
             s = re.sub(r" ?\(\d+\.\d*\)", r"", s)   # *CHI:	(5.) &=laugh (5.) &=noise (4.) &=noise .
             s = re.sub(r" ?&=\w+", r"", s)          # *CHI:	(5..) &=laugh (5..) &=noise (4..) &=noise .
@@ -1009,9 +1018,14 @@ class ChatProcessor:
             s = re.sub(r"([a-zA-Z]+')(?=[a-zA-Zà-úÀ-Ú])", r"\1 ", s)
             s = re.sub(r'\s+', ' ', s)
         elif hasattr(self, 'language') and re.search(r'eng|english', self.language):
-            s = re.sub(r'n\'t', r" n't", s)  # haven't -> have n't
-            s = re.sub(r"I'm", r"I 'm", s)  # it's -> it 's, I've -> I 've
-            s = re.sub(r'(\S)\'(s|ve|ll|d|re)', r"\1 '\2", s)  # it's -> it 's, I've -> I 've etc.
+            # Only reached when UDPipe does not tokenise (no --api_model). With a
+            # parser the presegmented path is used instead, and its tokenizer -
+            # trained on UD_English-CHILDES - writes the multiword tokens these
+            # rules cannot: don't -> 2-3 don't / do / n't, wanna -> wan / na.
+            # 'm was previously handled only for the literal "I'm"; it is just
+            # another suffix.
+            s = re.sub(r"n't\b", r" n't", s)                      # haven't -> have n't
+            s = re.sub(r"(\S)'(s|ve|ll|d|re|m)\b", r"\1 '\2", s)   # it's -> it 's, I'm -> I 'm
         elif hasattr(self, 'language') and re.search(r'deu|german', self.language):
             # CHAT already spaces punctuation in these corpora, but not always
             s = re.sub(r'([,;?.!])(?=\s|$)', r' \1', s)

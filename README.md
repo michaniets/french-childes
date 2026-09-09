@@ -73,6 +73,15 @@ This script converts CHILDES chat data to a one-word-per-line CSV format. It int
 Full rationale, evidence and examples for each item below are in
 [CHANGELOG.md](CHANGELOG.md).
 
+- **Since v6.0 (German, English):** German preposition+article contractions are
+  split into UD multiword tokens (`im` -> `in`+`dem`), including the colloquial
+  forms spoken data is full of (`aufm`, `ausm`, `durch's`), with an enclitic
+  `'s` split as in GSD; forms that are ordinary words (`Bein`, `vorn`,
+  `Hintern`) are vetoed. English needs no table: its model is trained on
+  UD_English-CHILDES and already writes the multiword tokens, so `--tag_ud_tokens`
+  is all that is required. Neither language needs a `.grs`, and both pass the UD
+  validator at level 2. Also: CHAT's `„` satellite marker and `‹›` scope markers
+  are now cleaned, and the HTML export writes an `index.html` per directory.
 - **v6.0:** the tokenisation work of 5.7-5.9 is finished and verified - French
   and Italian output now passes the official UD validator at level 5, the
   strictest language-specific level, and the CoNLL-U carries `# sent_id`.

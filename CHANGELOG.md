@@ -5,6 +5,68 @@ summary per version; this file has the full reasoning, evidence, and examples
 behind each design decision, for anyone who needs to know *why* something works
 the way it does before changing it.
 
+## Unreleased - German and English
+
+With these two, all four languages are tokenised to UD conventions and both
+new ones pass the official validator at level 2, the gate childes-gold treats
+as blocking.
+
+### German
+
+UD German has exactly one class of multiword token - "the contractions of
+prepositions and definite articles" (universaldependencies.org/de) - and the
+split is unconditional: in UD_German-GSD all 4774 are split and none is left
+whole, every one of the 4610 multiword tokens is a contraction, and even
+superlative `am` is split. Nothing depends on the eventual analysis, so unlike
+French and Italian this needs no post-parse rules and there is no German .grs.
+
+It is not only a surface question. Left fused, `ins Bett` comes back as DET +
+obj instead of ADP + DET + obl, the same loss as French `au`.
+
+childes.py writes the range line itself, which both tokens2conllu() and
+tagged2conllu() already support, and UDPipe passes it through untouched.
+The table is data-driven: the mechanical prep+m/n/s/r generation produces
+forms that are ordinary words here, and they are vetoed - `Bein` (leg, 504
+occurrences), `vorn` (the adverb), `Hintern` (the noun in every occurrence
+checked). The -m, -s and -r forms are unambiguous; the -n forms are not
+(`was fürn Auto` is `für ein`, 5 of 41) and take the definite reading. The
+enclitic `'s` is split without a range line, matching GSD, which writes the
+stem with SpaceAfter=No; a preposition stem makes it a contraction instead
+("durch's" = durch + das), so that test comes first.
+
+German also stopped taking the presegmented path: UDPipe splits the standard
+forms it was trained on but not the colloquial ones spoken data is full of -
+aufm, aufn, ausm, mitm and the apostrophised durch's, über's - and the tagger
+path never reaches that tokenizer at all, so the two configurations disagreed.
+
+### English
+
+English needed no new tokenisation code, which is worth recording because the
+obvious move was to write another table. UD English also uses multiword tokens
+for contractions - 8609 of them in UD_English-CHILDES - but the inventory is
+not closed: 83% is productive (`X's` 3469, `Xn't` 1940, `X're`, `X'm`, `X'll`,
+`X'd`, `X've`, which also covers `let's` and `ain't`), and the lexicalised
+splits are idiosyncratic (`haf`+`ta` but `ought`+`a`; `lott`+`a`;
+`dunno` -> `du`+`n`+`no`, three words). A hand-written table would always lag.
+
+The english-childes-ud model is trained on that treebank and reproduces its
+conventions, verified live: `don't` -> do + n't, `wanna` -> wan + na with
+lemmas want and to. So the fix was a flag in the pipeline scripts -
+--tag_ud_tokens, which lets UDPipe tokenise while TreeTagger still supplies
+the tagger_pos/tagger_lemma columns. Real slices of Brown (North American) and
+Belfast (UK) give 160 and 171 multiword tokens per 150 sentences, both passing
+level 2.
+
+The two varieties need no separate rules, checked rather than assumed: the
+Irish and Scots contracted forms are absent (`gonnae`, `cannae`, `dinnae`,
+`'tis` all 0; `amn't` 4, all North American). The UK data differs lexically -
+`wee` 5027, `aye` 1283, `innit` 79, `youse` 66 - but those are ordinary words.
+
+Two CHAT-cleaning gaps found on the way are described in the commit for them:
+the following-satellite marker `„` was reaching the parser as a token, and the
+angle-quotation scope markers `‹›` were unrecognised, so words the child never
+said were being parsed as if spoken.
+
 ## Unreleased - fixes found while converting the Italian corpora
 
 Running the full seven corpora surfaced four defects, three of them in rules

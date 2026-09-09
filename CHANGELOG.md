@@ -5,6 +5,117 @@ summary per version; this file has the full reasoning, evidence, and examples
 behind each design decision, for anyone who needs to know *why* something works
 the way it does before changing it.
 
+## Unreleased - CHAT markup no longer leaks into the CoNLL-U
+
+Three classes of CHAT markup were reaching the token stream, because the rules
+that handled them stripped a prefix character and left the rest standing.
+
+**Utterance terminators.** `re.sub(r'\+[<,]? ?', '', s)` removes the `+` alone,
+so `+...` became `...`, `+/.` became `/.`, `+//.` became `//.` and `+"/.` became
+`"/.`; where the tokeniser then split them, the residue was `..` and a bare `/`.
+About 245000 tokens across the five corpora - `...` 63920, `..` 47888, `/` 63556,
+`/.` 15449, `//.` 10165, `"/.` 4329, `..?` 1202, `//?` 925, `/?` 612, `".` 549.
+
+All eight forms end the utterance, so they are now normalised to plain sentence
+punctuation, which also gives the utterance the final PUNCT token UD expects:
+
+    s = re.sub(r'\+"?/{0,2}\.{0,2}\?', ' ? ', s)
+    s = re.sub(r'\+"?/{0,2}\.{1,3}', ' . ', s)
+
+The question-marked variants `+..?`, `+/?`, `+//?` keep the question mark rather
+than becoming `.`: mapping them to a full stop would discard the only record
+that the utterance was a question. Both rules run before the `+<` / `+,` rule,
+which is what left the residue. Compound markers (`ice+cream`) are unaffected -
+the patterns require a dot or a question mark immediately after the `+`.
+
+**The omitted-word placeholder `0w`.** CHAT writes the omitted word itself in
+`0the`, `0il`, `0ne`, and the `0word -> word` rule restores it. `0w` is the
+placeholder for an omitted word whose form is *not* recoverable, so restoring it
+produced a token `w` - 2029 of them, plus 374 surviving `0w` where the marker
+stood utterance-initially and the space-anchored rule never saw it. It is now
+dropped outright, before that rule runs. Genuine `w` in the transcript (the
+German data has children saying `w wä`) is untouched, and `0was` is not matched.
+
+**A replacement string that was not raw.** `re.sub(r'0(faire|ne) ', '\1 ', s)`
+wrote `\x01` (the octal escape) instead of the captured group, putting three
+control characters into the French output. Now `r'\1 '`.
+
+Verified by reprocessing German `Caroline`, Italian `Calambrone` and English
+`McMillan`: no `...`, `..`, `/`, `/.`, `//.`, `"/.`, `..?`, `/?`, `//?`, `".`,
+`0w`, `\x01` tokens remain in any of them. Corpora produced before this change
+carry all of it and need reprocessing.
+
+**The remaining utterance-linking markers.** `+<` (lazy overlap) and `+,`
+(self-completion) were listed in that rule; `++` (other-completion), `+^` (quick
+uptake) and `+"` (quotation introducer) were not, so their second character was
+left standing as a token - `"` 33335, `^` 7180. All five are now removed. A bare
+`+` is still the compound marker, so `ice+cream` continues to give `icecream`.
+
+**The remaining omission placeholders.** `0x` and `0zero` are the same kind of
+marker as `0w` - an omission whose form is not recoverable - and were producing
+`x`/`0x` (4283) and `zero`/`0zero` (2835). All three are now dropped by one rule
+that runs before `0word -> word` can restore them, so fixing that rule's anchor
+(below) does not simply convert them into `x` and `zero`.
+
+**`0word -> word` was anchored on a preceding space.** ` 0([\S+])` never saw an
+utterance-INITIAL omission, so `0il`, `0the`, `0I`, `0it`, `0do`, `0je` kept
+their zero - about 2900 tokens - and Lyon's 9126 utterances consisting of nothing
+but `0.` came out as a token `0` followed by a full stop. Now anchored on a word
+start, `(^|\s)0(\S)`, which also subsumes the separate `0faire` / `0ne` rule
+that existed for exactly this reason; that rule has been removed.
+
+Those `0.` utterances now reduce to a bare `.`, which is what the CHAT says: the
+speaker produced nothing recordable. Whether such utterances belong in the
+corpus at all is a separate question, untouched here.
+
+### Effect
+
+CHAT markup in the corpora as they stand, counted over the finished CoNLL-U:
+
+| | tokens | markup tokens | |
+|---|---:|---:|---:|
+| French | 4322067 | 45951 | 1.06% |
+| German | 6523923 | 73095 | 1.12% |
+| Italian | 512322 | 6308 | 1.23% |
+| English NA | 16861758 | 123930 | 0.73% |
+| English UK | 13881172 | 53146 | 0.38% |
+| **all** | **42101242** | **302430** | **0.72%** |
+
+Reprocessing one corpus per language offline - Lyon, Caroline, Calambrone,
+Belfast, McMillan, 2.3M tokens - leaves 84: `w`, `x` and one `zero`, every one
+of them a genuine transcription (`w@l c@l` for French *WC*, the alphabet recited
+as `w@l x@l y@l z@l`, and German children saying `w wä`). No marker survives.
+
+## Unreleased - CHAT pauses removed for every language
+
+`cleanUtt()` removed only the unfilled pauses `(.)`, `(..)`, `(...)`, and only
+when one was followed by a space. The timed pauses - `(3.)`, `(2.5)`, `(5..)`,
+`(1:20.)`, all standard CHAT - were removed in the English branch of
+`strip_transcription_noise()` alone, so they survived everywhere else.
+
+The effect in finished corpora: German kept 34283 of them as literal tokens
+(`hingestellt (3.) .` parses as VERB + PUNCT + PUNCT), and Italian kept 2916
+residues - bare `..`, `2.`, `1.5` - left behind where an utterance-final pause
+escaped the trailing-space requirement and the tokeniser then split the
+parentheses off it. English escaped only the `(5..)` form, which its own two
+rules did not cover either.
+
+One rule now handles all of them, in `cleanUtt()` where the rest of the CHAT
+markup is dealt with, because a pause is CHAT markup and not corpus-specific
+noise:
+
+    s = re.sub(r'\s*\(\d*:?\d*\.+\d*\)\s*', ' ', s)
+
+Checked against every parenthesised digit/dot string in all five corpora: 129
+distinct forms, `(.)` to `(59.)` and `(0:3.)` to `(5:30.)`, all of them pauses.
+Nothing else in the data has that shape, and `(2)` without a dot is left alone,
+as is `(be)cause`, which the following rule still needs to see. The three now
+redundant English rules were removed; the `\n\s+\(\d\.\d\).*` one among them
+could never fire in any case, since the utterance is matched off a single line
+and `cleanUtt()` normalises whitespace before that branch runs.
+
+Corpora produced before this change keep the pause tokens and need reprocessing.
+
 ## Unreleased - German and English
 
 With these two, all four languages are tokenised to UD conventions and both

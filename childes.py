@@ -72,20 +72,62 @@ def cleanUtt(s):
     # (<nose spray> as ‹nose spray›, 35945 in the North American English data).
     # Normalised first, so every <...> rule below applies to them too.
     s = s.replace('‹', '<').replace('›', '>')
-    s = re.sub(r' 0([\S+])', r' \1', s)           # 0word -> word
-    s = re.sub(r'0(faire|ne) ', '\1 ', s)           # Specific fix for 0faire, 0ne
+    # CHAT's omission markers. In '0the' / '0il' / '0ne' the omitted word itself
+    # is written out and the rule below restores it. '0w', '0x' and '0zero' are
+    # placeholders for an omission whose form is NOT recoverable, so restoring
+    # them yields tokens 'w', 'x', 'zero'. They are dropped first, before that
+    # rule can see them: 9491 tokens across the five corpora (w/0w 2403,
+    # x/0x 4283, zero/0zero 2835). Genuine 'w' and 'x' in a transcript - the
+    # German children say 'w wä' - are untouched, and so is '0was'.
+    s = re.sub(r'\b0(?:w|x|zero)\b', ' ', s)
+    # 0word -> word. Anchored at a word start, not on a preceding space: an
+    # utterance-INITIAL '0il' / '0the' / '0I' used to keep its zero (about 2900
+    # tokens), and 9126 utterances consisting of nothing but '0.' came out as a
+    # token '0' plus a full stop. This also covers '0faire' / '0ne', which had a
+    # rule of their own here for exactly that reason.
+    s = re.sub(r'(^|\s)0(\S)', r'\1\2', s)
     s = re.sub(r'&=li ', ' ', s)                   # Remove non-canonical liaison markers (mostly in Lyon project)
     s = re.sub(r'<[^>]+> \[//?\] ', '', s)        # Remove retracings <...> [//]
     s = re.sub(r'\[\!\] ?', ' ', s)               # Remove stressing [!]
-    s = re.sub(r' ?\(\.+\) ', ' ', s)            # Pauses (.) (..) -> remove
+    # CHAT pauses, unfilled and timed: (.) (..) (...) (3.) (2.5) (5..) (1:20.).
+    # This is standard CHAT markup, so it is removed for every language. Two
+    # earlier limitations: only the dot-only forms were matched, and only when
+    # followed by a space, so an utterance-final '(..)' survived; timed pauses
+    # were removed in the English branch of strip_transcription_noise() alone.
+    # German therefore kept 34283 timed pauses as literal tokens, which the
+    # parser tagged PUNCT, and Italian kept 2916 residues ('..', '2.', '1.5')
+    # left behind when the tokeniser split the parentheses off an unremoved
+    # utterance-final pause.
+    s = re.sub(r'\s*\(\d*:?\d*\.+\d*\)\s*', ' ', s)
     s = re.sub(r'<([^>]+)>\s+\[%[^\]]+\]', r'\1', s) # Keep text before comment <text> [% comment]
     s = re.sub(r'<(0|www|xxx|yyy)[^>]+> ?', '', s)   # Remove unintelligible marked with <>
-    s = re.sub(r'\+[<,]? ?', '', s)               # Remove +< and +,
+    # CHAT utterance terminators. Every one of them ends the utterance, so they
+    # are normalised to plain sentence punctuation - which also gives the
+    # utterance the final PUNCT token UD expects:
+    #   +...  trailing off        +..?  trailing off, question
+    #   +/.   interrupted         +/?   interrupted question
+    #   +//.  self-interrupted    +//?  self-interrupted question
+    #   +"/.  quotation follows   +".   quotation precedes
+    # The question-marked variants keep the question mark: mapping them to '.'
+    # would discard the only record that the utterance was a question.
+    # This must run BEFORE the '+<' / '+,' rule below, which strips the '+'
+    # alone and left the rest behind as tokens - 245000 of them across the five
+    # corpora ('...' 63920, '..' 47888, '/' 63556, '/.' 15449, '//.' 10165,
+    # '"/.' 4329, '..?' 1202, '//?' 925, '/?' 612, '".' 549).
+    s = re.sub(r'\+"?/{0,2}\.{0,2}\?', ' ? ', s)
+    s = re.sub(r'\+"?/{0,2}\.{1,3}', ' . ', s)
+    # Utterance-linking markers, none of which is part of the utterance:
+    # +< lazy overlap, +, self-completion, ++ other-completion, +^ quick uptake,
+    # +" quotation introducer. Only the first two were listed, so the others
+    # left their second character standing as a token - '"' 33335, '^' 7180.
+    # A bare '+' is the compound marker (ice+cream -> icecream), as before.
+    s = re.sub(r'\+[+<,"^]? ?', '', s)
     s = re.sub(r'(0|www|xxx|yyy)\s', '', s)          # Remove unintelligible words
     s = re.sub(r'\[.*?\] ?', '', s)               # Remove all other bracketed content [...]
     # Keep text inside parentheses: (be)cause -> because, (d'ac)cord -> d'accord.
-    # Letters incl. accented, apostrophe and hyphen; digits/dots stay excluded so
-    # that timed pauses like (5.) or (2.5) are not swallowed here.
+    # Letters incl. accented, apostrophe and hyphen only; digits and dots stay
+    # excluded so that a pause the rule above somehow missed is left visible as
+    # '(5.)' rather than silently turned into the word '5.'.
     s = re.sub(r"\(([A-Za-zÀ-ÿ'’\-]+)\)", r'\1', s)
     s = re.sub(r' \+/+', ' ', s)                  # Remove +/
     # added v4.4
@@ -873,8 +915,6 @@ class ChatProcessor:
             # English UK: Forrester has arrows in utterances (for intonation?)
             s = re.sub(r" ?[↗→↓∇] ?", r"", s)  # *FAT:	of the thunder ↗
             s = re.sub(r"(\w):+(\w)", r"\1\2", s)  # n::::O →
-            s = re.sub(r"\n\s+\(\d\.\d\).*", r"", s)    # *FAT:	that good darlin' ↗ 10340_13805<BR>	(24.8) 13805_34059
-            s = re.sub(r" ?\(\d\.\d\)", r"", s)  # ⌊eh a:::o⌋ → (0.4)
             # English UK Belfast
             s = re.sub(r" ?‡", r"", s)  # oh ‡ aren't they gorgeous !
             # „ is the mirror image of ‡: CHAT marks a satellite that FOLLOWS
@@ -882,9 +922,10 @@ class ChatProcessor:
             # Left in, the parser reads it as a token and attaches it as parataxis
             # or conj, which the validator rejects at level 3. 76003 in the UK data.
             s = re.sub(r" ?„", r"", s)
-            # English UK Wells
-            s = re.sub(r" ?\(\d+\.\d*\)", r"", s)   # *CHI:	(5.) &=laugh (5.) &=noise (4.) &=noise .
-            s = re.sub(r" ?&=\w+", r"", s)          # *CHI:	(5..) &=laugh (5..) &=noise (4..) &=noise .
+            # English UK Wells. The timed pauses in these utterances - '(5.)
+            # &=laugh (5..) &=noise' - are removed by cleanUtt() for every
+            # language now; only the event codes are handled here.
+            s = re.sub(r" ?&=\w+", r"", s)
             s = re.sub(r'\s+', ' ', s).strip()
         return s
 

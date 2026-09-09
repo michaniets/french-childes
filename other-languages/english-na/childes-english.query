@@ -1,5 +1,5 @@
 %--------------------------------------------------------
-% Rules for graphs created with UDPipe (model english-ewt-ud-2.5)
+% Rules for graphs created with UDPipe (model english-ud)
 %
 % Rules are ranked by specificity
 % ==> run dql.py --first_rule
@@ -29,7 +29,7 @@ pattern {
 % coding attribute=subj value=pron node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
-    PRO [upos=/PRON/, Case="Nom"];
+    PRO [upos=/PRON/];
     V -[1=nsubj]-> PRO;
 }
 
@@ -127,7 +127,7 @@ pattern {
 % coding attribute=iobj value=pron node=V addlemma=PRO
 pattern {
     V [upos=/AUX|VERB/];
-    PRO [PronType="Prs"];
+    %PRO [PronType="Prs"];
     V -[iobj|obl:arg]-> PRO;
 }
 
@@ -172,7 +172,7 @@ without {
 % coding attribute=cp value=xcomp node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
-    V [upos=/AUX|VERB/, VerbForm=Inf];
+    V [upos=/AUX|VERB/];
     Vmain -[xcomp]-> V;   
 }
 
@@ -180,7 +180,7 @@ pattern {
 % coding attribute=cp value=ccomp node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
-    V [upos=/AUX|VERB/, VerbForm=Inf];
+    V [upos=/AUX|VERB/];
     Vmain -[ccomp]-> V;   
 }
 
@@ -188,7 +188,7 @@ pattern {
 % coding attribute=cp value=coord node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
-    V [upos=/AUX|VERB/, VerbForm=Inf];
+    V [upos=/AUX|VERB/];
     Vmain -[conj|parataxis]-> V;   
 }
 
@@ -196,7 +196,7 @@ pattern {
 % coding attribute=cp value=other node=Vmain addlemma=V
 pattern {
     Vmain [upos="VERB"];
-    V [upos=/AUX|VERB/, VerbForm=Inf];
+    V [upos=/AUX|VERB/];
     Vmain -> V;   
 }
 without {
@@ -208,7 +208,7 @@ without {
 %--------------------------------------------------------
 
 % ======= passive be
-% coding attribute=passive value=werden node=V addlemma=AUX
+% coding attribute=passive value=be node=V addlemma=AUX
 pattern {
     V [upos="VERB"];
     AUX [lemma="be", upos="AUX"];
@@ -216,7 +216,7 @@ pattern {
 }
 
 % ======= passive get
-% coding attribute=passive value=sein node=V addlemma=AUX
+% coding attribute=passive value=get node=V addlemma=AUX
 pattern {
     V [upos="VERB"];
     AUX [lemma="get", upos="AUX"];

@@ -260,6 +260,57 @@ IT_CONTRACTIONS = {
 IT_CONTRACTIONS_VETOED = {'dai', 'dallo', 'dalla', 'dalle', 'dagli'}
 
 
+# German preposition+article contractions. UD German has exactly one class of
+# multiword token - "the contractions of prepositions and definite articles"
+# (universaldependencies.org/de) - and the split is unconditional: in
+# UD_German-GSD all 4774 of these are split and none is left whole, superlative
+# 'am' included. So there is nothing for a post-parse rule to decide and no .grs
+# is needed; childes.py writes the range line itself.
+#
+# Leaving them fused is not merely a surface matter: the parser reads 'ins Bett'
+# as DET + obj rather than ADP + DET + obl (checked against the API), the same
+# way French 'au' loses its preposition.
+#
+# The -m, -s and -r forms are unambiguous. The -n forms are not: colloquial
+# 'aufn' is 'auf den' but can be 'auf einen', and 'was fürn Auto' is 'für ein'
+# (5 of 41 'fürn' in this corpus). They are expanded to the definite reading,
+# which is the majority one, because the alternative is to lose them entirely.
+DE_CONTRACTIONS = {
+    # + dem
+    'im': ('in', 'dem'), 'am': ('an', 'dem'), 'beim': ('bei', 'dem'),
+    'vom': ('von', 'dem'), 'zum': ('zu', 'dem'), 'aufm': ('auf', 'dem'),
+    'ausm': ('aus', 'dem'), 'mitm': ('mit', 'dem'), 'nachm': ('nach', 'dem'),
+    'unterm': ('unter', 'dem'), 'vorm': ('vor', 'dem'), 'hinterm': ('hinter', 'dem'),
+    'überm': ('über', 'dem'),
+    "auf'm": ('auf', 'dem'), "aus'm": ('aus', 'dem'), "mit'm": ('mit', 'dem'),
+    # + der
+    'zur': ('zu', 'der'),
+    # + das
+    'ins': ('in', 'das'), 'ans': ('an', 'das'), 'aufs': ('auf', 'das'),
+    'ums': ('um', 'das'), 'übers': ('über', 'das'), 'fürs': ('für', 'das'),
+    'durchs': ('durch', 'das'), 'unters': ('unter', 'das'), 'vors': ('vor', 'das'),
+    'hinters': ('hinter', 'das'),
+    "in's": ('in', 'das'), "an's": ('an', 'das'), "auf's": ('auf', 'das'),
+    "um's": ('um', 'das'), "über's": ('über', 'das'), "für's": ('für', 'das'),
+    "durch's": ('durch', 'das'), "unter's": ('unter', 'das'), "vor's": ('vor', 'das'),
+    "hinter's": ('hinter', 'das'),
+    # + den (colloquial, see the caveat above)
+    'aufn': ('auf', 'den'), 'fürn': ('für', 'den'), 'übern': ('über', 'den'),
+    'untern': ('unter', 'den'), 'mitn': ('mit', 'den'),
+}
+
+# Forms the pattern would generate that are ordinary words in this corpus, and
+# must never be split: 'Bein' (leg, 504x - 172 of them after am/das/dem/ein),
+# 'vorn' (the adverb, 'von vorn'), 'Hintern' (every occurrence checked is the
+# noun), plus CHAT artefacts like 'inn(en)drin' and 'Zun(ge)'.
+DE_CONTRACTIONS_VETOED = {'bein', 'vorn', 'hintern', 'inn', 'zun', 'ann',
+                          'auss', 'umm', 'mits', 'beis', 'zus', 'aufr', 'ausr'}
+
+# Stems that may carry an enclitic 's (= es): everything except a preposition,
+# which would make it a contraction instead and is handled above.
+DE_CLITIC_S = re.compile(r"^(.+[a-zäöüß])'s$", re.IGNORECASE)
+
+
 def _it_verb_forms(lemmas):
     """
     Builds the sets of host forms the splitter accepts, from a list of infinitives:
@@ -524,6 +575,19 @@ class ChatProcessor:
         if self.args.fuse_contractions == 'no': return False
         return bool(getattr(self, 'language', '') and re.search(r'fra|french|ita|italian', self.language))
 
+    def split_german_here(self):
+        """
+        Whether German tokenisation must be done here rather than left to UDPipe.
+
+        UDPipe's own tokenizer splits the standard contractions it was trained on
+        (im, ins, am ...) but not the colloquial ones that spoken data is full of:
+        aufm, aufn, ausm, mitm and the apostrophised durch's, über's - about 220
+        tokens in this corpus that would otherwise stay fused, plus a further
+        inconsistency between a run with a tagger and one without, since the
+        tagger path never reaches UDPipe's tokenizer at all.
+        """
+        return bool(re.search(r'deu|german', getattr(self, 'language', '') or ''))
+
     def split_enclitics(self):
         """
         Whether Italian verb+clitic forms are split into UD syntactic words here,
@@ -740,6 +804,50 @@ class ChatProcessor:
             s = re.sub(r'\s+', ' ', s).strip()
         return s
 
+    def split_german_contractions(self, s, mwt, misc):
+        """
+        Splits German preposition+article contractions into their two syntactic
+        words and records the multiword token, and separates an enclitic 's.
+
+        'im Haus' -> '3-4 im' / 'in' / 'dem'; 'geht's' -> 'geht' + "'s". The
+        contraction is a multiword token because the two words are written as one
+        (UD German's only such class); the clitic is not, because UD German writes
+        it as two plain tokens with SpaceAfter=No on the stem - which
+        add_space_after() derives from '# text' on its own.
+
+        Unlike Italian this needs no post-parse rule: the expansion is fixed, so
+        nothing depends on the eventual analysis.
+
+        Runs after split_italian_enclitics(), so any groups and MISC keys it
+        returned are re-indexed for the tokens inserted here.
+        """
+        toks = s.split()
+        out, shift, groups = [], {}, []
+        for i, t in enumerate(toks, 1):
+            shift[i] = len(out) + 1
+            low = t.lower()
+            if low in DE_CONTRACTIONS_VETOED:
+                out.append(t)
+                continue
+            rep = DE_CONTRACTIONS.get(low)
+            if rep:
+                prep, art = rep
+                if t[:1].isupper():
+                    prep = prep.capitalize()
+                groups.append((len(out) + 1, len(out) + 2, t, 'C'))
+                out.extend([prep, art])
+                continue
+            m = DE_CLITIC_S.match(t)
+            if m and m.group(1).lower() not in DE_CONTRACTIONS:
+                out.extend([m.group(1), "'s"])       # geht's -> geht + 's
+                continue
+            out.append(t)
+        if len(out) == len(toks):
+            return s, mwt, misc
+        mwt = [(shift[a], shift[b], f, tier) for (a, b, f, tier) in mwt] + groups
+        misc = {shift[k]: v for k, v in misc.items()}
+        return ' '.join(out), mwt, misc
+
     def _it_split_contractions(self, s, mwt, misc):
         """
         Splits Italian preposizioni articolate on the finished token list:
@@ -830,7 +938,9 @@ class ChatProcessor:
             s = re.sub(r"I'm", r"I 'm", s)  # it's -> it 's, I've -> I 've
             s = re.sub(r'(\S)\'(s|ve|ll|d|re)', r"\1 '\2", s)  # it's -> it 's, I've -> I 've etc.
         elif hasattr(self, 'language') and re.search(r'deu|german', self.language):
-            pass
+            # CHAT already spaces punctuation in these corpora, but not always
+            s = re.sub(r'([,;?.!])(?=\s|$)', r' \1', s)
+            s = re.sub(r'\s+', ' ', s)
         else:
             # Default simple tokenization if no language is matched
             s = re.sub(r'([,;?.!])(?=\s|$)', r' \1', s)
@@ -846,6 +956,11 @@ class ChatProcessor:
         if split_contractions and s.strip() and re.search(
                 r'ita|italian', getattr(self, 'language', '') or ''):
             s, mwt, misc = self._it_split_contractions(s, mwt, misc)
+        # German: unconditional, so it applies on the tagger path too - both
+        # tokens2conllu() and tagged2conllu() write the range lines from these
+        # groups, and TreeTagger tags 'in'/'dem' better than it tags 'im'.
+        if s.strip() and re.search(r'deu|german', getattr(self, 'language', '') or ''):
+            s, mwt, misc = self.split_german_contractions(s, mwt, misc)
         return (s, mwt, misc) if return_mwt else s
 
     def tokens2conllu(self):
@@ -1100,7 +1215,8 @@ class ChatProcessor:
         if self.args.parameters is not None and not use_tag_ud_tokens:
             self.tagger_input_file.write(f"<s_{uttID}> {self.tokenise(splitUtt)}\n")
             self.generate_rows_from_tagger(splitUtt, utt.strip(), speaker, uttID, timeCode)
-        elif self.args.api_model and not self.fuse_contractions() and self.split_enclitics() == 'none':
+        elif (self.args.api_model and not self.fuse_contractions()
+              and self.split_enclitics() == 'none' and not self.split_german_here()):
             # No tagger, or --tag_ud_tokens: defer tokenisation to UDPipe's own
             # tokenizer (UD-compliant), instead of pre-splitting with tokenise()'s
             # tagger-oriented rules. The per-word outRows grid for this utterance is
